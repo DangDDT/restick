@@ -1,8 +1,8 @@
 name: restick
 
 include:
-  - path: deploy/postgres/docker-compose.yml
-  - path: deploy/minio/docker-compose.yml
+  - path: infra/postgres/docker-compose.yml
+  - path: infra/minio/docker-compose.yml
   - path: services/api/docker-compose.yml
   - path: services/ftp/docker-compose.yml
   - path: services/img_tool/docker-compose.yml

@@ -43,7 +43,7 @@ go run ./cmd/api_svc
 
 ### With Docker
 ```bash
-docker compose -f ../../deploy/postgres/docker-compose.yml -f docker-compose.yml up --build
+docker compose -f ../../infra/postgres/docker-compose.yml -f docker-compose.yml up --build
 ```
 
 ---

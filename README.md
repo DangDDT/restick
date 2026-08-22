@@ -92,7 +92,7 @@ flowchart TD
 | [`clients/web`](clients/web/) | Web Application | Contributor workspace, admin moderation console, rejection analytics, API key management | Flutter 3.47+ Web, Retrofit, Flutter BLoC, Drift SQLite |
 | [`clients/flutter/restick`](clients/flutter/restick/) | Mobile SDK | Official Flutter SDK for embedding sticker pickers, marketplace, offline caching & sync | Dart / Flutter, Drift, Dio, Retrofit, Secure Storage |
 | [`contracts/proto`](contracts/proto/) | Protocol Buffers | Shared gRPC & Protobuf definitions for inter-service communication | Protobuf v3, protoc, Go & Python plugins |
-| [`deploy`](deploy/) | Infrastructure | Docker Compose definitions for PostgreSQL 17 and MinIO S3 object storage | Docker Compose |
+| [`infra`](infra/) | Infrastructure | Docker Compose definitions for PostgreSQL 17 and MinIO S3 object storage | Docker Compose |
 
 ---
 
@@ -106,7 +106,7 @@ flowchart TD
 ### 2. Configure Environment
 Clone the repository and create your `.env` configuration:
 ```bash
-git clone https://github.com/eykh/restick.git
+git clone https://github.com/DangDDT/restick.git
 cd restick
 cp .env.example .env
 ```
@@ -117,22 +117,23 @@ Build Flutter Web artifacts and start all containers:
 # Build Flutter Web release assets
 cd clients/web && flutter build web --release --dart-define-from-file=configuration.dev.json && cd ../..
 
-# Start all services
+# Start all services & unified gateway on port 80
 docker compose up --build -d
 ```
 
 ### 4. Health Checks
-Verify all services are up and healthy:
+Verify the single gateway and services are up and healthy:
 ```bash
-curl -s http://localhost:8080/healthz # api_svc: {"service":"api_svc","status":"ok"}
-curl -s http://localhost:8081/healthz # ftp_svc: {"service":"ftp_svc","status":"ok"}
-curl -s http://localhost:8090/healthz # img_tool: {"status":"ok","service":"img_tool"}
-curl -s -I http://localhost:8088      # web: HTTP/1.1 200 OK
+curl -s http://localhost/healthz          # gateway: {"status":"ok","service":"gateway"}
+curl -s http://localhost/api/v1/packs     # api_svc: {"error":{"code":"unauthorized",...}}
+curl -s http://localhost:8090/healthz     # img_tool: {"status":"ok","service":"img_tool"}
+curl -s -I http://localhost/              # web: HTTP/1.1 200 OK
 ```
 
-Access the **Admin & Contributor Web Portal** at **[http://localhost:8088](http://localhost:8088)**:
+Access the **Admin & Contributor Web Portal** at **[http://localhost](http://localhost)**:
 - **Default Admin Account**: `admin@restick.local`
 - **Default Password**: `changeme` (configured via `BOOTSTRAP_ADMIN_PASSWORD` in `.env`)
+- **Default API Key**: `dev-api-key`
 
 ---
 
@@ -159,16 +160,16 @@ Each service can be deployed independently across different physical servers or 
 
 ```bash
 # Machine 1: Database & Core API
-docker compose -f deploy/postgres/docker-compose.yml -f api_svc/docker-compose.yml up -d --build
+docker compose -f infra/postgres/docker-compose.yml -f services/api/docker-compose.yml up -d --build
 
 # Machine 2: MinIO & Asset Delivery Gateway
 API_SVC_GRPC_ADDR=192.168.1.10:50051 \
-docker compose -f deploy/minio/docker-compose.yml -f ftp_svc/docker-compose.yml up -d --build
+docker compose -f infra/minio/docker-compose.yml -f services/ftp/docker-compose.yml up -d --build
 
 # Machine 3: Image Processing Worker
 API_SVC_GRPC_ADDR=192.168.1.10:50051 \
 FTP_SVC_GRPC_ADDR=192.168.1.11:50052 \
-docker compose -f img_tool/docker-compose.yml up -d --build
+docker compose -f services/img_tool/docker-compose.yml up -d --build
 ```
 
 ---
