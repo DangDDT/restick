@@ -35,14 +35,18 @@
 flowchart TD
     subgraph Clients["Clients & Consumers"]
         SDK["Flutter Mobile SDK\n(clients/flutter/restick)"]
-        WEB["Admin & Contributor Portal\n(clients/web - Flutter Web)"]
-        CLI["img_tool CLI / 3rd Party SDKs"]
+        WEB["Admin & Contributor Portal\n(Browser Web)"]
+        CLI["img_tool CLI / 3rd Party Apps"]
     end
 
-    subgraph Edge["Gateway & Public Ingress"]
-        API_HTTP["api_svc HTTP (:8080)\nAuth, Catalog, Moderation, Keys"]
-        FTP_HTTP["ftp_svc HTTP (:8081)\nPublic Asset & Bundle Streaming"]
-        WEB_HTTP["web Nginx (:8088)\nWeb Client Host"]
+    subgraph Ingress["Unified Edge Gateway"]
+        GW["Nginx Ingress Gateway (:80)\nSingle Entrypoint & Unified CORS"]
+    end
+
+    subgraph Internal_HTTP["Internal Web & HTTP Hosts"]
+        API_HTTP["api_svc (:8080)\n/api/*, /docs"]
+        FTP_HTTP["ftp_svc (:8080)\n/v1/objects/*, /v1/bundles/*"]
+        WEB_HTTP["web (:8080)\nFlutter Web SPA"]
     end
 
     subgraph Core["Backend Microservices (gRPC Mesh)"]
@@ -56,10 +60,13 @@ flowchart TD
         MINIO[("MinIO S3\nObject & Bundle Store")]
     end
 
-    SDK -->|REST API + X-Api-Key| API_HTTP
-    SDK -->|Download Bundles & Thumbnails| FTP_HTTP
-    WEB -->|JWT Bearer REST API| API_HTTP
-    CLI -->|X-Api-Key| API_HTTP
+    SDK -->|Single Base URL :80| GW
+    WEB -->|Single Base URL :80| GW
+    CLI -->|Single Base URL :80| GW
+
+    GW -->|/api/*, /docs| API_HTTP
+    GW -->|/v1/objects/*, /v1/bundles/*| FTP_HTTP
+    GW -->|/* (SPA Routing)| WEB_HTTP
 
     API_HTTP --> API_SVC
     FTP_HTTP --> FTP_SVC
@@ -78,6 +85,7 @@ flowchart TD
 
 | Directory | Type | Role | Technology Stack |
 | :--- | :--- | :--- | :--- |
+| [`deploy/gateway`](deploy/gateway/) | Edge Gateway | Nginx Ingress proxy, single entrypoint, zero-buffering asset streaming, CORS unification | Nginx 1.27 Alpine, HTTP/2, Stream Proxy |
 | [`api_svc`](api_svc/) | Backend Service | Core catalog, user auth, moderation workflow, API key lifecycle, database migrations | Go 1.25, Chi Router, pgx/PostgreSQL, gRPC |
 | [`ftp_svc`](ftp_svc/) | Backend Service | High-throughput object gateway, ZIP pack bundle streaming, gRPC API key auth caching | Go 1.25, MinIO Go SDK, gRPC, in-memory TTL cache |
 | [`img_tool`](img_tool/) | Worker & CLI | Automated sticker sheet slicing, contour detection, padding & 512x512 WebP normalization | Python 3.12, OpenCV Headless, Pillow, Typer, gRPC |
