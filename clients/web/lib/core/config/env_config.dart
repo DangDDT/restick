@@ -8,27 +8,30 @@
 /// not published as Flutter asset bundle entries.
 class EnvConfig {
   const EnvConfig({
-    required this.apiBaseUrl,
-    required this.ftpBaseUrl,
+    required this.baseUrl,
   });
 
   factory EnvConfig.load() {
     return const EnvConfig(
-      apiBaseUrl: apiBaseUrlDefine,
-      ftpBaseUrl: ftpBaseUrlDefine,
+      baseUrl: baseUrlDefine,
     );
   }
 
-  final String apiBaseUrl;
-  final String ftpBaseUrl;
+  /// Single Unified Ingress URL for the entire Restick platform (API, Assets, Docs).
+  final String baseUrl;
 
-  static const String apiBaseUrlDefine = String.fromEnvironment(
-    "API_BASE_URL",
-    defaultValue: "http://localhost",
-  );
+  /// Backward-compatible accessors for legacy callers.
+  String get apiBaseUrl => baseUrl;
+  String get ftpBaseUrl => baseUrl;
 
-  static const String ftpBaseUrlDefine = String.fromEnvironment(
-    "FTP_BASE_URL",
-    defaultValue: "http://localhost",
+  static const String baseUrlDefine = String.fromEnvironment(
+    "BASE_URL",
+    defaultValue: String.fromEnvironment(
+      "RESTICK_BASE_URL",
+      defaultValue: String.fromEnvironment(
+        "API_BASE_URL",
+        defaultValue: "http://localhost",
+      ),
+    ),
   );
 }

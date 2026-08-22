@@ -47,8 +47,7 @@ Future<void> main() async {
 
   final RestickClient client = await Restick.open(
     RestickConfig(
-      apiBaseUrl: 'https://api.your-restick-domain.com',
-      ftpBaseUrl: 'https://cdn.your-restick-domain.com',
+      baseUrl: 'https://restick.your-domain.com',
       apiKey: 'rstk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
     ),
   );
@@ -150,10 +149,10 @@ await client.deletePackLocally(packId: 'pack-123');
 
 | Option | Type | Description |
 | :--- | :--- | :--- |
-| `apiBaseUrl` | `String` | Base URL for catalog and metadata (`api_svc`) |
-| `ftpBaseUrl` | `String` | Base URL for CDN asset and bundle downloads (`ftp_svc`) |
-| `apiKey` | `String?` | API Key (`rstk_live_...`) for authorized requests |
-| `cacheDuration` | `Duration` | Catalog cache lifetime (default: 1 hour) |
+| `baseUrl` | `String` | Single Gateway base URL for all catalog, API, and sticker assets |
+| `apiKey` | `String` | API Key (`rstk_live_...`) for authorized requests |
+| `autoSyncInterval` | `Duration` | Automatic tombstone / catalog synchronization interval (default: 5 minutes) |
+| `persistApiKey` | `bool` | Persist API Key in secure storage (default: true) |
 
 ---
 
