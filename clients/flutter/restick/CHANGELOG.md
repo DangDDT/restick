@@ -1,3 +1,10 @@
+## 0.1.2-flutter3.32.8
+
+- Removed `sqlite3_flutter_libs` to eliminate native symbol conflicts with `sqlcipher_flutter_libs`.
+- Supported custom `QueryExecutor` injection via `RestickConfig(databaseExecutor: ...)` for SQLCipher / custom database openers.
+- Exported `QueryExecutor`, `DatabaseConnection`, and `RestickDatabase` for host application custom database wiring.
+- Widened `archive: ">=3.6.1 <5.0.0"` to support host applications using `image ^4.5.4`.
+
 ## 0.1.0-flutter3.32.8
 
 - Dedicated Flutter 3.32.8 backward-compatibility release stream.

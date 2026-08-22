@@ -39,7 +39,7 @@ dependencies:
     hosted:
       url: https://onepub.dev/api/xdhdsdavuh
       name: restick
-    version: 0.1.0-flutter3.32.8
+    version: 0.1.2-flutter3.32.8
 ```
 
 **Or directly via GitHub Private Repository:**
