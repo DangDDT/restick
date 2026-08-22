@@ -1,6 +1,6 @@
 import "dart:io";
 
-import "package:material_ui/material_ui.dart";
+import "package:flutter/material.dart";
 import "package:restick/restick.dart";
 
 Future<void> main() async {
@@ -20,14 +20,8 @@ class ExampleApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: "Restick SDK ${Restick.sdkVersion}",
-      theme: buildRestickThemeData(brightness: Brightness.light),
-      darkTheme: buildRestickThemeData(brightness: Brightness.dark),
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      builder: (BuildContext context, Widget? child) {
-        // Bridge legacy SDK Material widgets until packages migrate.
-        // ignore: deprecated_member_use
-        return MaterialUiCompatibilityBridge(child: child!);
-      },
+      theme: ThemeData(useMaterial3: true, brightness: Brightness.light),
+      darkTheme: ThemeData(useMaterial3: true, brightness: Brightness.dark),
       home: RestickScope(
         client: client,
         child: ExampleHome(client: client),

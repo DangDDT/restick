@@ -1,4 +1,4 @@
-import "package:material_ui/material_ui.dart";
+import "package:flutter/material.dart";
 
 class PackThumbnail extends StatelessWidget {
   const PackThumbnail({required this.url, this.size = 48, super.key});
