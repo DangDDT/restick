@@ -1,3 +1,9 @@
+## 0.1.3-flutter3.32.8
+
+- Bundled pre-generated source files (`*.g.dart`) directly into package and git repository.
+- Added `.pubignore` ensuring `app_database.g.dart` and `restick_api.g.dart` are included in published OnePub archive.
+- Eliminates the requirement for consumers to run `build_runner`.
+
 ## 0.1.2-flutter3.32.8
 
 - Removed `sqlite3_flutter_libs` to eliminate native symbol conflicts with `sqlcipher_flutter_libs`.
