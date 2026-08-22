@@ -1,3 +1,9 @@
+## 0.1.4-flutter3.32.8
+
+- Replaced Retrofit generator with pure, robust Dio implementation in `RestickApi`.
+- Completely removed `retrofit` and `retrofit_generator` dependencies.
+- Eliminates `ParseErrorLogger.logError` positional argument version mismatch on host apps.
+
 ## 0.1.3-flutter3.32.8
 
 - Bundled pre-generated source files (`*.g.dart`) directly into package and git repository.

@@ -1,24 +1,58 @@
 import "package:dio/dio.dart";
 import "package:restick/src/data/dto/pack_dto.dart";
-import "package:retrofit/retrofit.dart";
 
-part "restick_api.g.dart";
+class RestickApi {
+  const RestickApi(this._dio, {String? baseUrl}) : _baseUrl = baseUrl;
 
-@RestApi()
-abstract class RestickApi {
-  factory RestickApi(Dio dio, {String? baseUrl}) = _RestickApi;
+  final Dio _dio;
+  final String? _baseUrl;
 
-  @GET("/api/v1/packs")
-  Future<PackListResponseDto> listPacks({@Query("tag") String? tag});
+  Options? _requestOptions() {
+    if (_baseUrl == null) return null;
+    return Options(extra: <String, dynamic>{"baseUrl": _baseUrl});
+  }
 
-  @GET("/api/v1/packs/{id}")
-  Future<PackSummaryDto> getPack(@Path("id") String id);
+  Future<PackListResponseDto> listPacks({String? tag}) async {
+    final Response<dynamic> response = await _dio.get<dynamic>(
+      "/api/v1/packs",
+      queryParameters: tag != null ? <String, dynamic>{"tag": tag} : null,
+      options: _requestOptions(),
+    );
+    final Map<String, dynamic> data =
+        (response.data as Map).cast<String, dynamic>();
+    return PackListResponseDto.fromJson(data);
+  }
 
-  @GET("/api/v1/packs/{id}/bundle")
-  Future<BundleMetaDto> getBundle(@Path("id") String id);
+  Future<PackSummaryDto> getPack(String id) async {
+    final Response<dynamic> response = await _dio.get<dynamic>(
+      "/api/v1/packs/$id",
+      options: _requestOptions(),
+    );
+    final Map<String, dynamic> data =
+        (response.data as Map).cast<String, dynamic>();
+    return PackSummaryDto.fromJson(data);
+  }
 
-  @GET("/api/v1/tombstones")
+  Future<BundleMetaDto> getBundle(String id) async {
+    final Response<dynamic> response = await _dio.get<dynamic>(
+      "/api/v1/packs/$id/bundle",
+      options: _requestOptions(),
+    );
+    final Map<String, dynamic> data =
+        (response.data as Map).cast<String, dynamic>();
+    return BundleMetaDto.fromJson(data);
+  }
+
   Future<TombstoneListResponseDto> listTombstones({
-    @Query("since") required String since,
-  });
+    required String since,
+  }) async {
+    final Response<dynamic> response = await _dio.get<dynamic>(
+      "/api/v1/tombstones",
+      queryParameters: <String, dynamic>{"since": since},
+      options: _requestOptions(),
+    );
+    final Map<String, dynamic> data =
+        (response.data as Map).cast<String, dynamic>();
+    return TombstoneListResponseDto.fromJson(data);
+  }
 }
