@@ -60,20 +60,20 @@ flowchart TD
         MINIO[("MinIO S3\nObject & Bundle Store")]
     end
 
-    SDK -->|Single Base URL :80| GW
-    WEB -->|Single Base URL :80| GW
-    CLI -->|Single Base URL :80| GW
+    SDK -->|"Single Base URL :80"| GW
+    WEB -->|"Single Base URL :80"| GW
+    CLI -->|"Single Base URL :80"| GW
 
-    GW -->|/api/*, /docs| API_HTTP
-    GW -->|/v1/objects/*, /v1/bundles/*| FTP_HTTP
-    GW -->|/* (SPA Routing)| WEB_HTTP
+    GW -->|"/api/*, /docs"| API_HTTP
+    GW -->|"/v1/objects/*, /v1/bundles/*"| FTP_HTTP
+    GW -->|"SPA Web Console (/)"| WEB_HTTP
 
     API_HTTP --> API_SVC
     FTP_HTTP --> FTP_SVC
 
-    API_SVC <-->|gRPC: Ping, JobService| FTP_SVC
-    API_SVC <-->|gRPC: Ping, ProcessJob| IMG_TOOL
-    FTP_SVC -->|gRPC: ValidateAPIKey (TTL Cached)| API_SVC
+    API_SVC <-->|"gRPC: Ping, JobService"| FTP_SVC
+    API_SVC <-->|"gRPC: Ping, ProcessJob"| IMG_TOOL
+    FTP_SVC -->|"gRPC: ValidateAPIKey (TTL Cached)"| API_SVC
 
     API_SVC --- PG
     FTP_SVC --- MINIO
