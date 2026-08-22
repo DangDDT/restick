@@ -104,6 +104,10 @@ jobs:
         working-directory: clients/flutter/restick
         run: flutter pub get
 
+      - name: Generate SDK Code
+        working-directory: clients/flutter/restick
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
       - name: Analyze SDK Code
         working-directory: clients/flutter/restick
         run: flutter analyze
