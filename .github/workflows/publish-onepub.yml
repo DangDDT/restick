@@ -1,0 +1,48 @@
+name: Publish to OnePub
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish Flutter SDK to OnePub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install SDK Dependencies
+        working-directory: clients/flutter/restick
+        run: flutter pub get
+
+      - name: Run Tests & Static Analysis
+        working-directory: clients/flutter/restick
+        run: |
+          flutter analyze
+          flutter test
+
+      - name: Install OnePub CLI
+        run: dart pub global activate onepub
+
+      - name: Authenticate with OnePub
+        env:
+          ONEPUB_TOKEN: ${{ secrets.ONEPUB_TOKEN }}
+        run: |
+          if [ -z "$ONEPUB_TOKEN" ]; then
+            echo "::error::ONEPUB_TOKEN secret is not set. Please configure it in GitHub Repository Settings -> Secrets."
+            exit 1
+          fi
+          onepub import-token "$ONEPUB_TOKEN"
+
+      - name: Publish Package to OnePub
+        working-directory: clients/flutter/restick
+        run: dart pub publish --force

@@ -22,12 +22,46 @@ Official Flutter client SDK for the **Restick Platform**. Provides out-of-the-bo
 
 ---
 
-## 📦 Installation
+## 📦 Installation (via OnePub Private Registry)
 
-Add `restick` to your `pubspec.yaml`:
+### 1. Authenticate with OnePub (One-time setup per developer/CI)
+```bash
+dart pub global activate onepub
+onepub login
+```
+
+### 2. Add `restick` to your `pubspec.yaml`
+```yaml
+dependencies:
+  restick:
+    hosted:
+      url: https://onepub.dev/api
+      name: restick
+    version: ^0.1.0
+```
+
+Or via Flutter CLI:
+```bash
+flutter pub add restick --hosted-url=https://onepub.dev/api
+```
+
+---
+
+## 🚀 Publishing New Releases to OnePub
+
+To publish updates to your organization's private registry:
 
 ```bash
-flutter pub add restick
+cd clients/flutter/restick
+
+# 1. Verify package analysis & tests
+flutter analyze
+flutter test
+
+# 2. Publish to OnePub
+onepub pub publish
+# Or using standard dart tool:
+dart pub publish
 ```
 
 ---
