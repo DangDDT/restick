@@ -136,6 +136,10 @@ jobs:
         working-directory: clients/web
         run: flutter pub get
 
+      - name: Generate Web Code
+        working-directory: clients/web
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
       - name: Analyze Web Code
         working-directory: clients/web
         run: flutter analyze
