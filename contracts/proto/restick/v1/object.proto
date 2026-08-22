@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package restick.v1;
+
+option go_package = "github.com/eykh/restick/contracts/gen/go/restick/v1;restickv1";
+
+service ObjectService {
+  rpc PutObject(PutObjectRequest) returns (PutObjectResponse);
+  rpc GetObject(GetObjectRequest) returns (GetObjectResponse);
+  rpc StatObject(StatObjectRequest) returns (StatObjectResponse);
+  rpc BuildBundle(BuildBundleRequest) returns (BuildBundleResponse);
+}
+
+message PutObjectRequest {
+  string key = 1;
+  bytes data = 2;
+  string content_type = 3;
+}
+
+message PutObjectResponse {
+  string key = 1;
+  string etag = 2;
+}
+
+message GetObjectRequest {
+  string key = 1;
+}
+
+message GetObjectResponse {
+  bytes data = 1;
+  string content_type = 2;
+  string etag = 3;
+}
+
+message StatObjectRequest {
+  string key = 1;
+}
+
+message StatObjectResponse {
+  int64 size = 1;
+  string etag = 2;
+  string content_type = 3;
+}
+
+message BuildBundleRequest {
+  string pack_id = 1;
+  int32 version = 2;
+  repeated string keys = 3;
+}
+
+message BuildBundleResponse {
+  string bundle_key = 1;
+}

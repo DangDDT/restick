@@ -1,0 +1,9 @@
+.git
+docs
+clients
+**/.venv
+**/__pycache__
+**/.dart_tool
+**/build
+**/.ruff_cache
+.env

@@ -1,0 +1,4 @@
+{
+  "API_BASE_URL": "https://api.restick.example",
+  "FTP_BASE_URL": "https://ftp.restick.example"
+}

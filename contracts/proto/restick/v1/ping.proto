@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package restick.v1;
+
+option go_package = "github.com/eykh/restick/contracts/gen/go/restick/v1;restickv1";
+
+// PingService is implemented by every Restick backend service.
+// Use it to verify gRPC reachability on one host or across machines.
+service PingService {
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+message PingRequest {
+  string from_service = 1;
+}
+
+message PingResponse {
+  string service_name = 1;
+  string message = 2;
+}

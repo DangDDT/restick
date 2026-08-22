@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: restick
+      POSTGRES_PASSWORD: restick
+      POSTGRES_DB: restick
+    ports:
+      - "5432:5432"
+    volumes:
+      - restick_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U restick -d restick"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - restick
+
+volumes:
+  restick_pg:
+
+networks:
+  restick:
+    name: restick

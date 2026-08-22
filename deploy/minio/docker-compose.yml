@@ -1,0 +1,45 @@
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: restick
+      MINIO_ROOT_PASSWORD: resticksecret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - restick_minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - restick
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    restart: "no"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        i=0
+        until mc alias set local http://minio:9000 restick resticksecret; do
+          i=$$((i+1))
+          if [ "$$i" -gt 30 ]; then exit 1; fi
+          sleep 1
+        done
+        mc mb -p local/restick-assets || true
+    networks:
+      - restick
+
+volumes:
+  restick_minio:
+
+networks:
+  restick:
+    name: restick
