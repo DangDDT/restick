@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from img_tool.infrastructure.grpc_clients import ObjectClient, JobClient
+from img_tool.infrastructure.grpc_clients import JobClient, ObjectClient
 
 
 def execute_submit(out_dir: Path, objects: ObjectClient, jobs: JobClient) -> None:

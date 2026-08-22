@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import grpc
-from restick.v1 import job_pb2, job_pb2_grpc, object_pb2, object_pb2_grpc
+
+try:
+    from restick.v1 import job_pb2, job_pb2_grpc, object_pb2, object_pb2_grpc
+except ModuleNotFoundError:  # pragma: no cover - fallback for local/CI editable installs
+    proto_root: Path = Path(__file__).resolve().parents[5] / "contracts" / "gen" / "python"
+    sys.path.insert(0, str(proto_root))
+    from restick.v1 import job_pb2, job_pb2_grpc, object_pb2, object_pb2_grpc
 
 MAX_MSG: int = 16 * 1024 * 1024
 

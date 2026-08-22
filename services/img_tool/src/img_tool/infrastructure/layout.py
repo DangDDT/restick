@@ -33,7 +33,10 @@ def upscale_source(image: Image.Image) -> Image.Image:
     short: int = min(width, height)
     if not is_strip or short >= CANVAS_SIZE:
         return image
-    scale: float = min(float(CANVAS_SIZE) / float(short), MAX_SHEET_SIDE / float(max(width, height)))
+    scale: float = min(
+        float(CANVAS_SIZE) / float(short),
+        MAX_SHEET_SIDE / float(max(width, height)),
+    )
     new_width: int = max(1, int(round(width * scale)))
     new_height: int = max(1, int(round(height * scale)))
     return _resize_rgba(image.convert("RGBA"), new_width, new_height)
@@ -81,7 +84,9 @@ def _resize_rgba(image: Image.Image, width: int, height: int) -> Image.Image:
     source = np.array(image.convert("RGBA")).astype(np.float32)
     alpha = np.clip(source[:, :, 3:4] / 255.0, 0.0, 1.0)
     source[:, :, :3] *= alpha
-    interpolation = cv2.INTER_AREA if width * height < image.width * image.height else cv2.INTER_LANCZOS4
+    interpolation = (
+        cv2.INTER_AREA if width * height < image.width * image.height else cv2.INTER_LANCZOS4
+    )
     resized = cv2.resize(source, (width, height), interpolation=interpolation)
     out_alpha = np.clip(resized[:, :, 3:4], 0.0, 255.0)
     safe = np.maximum(out_alpha / 255.0, 1.0 / 255.0)
