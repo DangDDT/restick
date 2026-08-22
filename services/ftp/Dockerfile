@@ -2,10 +2,10 @@ FROM golang:1.25-alpine AS build
 WORKDIR /src
 RUN apk add --no-cache git ca-certificates
 COPY contracts/go.mod contracts/go.sum ./contracts/
-COPY ftp_svc/go.mod ftp_svc/go.sum ./ftp_svc/
+COPY services/ftp/go.mod services/ftp/go.sum ./services/ftp/
 COPY contracts ./contracts
-COPY ftp_svc ./ftp_svc
-WORKDIR /src/ftp_svc
+COPY services/ftp ./services/ftp
+WORKDIR /src/services/ftp
 RUN go build -o /bin/ftp_svc ./cmd/ftp_svc
 
 FROM alpine:3.21

@@ -3,8 +3,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl libglib2.0-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
-COPY img_tool/pyproject.toml /app/img_tool/pyproject.toml
-COPY img_tool/src /app/img_tool/src
+COPY services/img_tool/pyproject.toml /app/img_tool/pyproject.toml
+COPY services/img_tool/src /app/img_tool/src
 COPY contracts/gen/python /opt/restick/gen
 ENV PYTHONPATH=/app/img_tool/src:/opt/restick/gen
 RUN pip install --no-cache-dir /app/img_tool

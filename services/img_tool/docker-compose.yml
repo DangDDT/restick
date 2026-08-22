@@ -1,8 +1,8 @@
 services:
   img_tool:
     build:
-      context: ..
-      dockerfile: img_tool/Dockerfile
+      context: ../..
+      dockerfile: services/img_tool/Dockerfile
     environment:
       SERVICE_NAME: img_tool
       HTTP_ADDR: ":8080"

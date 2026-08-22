@@ -32,4 +32,4 @@ require (
 	gopkg.in/ini.v1 v1.67.3 // indirect
 )
 
-replace github.com/eykh/restick/contracts => ../contracts
+replace github.com/eykh/restick/contracts => ../../contracts

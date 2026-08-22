@@ -1,8 +1,8 @@
 services:
   api_svc:
     build:
-      context: ..
-      dockerfile: api_svc/Dockerfile
+      context: ../..
+      dockerfile: services/api/Dockerfile
     environment:
       SERVICE_NAME: api_svc
       HTTP_ADDR: ":8080"

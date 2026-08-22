@@ -37,13 +37,13 @@ Core catalog, authentication, moderation workflow, and API key lifecycle managem
 
 ### With Go
 ```bash
-cd api_svc
+cd services/api
 go run ./cmd/api_svc
 ```
 
 ### With Docker
 ```bash
-docker compose -f ../deploy/postgres/docker-compose.yml -f docker-compose.yml up --build
+docker compose -f ../../deploy/postgres/docker-compose.yml -f docker-compose.yml up --build
 ```
 
 ---
@@ -51,7 +51,7 @@ docker compose -f ../deploy/postgres/docker-compose.yml -f docker-compose.yml up
 ## 🧪 Testing & Linting
 
 ```bash
-cd api_svc
+cd services/api
 go test -v ./...
 go vet ./...
 ```

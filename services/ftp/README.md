@@ -35,13 +35,13 @@ High-throughput object storage gateway and pack bundle generation service for Re
 
 ### With Go
 ```bash
-cd ftp_svc
+cd services/ftp
 go run ./cmd/ftp_svc
 ```
 
 ### With Docker
 ```bash
-docker compose -f ../deploy/minio/docker-compose.yml -f docker-compose.yml up --build
+docker compose -f ../../deploy/minio/docker-compose.yml -f docker-compose.yml up --build
 ```
 
 ---
@@ -49,7 +49,7 @@ docker compose -f ../deploy/minio/docker-compose.yml -f docker-compose.yml up --
 ## 🧪 Testing & Linting
 
 ```bash
-cd ftp_svc
+cd services/ftp
 go test -v ./...
 go vet ./...
 ```

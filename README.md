@@ -85,10 +85,10 @@ flowchart TD
 
 | Directory | Type | Role | Technology Stack |
 | :--- | :--- | :--- | :--- |
-| [`deploy/gateway`](deploy/gateway/) | Edge Gateway | Nginx Ingress proxy, single entrypoint, zero-buffering asset streaming, CORS unification | Nginx 1.27 Alpine, HTTP/2, Stream Proxy |
-| [`api_svc`](api_svc/) | Backend Service | Core catalog, user auth, moderation workflow, API key lifecycle, database migrations | Go 1.25, Chi Router, pgx/PostgreSQL, gRPC |
-| [`ftp_svc`](ftp_svc/) | Backend Service | High-throughput object gateway, ZIP pack bundle streaming, gRPC API key auth caching | Go 1.25, MinIO Go SDK, gRPC, in-memory TTL cache |
-| [`img_tool`](img_tool/) | Worker & CLI | Automated sticker sheet slicing, contour detection, padding & 512x512 WebP normalization | Python 3.12, OpenCV Headless, Pillow, Typer, gRPC |
+| [`services/gateway`](services/gateway/) | Edge Gateway | Nginx Ingress proxy, single entrypoint, zero-buffering asset streaming, CORS unification | Nginx 1.27 Alpine, HTTP/2, Stream Proxy |
+| [`services/api`](services/api/) | Backend Service | Core catalog, user auth, moderation workflow, API key lifecycle, database migrations | Go 1.25, Chi Router, pgx/PostgreSQL, gRPC |
+| [`services/ftp`](services/ftp/) | Backend Service | High-throughput object gateway, ZIP pack bundle streaming, gRPC API key auth caching | Go 1.25, MinIO Go SDK, gRPC, in-memory TTL cache |
+| [`services/img_tool`](services/img_tool/) | Worker & CLI | Automated sticker sheet slicing, contour detection, padding & 512x512 WebP normalization | Python 3.12, OpenCV Headless, Pillow, Typer, gRPC |
 | [`clients/web`](clients/web/) | Web Application | Contributor workspace, admin moderation console, rejection analytics, API key management | Flutter 3.47+ Web, Retrofit, Flutter BLoC, Drift SQLite |
 | [`clients/flutter/restick`](clients/flutter/restick/) | Mobile SDK | Official Flutter SDK for embedding sticker pickers, marketplace, offline caching & sync | Dart / Flutter, Drift, Dio, Retrofit, Secure Storage |
 | [`contracts/proto`](contracts/proto/) | Protocol Buffers | Shared gRPC & Protobuf definitions for inter-service communication | Protobuf v3, protoc, Go & Python plugins |

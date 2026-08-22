@@ -29,7 +29,7 @@ Automated image processing worker, sticker sheet slicer, and standalone CLI util
 Install `img_tool` locally using `pip`:
 
 ```bash
-cd img_tool
+cd services/img_tool
 pip install -e .
 ```
 
@@ -49,7 +49,7 @@ img_tool normalize sticker_raw.png --out ./sticker_512.webp --size 512
 
 ### With Python
 ```bash
-cd img_tool
+cd services/img_tool
 python -m img_tool.main
 ```
 

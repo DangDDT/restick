@@ -1,8 +1,8 @@
 services:
   ftp_svc:
     build:
-      context: ..
-      dockerfile: ftp_svc/Dockerfile
+      context: ../..
+      dockerfile: services/ftp/Dockerfile
     environment:
       SERVICE_NAME: ftp_svc
       HTTP_ADDR: ":8080"
