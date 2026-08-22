@@ -1,3 +1,9 @@
+## 0.1.0-flutter3.32.8
+
+- Dedicated Flutter 3.32.8 backward-compatibility release stream.
+- Relaxed SDK and dependency constraints (`flutter: ">=3.32.0 <3.47.0"`).
+- Full feature parity with 0.1.0 (Single Gateway, Drift SQLite, Marketplace, Picker, Tombstone sync).
+
 ## 0.1.0
 
 - Initial release of the official Restick Flutter client SDK.

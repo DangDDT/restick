@@ -31,18 +31,25 @@ onepub login
 ```
 
 ### 2. Add `restick` to your `pubspec.yaml`
+
+**Via OnePub Private Registry:**
 ```yaml
 dependencies:
   restick:
     hosted:
       url: https://onepub.dev/api/xdhdsdavuh
       name: restick
-    version: ^0.1.0
+    version: 0.1.0-flutter3.32.8
 ```
 
-Or via Flutter CLI:
-```bash
-flutter pub add restick --hosted-url=https://onepub.dev/api/xdhdsdavuh
+**Or directly via GitHub Private Repository:**
+```yaml
+dependencies:
+  restick:
+    git:
+      url: git@github.com:DangDDT/restick.git
+      path: clients/flutter/restick
+      ref: support/flutter-3.32
 ```
 
 ---

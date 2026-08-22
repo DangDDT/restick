@@ -1,6 +1,6 @@
 name: restick
 description: Official Flutter SDK for the Restick sticker ecosystem. High-performance streaming, offline caching, and marketplace widgets.
-version: 0.1.0
+version: 0.1.0-flutter3.32.8
 publish_to: "https://onepub.dev/api/xdhdsdavuh"
 repository: https://github.com/DangDDT/restick
 issue_tracker: https://github.com/DangDDT/restick/issues
@@ -12,27 +12,27 @@ topics:
   - flutter
 
 environment:
-  sdk: ">=3.7.0 <4.0.0"
-  flutter: ">=3.29.0"
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.32.0 <3.47.0"
 
 dependencies:
   archive: ^3.6.1
   auto_size_text: ^3.0.0
   crypto: ^3.0.6
-  dio: ^5.11.0
-  drift: ^2.28.2
-  equatable: ^2.1.0
+  dio: ^5.7.0
+  drift: ^2.20.0
+  equatable: ^2.0.5
   flutter:
     sdk: flutter
-  flutter_bloc: ^9.1.1
-  flutter_secure_storage: ^10.3.1
+  flutter_bloc: ^9.0.0
+  flutter_secure_storage: ^9.2.2
   material_ui: ^1.0.1
-  path: ^1.9.1
-  path_provider: ^2.1.5
-  retrofit: ^4.9.0
-  shared_preferences: ^2.5.3
-  sqlite3: ^2.9.4
-  sqlite3_flutter_libs: ^0.5.39
+  path: ^1.9.0
+  path_provider: ^2.1.2
+  retrofit: ^4.4.1
+  shared_preferences: ^2.3.0
+  sqlite3: ^2.4.0
+  sqlite3_flutter_libs: ^0.5.20
 
 dev_dependencies:
   bloc_lint: ^0.3.7
