@@ -12,8 +12,8 @@ services:
       POSTGRES_DSN: ${POSTGRES_DSN:-postgres://restick:restick@postgres:5432/restick?sslmode=disable}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
-      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8088}
-      PUBLIC_FTP_ORIGIN: ${PUBLIC_FTP_ORIGIN:-http://localhost:8081}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost}
+      PUBLIC_FTP_ORIGIN: ${PUBLIC_FTP_ORIGIN:-http://localhost}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@restick.local}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-changeme}
       BOOTSTRAP_API_KEY: ${BOOTSTRAP_API_KEY:-dev-api-key}

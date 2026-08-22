@@ -12,7 +12,7 @@ class PackDownloader {
     required Directory dest,
     required String expectedChecksum,
   }) async {
-    if (await dest.exists()) {
+    if (dest.existsSync()) {
       await dest.delete(recursive: true);
     }
     await dest.create(recursive: true);

@@ -23,7 +23,7 @@ class PackFileStore {
       return;
     }
     final Directory dir = Directory(dirPath);
-    if (await dir.exists()) {
+    if (dir.existsSync()) {
       await dir.delete(recursive: true);
     }
   }

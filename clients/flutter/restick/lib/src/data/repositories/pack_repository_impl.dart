@@ -186,7 +186,7 @@ class PackRepositoryImpl implements PackRepository {
       return <StickerAsset>[];
     }
     final File packFile = File(p.join(cached.localDir, "pack.json"));
-    if (!await packFile.exists()) {
+    if (!packFile.existsSync()) {
       return <StickerAsset>[];
     }
     final Map<String, Object?> pack = asJsonMap(

@@ -24,11 +24,11 @@ class EnvConfig {
 
   static const String apiBaseUrlDefine = String.fromEnvironment(
     "API_BASE_URL",
-    defaultValue: "http://localhost:8080",
+    defaultValue: "http://localhost",
   );
 
   static const String ftpBaseUrlDefine = String.fromEnvironment(
     "FTP_BASE_URL",
-    defaultValue: "http://localhost:8081",
+    defaultValue: "http://localhost",
   );
 }

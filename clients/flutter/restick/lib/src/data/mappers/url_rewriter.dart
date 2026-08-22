@@ -6,7 +6,11 @@ String rewritePublicUrl(String advertised, Uri apiBase) {
   if (!_isLoopbackHost(parsed.host)) {
     return advertised;
   }
-  return parsed.replace(scheme: apiBase.scheme, host: apiBase.host).toString();
+  return parsed.replace(
+    scheme: apiBase.scheme,
+    host: apiBase.host,
+    port: apiBase.hasPort ? apiBase.port : (apiBase.scheme == "https" ? 443 : 80),
+  ).toString();
 }
 
 bool _isLoopbackHost(String host) {

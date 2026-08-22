@@ -26,7 +26,7 @@ class RestickConfig extends Equatable {
     return const RestickConfig(
       apiBaseUrl: String.fromEnvironment(
         "RESTICK_API_BASE",
-        defaultValue: "http://127.0.0.1:8080",
+        defaultValue: "http://127.0.0.1",
       ),
       apiKey: String.fromEnvironment(
         "RESTICK_API_KEY",
