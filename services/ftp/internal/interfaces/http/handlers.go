@@ -101,20 +101,17 @@ func (s *Server) putBytes(w http.ResponseWriter, r *http.Request, key string) {
 }
 
 func (s *Server) getObject(w http.ResponseWriter, r *http.Request) {
-	if !s.auth.APIKey(r) {
-		if _, err := s.auth.JWT(r); err != nil && !s.auth.Internal(r) {
+	key := r.PathValue("key")
+	if !strings.HasPrefix(key, "packs/") && !s.auth.APIKey(r) && !s.auth.Internal(r) {
+		if _, err := s.auth.JWT(r); err != nil {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 	}
-	s.streamKey(w, r, r.PathValue("key"))
+	s.streamKey(w, r, key)
 }
 
 func (s *Server) getBundle(w http.ResponseWriter, r *http.Request) {
-	if !s.auth.APIKey(r) && !s.auth.Internal(r) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
 	version, _ := strconv.Atoi(r.PathValue("version"))
 	s.streamKey(w, r, objectkey.BundleKey(r.PathValue("packID"), version))
 }

@@ -38,6 +38,12 @@ func (a Auth) Internal(r *http.Request) bool {
 func (a Auth) APIKey(r *http.Request) bool {
 	got := strings.TrimSpace(r.Header.Get("X-Api-Key"))
 	if got == "" {
+		got = strings.TrimSpace(r.URL.Query().Get("api_key"))
+	}
+	if got == "" {
+		got = strings.TrimSpace(r.URL.Query().Get("x-api-key"))
+	}
+	if got == "" {
 		return false
 	}
 	for _, key := range a.APIKeys {

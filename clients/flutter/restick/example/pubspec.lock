@@ -329,7 +329,7 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "0.1.4-flutter3.32.8"
+    version: "0.1.5-flutter3.32.8"
   shared_preferences:
     dependency: transitive
     description:

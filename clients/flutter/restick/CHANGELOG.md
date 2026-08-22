@@ -1,3 +1,9 @@
+## 0.1.5-flutter3.32.8
+
+- Injected `X-Api-Key` headers in `PackThumbnail` directly from `RestickScope`.
+- Made published sticker pack assets (`packs/*`, `thumb.webp`, bundles) publicly readable without authentication barriers.
+- Supported API key authentication via query parameters (`?api_key=...` / `?x-api-key=...`) across media endpoints.
+
 ## 0.1.4-flutter3.32.8
 
 - Replaced Retrofit generator with pure, robust Dio implementation in `RestickApi`.
