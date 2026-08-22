@@ -1,4 +1,6 @@
+export "package:drift/drift.dart" show DatabaseConnection, QueryExecutor;
 export "src/core/config/restick_config.dart";
+export "src/data/local/app_database.dart" show RestickDatabase;
 export "src/core/error/failure.dart";
 export "src/core/error/restick_bloc_observer.dart";
 export "src/core/error/restick_error_cubit.dart";

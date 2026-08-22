@@ -1,3 +1,4 @@
+import "package:drift/drift.dart";
 import "package:equatable/equatable.dart";
 import "package:restick/src/core/error/failure.dart";
 
@@ -8,6 +9,7 @@ class RestickConfig extends Equatable {
     this.autoSyncInterval = const Duration(minutes: 5),
     this.onError,
     this.persistApiKey = true,
+    this.databaseExecutor,
   });
 
   /// Backward-compatible constructor accepting `apiBaseUrl`.
@@ -17,12 +19,14 @@ class RestickConfig extends Equatable {
     Duration autoSyncInterval = const Duration(minutes: 5),
     void Function(Failure failure)? onError,
     bool persistApiKey = true,
+    QueryExecutor? databaseExecutor,
   }) : this(
           baseUrl: apiBaseUrl,
           apiKey: apiKey,
           autoSyncInterval: autoSyncInterval,
           onError: onError,
           persistApiKey: persistApiKey,
+          databaseExecutor: databaseExecutor,
         );
 
   factory RestickConfig.fromJson(Map<String, Object?> json) {
@@ -66,6 +70,9 @@ class RestickConfig extends Equatable {
   final void Function(Failure failure)? onError;
   final bool persistApiKey;
 
+  /// Optional custom QueryExecutor (e.g. injected SQLCipher database opener or custom NativeDatabase).
+  final QueryExecutor? databaseExecutor;
+
   Uri get apiBase => Uri.parse(baseUrl);
 
   @override
@@ -74,5 +81,6 @@ class RestickConfig extends Equatable {
         apiKey,
         autoSyncInterval,
         persistApiKey,
+        databaseExecutor,
       ];
 }

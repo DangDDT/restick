@@ -4,7 +4,6 @@ import "package:drift/drift.dart";
 import "package:drift/native.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
-import "package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart";
 
 part "app_database.g.dart";
 
@@ -44,9 +43,9 @@ class RestickDatabase extends _$RestickDatabase {
   static const String tombstoneCursorKey = "last_tombstone_at";
   static const String pendingPurgeKey = "pending_purge";
 
-  static Future<RestickDatabase> open() async {
-    if (Platform.isAndroid) {
-      await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
+  static Future<RestickDatabase> open([QueryExecutor? executor]) async {
+    if (executor != null) {
+      return RestickDatabase(executor);
     }
     return RestickDatabase(
       LazyDatabase(() async {

@@ -35,7 +35,8 @@ abstract final class Restick {
       errorCubit: errorCubit,
     );
     final Dio downloadDio = createDownloadDio(config: config);
-    final RestickDatabase database = await RestickDatabase.open();
+    final RestickDatabase database =
+        await RestickDatabase.open(config.databaseExecutor);
     final PackFileStore fileStore = PackFileStore();
     await fileStore.open();
     final PackRepositoryImpl repository = PackRepositoryImpl(
