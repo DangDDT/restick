@@ -35,14 +35,14 @@ onepub login
 dependencies:
   restick:
     hosted:
-      url: https://onepub.dev/api
+      url: https://onepub.dev/api/xdhdsdavuh
       name: restick
     version: ^0.1.0
 ```
 
 Or via Flutter CLI:
 ```bash
-flutter pub add restick --hosted-url=https://onepub.dev/api
+flutter pub add restick --hosted-url=https://onepub.dev/api/xdhdsdavuh
 ```
 
 ---
