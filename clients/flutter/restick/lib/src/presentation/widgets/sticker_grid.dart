@@ -1,4 +1,4 @@
-import "package:material_ui/material_ui.dart";
+import "package:flutter/material.dart";
 import "package:restick/src/domain/entities/sticker_asset.dart";
 import "package:restick/src/presentation/theme/restick_theme.dart";
 import "package:restick/src/presentation/widgets/sticker_grid_tile.dart";

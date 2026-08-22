@@ -1,4 +1,4 @@
-import "package:material_ui/material_ui.dart";
+import "package:flutter/material.dart";
 import "package:flutter_bloc/flutter_bloc.dart";
 import "package:restick/src/core/restick_client.dart";
 import "package:restick/src/presentation/cubit/marketplace_cubit.dart";
