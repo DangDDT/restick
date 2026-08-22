@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------
+  # 1. Docker Compose & Ingress Architecture Validation
+  # -------------------------------------------------------------
+  compose-validation:
+    name: Compose Config Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose Configuration
+        run: |
+          docker compose config --quiet
+          echo "Docker compose configuration is valid!"
+
+  # -------------------------------------------------------------
+  # 2. Go Backend Services (api, ftp)
+  # -------------------------------------------------------------
+  go-services:
+    name: Go Services (api, ftp)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [services/api, services/ftp]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache-dependency-path: |
+            ${{ matrix.service }}/go.sum
+            contracts/go.sum
+
+      - name: Vet & Test ${{ matrix.service }}
+        working-directory: ${{ matrix.service }}
+        run: |
+          go vet ./...
+          go test -v -race ./...
+
+  # -------------------------------------------------------------
+  # 3. Python Image Processing Worker & CLI (img_tool)
+  # -------------------------------------------------------------
+  python-worker:
+    name: Python Worker (img_tool)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: services/img_tool/pyproject.toml
+
+      - name: Install dependencies & linter
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+          pip install -e services/img_tool
+
+      - name: Run Ruff Linter
+        run: |
+          ruff check services/img_tool
+
+      - name: Verify CLI Entrypoint
+        run: |
+          img_tool --help
+
+  # -------------------------------------------------------------
+  # 4. Flutter Mobile SDK (clients/flutter/restick)
+  # -------------------------------------------------------------
+  flutter-sdk:
+    name: Flutter Mobile SDK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install SDK Dependencies
+        working-directory: clients/flutter/restick
+        run: flutter pub get
+
+      - name: Analyze SDK Code
+        working-directory: clients/flutter/restick
+        run: flutter analyze
+
+      - name: Run SDK Tests
+        working-directory: clients/flutter/restick
+        run: flutter test
+
+  # -------------------------------------------------------------
+  # 5. Flutter Web Admin Console (clients/web)
+  # -------------------------------------------------------------
+  flutter-web:
+    name: Flutter Web Admin
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Web Dependencies
+        working-directory: clients/web
+        run: flutter pub get
+
+      - name: Analyze Web Code
+        working-directory: clients/web
+        run: flutter analyze
+
+      - name: Build Web Release
+        working-directory: clients/web
+        run: flutter build web --release --dart-define-from-file=configuration.dev.json

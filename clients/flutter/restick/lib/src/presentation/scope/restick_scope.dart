@@ -28,6 +28,9 @@ class RestickScope extends StatelessWidget {
     final RestickTheme restickTheme =
         theme.extension<RestickTheme>() ??
         RestickTheme.fromColorScheme(theme.colorScheme);
+    final Map<Object, ThemeExtension<dynamic>> extensionsMap =
+        Map<Object, ThemeExtension<dynamic>>.of(theme.extensions)
+          ..[RestickTheme] = restickTheme;
     return RepositoryProvider<RestickClient>.value(
       value: client,
       child: MultiBlocProvider(
@@ -37,13 +40,7 @@ class RestickScope extends StatelessWidget {
         ],
         child: Theme(
           data: theme.copyWith(
-            extensions: <ThemeExtension<dynamic>>[
-              ...theme.extensions.values.where(
-                (ThemeExtension<dynamic> extension) =>
-                    extension is! RestickTheme,
-              ),
-              restickTheme,
-            ],
+            extensions: extensionsMap.values,
           ),
           child: Stack(
             children: <Widget>[
