@@ -15,11 +15,11 @@ import (
 type Server struct {
 	objects *application.ObjectService
 	auth    Auth
-	origin  string
+	origins []string
 }
 
-func NewServer(objects *application.ObjectService, auth Auth, origin string) *Server {
-	return &Server{objects: objects, auth: auth, origin: origin}
+func NewServer(objects *application.ObjectService, auth Auth, origins []string) *Server {
+	return &Server{objects: objects, auth: auth, origins: origins}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -151,11 +151,18 @@ func (s *Server) buildBundle(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", s.origin)
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Api-Key, X-Internal-Token")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS")
+		origin := r.Header.Get("Origin")
+		for _, o := range s.origins {
+			if o == origin {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+				break
+			}
 		}
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Api-Key, X-Internal-Token")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, HEAD, OPTIONS")
+		w.Header().Set("Access-Control-Expose-Headers", "ETag, Content-Length, Content-Type, Content-Range, Accept-Ranges")
+		w.Header().Set("Access-Control-Max-Age", "86400")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

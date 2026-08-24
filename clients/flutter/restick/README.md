@@ -7,77 +7,92 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"/></a>
 </p>
 
-Official Flutter client SDK for the **Restick Platform**. Provides out-of-the-box sticker marketplaces, picker dialogs, offline ZIP bundle caching, and delta tombstone synchronization for mobile messaging applications.
+Official Flutter client SDK for the **Restick Platform**. Provides drop-in sticker marketplaces, keyboard pickers, offline ZIP bundle caching, and automatic delta tombstone synchronization for mobile messaging and social applications.
 
 ---
 
-## ✨ Features
+## ✨ Key Features
 
-- 🛍️ **Sticker Marketplace**: Ready-to-use UI for browsing, searching, and previewing sticker packs.
-- 🎨 **Sticker Picker & Keyboard**: Fast, responsive sticker grid with emoji tabs, search, and recent stickers.
-- 📦 **Offline Caching & Bundles**: Automatically downloads complete `.zip` sticker archives, extracts assets locally, and indexes them with Drift SQLite.
-- 🔄 **Delta Tombstone Sync**: Automatically detects and purges revoked or deleted packs across app launches without redownloading the entire catalog.
-- 🔐 **API Key Authentication**: Seamlessly integrates with Restick dynamic API keys (`rstk_live_...`).
-- ⚡ **Zero Hassle Setup**: Wraps Drift database, Dio networking, and local storage into a unified `RestickClient`.
+- 🛍️ **Ready-to-Use Sticker Marketplace (`StickerMarketplace`)**: Beautiful UI for browsing, searching, and previewing sticker packs with animated download progress bars.
+- 🎨 **Sticker Picker & Keyboard (`StickerPicker`)**: High-performance sticker grid featuring emoji category tabs, in-memory caching, search, and recent stickers tracking.
+- 📦 **Offline-First ZIP Caching**: Downloads complete `.zip` sticker archives, extracts optimized `.webp` assets to local disk, and indexes them in a local Drift SQLite database. Zero latency for sending downloaded stickers!
+- 🔄 **Delta Tombstone Synchronization**: Automatically detects and purges revoked or deleted packs across app launches without redownloading the entire catalog.
+- 🔐 **Secure API Key Auth**: Built-in support for Restick dynamic API keys (`rstk_live_...`) with optional hardware keystore/keychain persistence.
+- ⚡ **Lightweight & Modular**: Clean separation between UI presentation widgets and the low-level `RestickClient` programmatic API.
 
 ---
 
-## 📦 Installation (via OnePub Private Registry)
+## 🏗️ Architecture & Storage Flow
 
-### 1. Authenticate with OnePub (One-time setup per developer/CI)
+```mermaid
+flowchart TD
+    subgraph Remote["Restick Platform Ingress Gateway"]
+        API["GET /api/v1/packs (Catalog Index)"]
+        ZIP["GET /v1/bundles/{id} (Streaming ZIP Stream)"]
+        TOMB["GET /api/v1/tombstones (Revocation Deltas)"]
+    end
+
+    subgraph Client["Flutter Mobile App (Restick SDK)"]
+        CLIENT["RestickClient Singleton\n(RestickScope)"]
+        DB[("Drift SQLite Database\nInstalled Packs & Asset Index")]
+        DISK[("Local File Storage\nExtracted 512x512 WebP Files")]
+        UI["UI Widgets:\nStickerPicker | StickerMarketplace"]
+    end
+
+    CLIENT -->|"Fetch Catalog"| API
+    CLIENT -->|"Download Bundle"| ZIP
+    CLIENT -->|"Delta Sync"| TOMB
+
+    CLIENT -->|"Index Metadata"| DB
+    CLIENT -->|"Extract ZIP"| DISK
+
+    UI -->|"Instant 0ms Read"| DB
+    UI -->|"Display Local Files"| DISK
+```
+
+---
+
+## 📦 Installation
+
+### Option A: Via OnePub Private Registry (Recommended)
+
+1. Authenticate with OnePub (one-time setup per developer or CI machine):
 ```bash
 dart pub global activate onepub
 onepub login
 ```
 
-### 2. Add `restick` to your `pubspec.yaml`
-
-**Via OnePub Private Registry:**
+2. Add `restick` to your app's `pubspec.yaml`:
 ```yaml
 dependencies:
+  flutter:
+    sdk: flutter
   restick:
     hosted:
       url: https://onepub.dev/api/xdhdsdavuh
       name: restick
-    version: 0.1.5-flutter3.32.8
+    version: ^0.1.5-flutter3.32.8
 ```
 
-**Or directly via GitHub Private Repository:**
+### Option B: Via Git Repository
 ```yaml
 dependencies:
+  flutter:
+    sdk: flutter
   restick:
     git:
-      url: git@github.com:DangDDT/restick.git
+      url: https://github.com/DangDDT/restick.git
       path: clients/flutter/restick
-      ref: support/flutter-3.32
+      ref: main
 ```
 
 ---
 
-## 🚀 Publishing New Releases to OnePub
+## 🚀 Quickstart & Setup
 
-To publish updates to your organization's private registry:
+### 1. Initialize the SDK in `main.dart`
 
-```bash
-cd clients/flutter/restick
-
-# 1. Verify package analysis & tests
-flutter analyze
-flutter test
-
-# 2. Publish to OnePub
-onepub pub publish
-# Or using standard dart tool:
-dart pub publish
-```
-
----
-
-## 🚀 Getting Started
-
-### 1. Initialize the SDK
-
-Initialize `Restick` in your `main()` before calling `runApp()`:
+Call `Restick.open()` before `runApp()` to initialize the database, network client, and background sync worker:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -86,10 +101,12 @@ import 'package:restick/restick.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize Restick Client
   final RestickClient client = await Restick.open(
     RestickConfig(
-      baseUrl: 'https://restick.your-domain.com',
-      apiKey: 'rstk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+      baseUrl: 'https://restick.your-domain.com', // Your unified gateway domain
+      apiKey: 'rstk_live_3f9b8a1c4e2d7f0e5b8a1c4e2d7f0e5b',
+      autoSyncInterval: const Duration(minutes: 5),
     ),
   );
 
@@ -97,22 +114,21 @@ Future<void> main() async {
 }
 ```
 
-### 2. Wrap with `RestickScope`
-
-Wrap your widget tree (or screen) with `RestickScope`:
+### 2. Wrap Your App with `RestickScope`
 
 ```dart
 class MyApp extends StatelessWidget {
   const MyApp({required this.client, super.key});
-
   final RestickClient client;
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: RestickScope(
-        client: client,
-        child: const HomeScreen(),
+    return RestickScope(
+      client: client,
+      child: MaterialApp(
+        title: 'Chat App',
+        theme: ThemeData(useMaterial3: true),
+        home: const ChatScreen(),
       ),
     );
   }
@@ -121,85 +137,115 @@ class MyApp extends StatelessWidget {
 
 ---
 
-## 🎨 UI Widgets
+## 🎨 UI Component Guide
 
-### 1. Sticker Picker (`StickerPicker`)
-Embed the sticker picker into your chat input bar or bottom sheet:
+### 1. Embed the Sticker Picker (`StickerPicker`)
+
+Open a bottom sheet or keyboard panel when the user taps a sticker button in your chat bar:
 
 ```dart
-IconButton(
-  icon: const Icon(Icons.emoji_emotions_outlined),
-  onPressed: () {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => SizedBox(
-        height: 360,
-        child: StickerPicker(
-          onStickerSelected: (File stickerFile, StickerAsset asset) {
-            print('Selected sticker file: ${stickerFile.path}');
-            print('Emoji hint: ${asset.emojiHint}');
-            Navigator.pop(context);
-          },
-        ),
+void openStickerPicker(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    builder: (context) => SizedBox(
+      height: 380,
+      child: StickerPicker(
+        onStickerSelected: (File stickerFile, StickerAsset asset) {
+          print('Selected file on disk: ${stickerFile.path}');
+          print('Emoji hint: ${asset.emojiHint}');
+          print('Sticker ID: ${asset.id}');
+          
+          Navigator.pop(context);
+          // Send sticker message in your chat pipeline!
+        },
       ),
-    );
-  },
-);
+    ),
+  );
+}
 ```
 
-### 2. Sticker Marketplace (`StickerMarketplace`)
-Open the full marketplace screen for users to discover and download new packs:
+### 2. Open the Sticker Marketplace (`StickerMarketplace`)
+
+Allow users to discover, search, preview, and download new sticker packs:
 
 ```dart
-Navigator.of(context).push(
-  MaterialPageRoute(
-    builder: (context) => Scaffold(
-      appBar: AppBar(title: const Text('Sticker Store')),
-      body: const StickerMarketplace(),
+void openMarketplace(BuildContext context) {
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (context) => Scaffold(
+        appBar: AppBar(title: const Text('Sticker Store')),
+        body: const StickerMarketplace(),
+      ),
     ),
-  ),
-);
+  );
+}
 ```
 
 ---
 
-## 🛠️ Programmatic API
+## 🛠️ Programmatic API Reference (`RestickClient`)
 
-You can also use `RestickClient` directly for custom UI:
+If you prefer building a completely custom UI, you can interact with `RestickClient` directly via `RestickScope.of(context)`:
 
 ```dart
 final client = RestickScope.of(context);
 
-// 1. Fetch available packs
-final List<StickerPack> packs = await client.listPacks();
+// 1. List available published packs in marketplace
+final List<StickerPack> remotePacks = await client.listPacks();
 
-// 2. Download and install a pack
-await client.downloadPack(packId: 'pack-123');
+// 2. Download and unpack a pack bundle
+await client.downloadPack(
+  packId: 'pack-101-cute-cats',
+  onProgress: (double progress) {
+    print('Download progress: ${(progress * 100).toInt()}%');
+  },
+);
 
-// 3. Check installed packs
-final List<StickerPack> installed = await client.getInstalledPacks();
+// 3. Query all installed packs (Read from local SQLite)
+final List<StickerPack> installedPacks = await client.getInstalledPacks();
 
-// 4. Delete an installed pack locally
-await client.deletePackLocally(packId: 'pack-123');
+// 4. Retrieve local sticker assets for an installed pack
+final List<StickerAsset> stickers = await client.getStickersForPack(packId: 'pack-101-cute-cats');
+
+// 5. Delete an installed pack from local storage
+await client.deletePackLocally(packId: 'pack-101-cute-cats');
+
+// 6. Force a catalog and tombstone delta synchronization
+await client.syncCatalogAndTombstones();
 ```
 
 ---
 
-## ⚙️ Configuration Options
+## ⚙️ Configuration Reference (`RestickConfig`)
 
-| Option | Type | Description |
-| :--- | :--- | :--- |
-| `baseUrl` | `String` | Single Gateway base URL for all catalog, API, and sticker assets |
-| `apiKey` | `String` | API Key (`rstk_live_...`) for authorized requests |
-| `autoSyncInterval` | `Duration` | Automatic tombstone / catalog synchronization interval (default: 5 minutes) |
-| `persistApiKey` | `bool` | Persist API Key in secure storage (default: true) |
+| Property | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `baseUrl` | `String` | *Required* | Unified Edge Gateway base URL (e.g. `https://restick.yourdomain.com`) |
+| `apiKey` | `String` | *Required* | API key (`rstk_live_...`) generated from Web Admin Console |
+| `autoSyncInterval` | `Duration` | `Duration(minutes: 5)` | Periodic interval for delta tombstone and catalog background sync |
+| `persistApiKey` | `bool` | `true` | Save API key securely on device using Secure Storage |
+| `connectTimeout` | `Duration` | `Duration(seconds: 15)` | HTTP connection timeout for asset downloads |
 
 ---
 
-## 📱 Example App
+## 🧪 Testing & Static Analysis
 
-Check out the fully functional example application in [`clients/flutter/restick/example`](https://github.com/DangDDT/restick/tree/main/clients/flutter/restick/example).
+```bash
+cd clients/flutter/restick
+
+# 1. Run Flutter analyzer
+flutter analyze
+
+# 2. Run unit & widget tests
+flutter test
+```
+
+---
+
+## 📱 Interactive Example App
+
+Explore a complete, working demonstration chat application in [`clients/flutter/restick/example`](example/).
 
 ---
 

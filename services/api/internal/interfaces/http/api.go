@@ -20,12 +20,12 @@ import (
 type Server struct {
 	store         *postgres.Store
 	jwtSecret     []byte
-	webOrigin     string
+	webOrigins    []string
 	publicFTP     string
 }
 
-func NewServer(store *postgres.Store, jwtSecret string, webOrigin string, publicFTP string) *Server {
-	return &Server{store: store, jwtSecret: []byte(jwtSecret), webOrigin: webOrigin, publicFTP: strings.TrimRight(publicFTP, "/")}
+func NewServer(store *postgres.Store, jwtSecret string, webOrigins []string, publicFTP string) *Server {
+	return &Server{store: store, jwtSecret: []byte(jwtSecret), webOrigins: webOrigins, publicFTP: strings.TrimRight(publicFTP, "/")}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -791,11 +791,22 @@ func (s *Server) apiKeyOK(r *http.Request) bool {
 
 func (s *Server) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.webOrigin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", s.webOrigin)
+		origin := r.Header.Get("Origin")
+		allowed := false
+		for _, o := range s.webOrigins {
+			if o == origin {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+				allowed = true
+				break
+			}
+		}
+		if allowed {
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Api-Key")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, HEAD, OPTIONS")
-			w.Header().Set("Content-Security-Policy", "frame-ancestors "+s.webOrigin)
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			csp := strings.Join(s.webOrigins, " ")
+			w.Header().Set("Content-Security-Policy", "frame-ancestors "+csp)
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

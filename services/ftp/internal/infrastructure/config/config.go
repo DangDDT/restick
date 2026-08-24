@@ -20,7 +20,7 @@ type Config struct {
 	InternalToken   string
 	JWTSecret       string
 	APIKeys         []string
-	WebOrigin       string
+	WebOrigins      []string
 }
 
 func Load() Config {
@@ -39,7 +39,7 @@ func Load() Config {
 		InternalToken:   envOr("INTERNAL_TOKEN", ""),
 		JWTSecret:       envOr("JWT_SECRET", "change-me-jwt"),
 		APIKeys:         splitCSV(envOr("API_KEYS", envOr("BOOTSTRAP_API_KEY", "dev-api-key"))),
-		WebOrigin:       envOr("WEB_ORIGIN", "http://localhost:8088"),
+		WebOrigins:       splitCSV(envOr("WEB_ORIGIN", "http://localhost:8088")),
 	}
 }
 

@@ -12,9 +12,6 @@ services:
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
       IMG_TOOL_ENGINE: ${IMG_TOOL_ENGINE:-simple}
       FTP_HTTP_URL: ${FTP_HTTP_URL:-http://ftp_svc:8080}
-    ports:
-      - "8090:8080"
-      - "50053:50053"
     networks:
       - restick
 

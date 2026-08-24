@@ -29,7 +29,7 @@ func main() {
 		JWTSecret:     []byte(cfg.JWTSecret),
 		APIKeys:       cfg.APIKeys,
 		KeyValidator:  authClient,
-	}, cfg.WebOrigin)
+	}, cfg.WebOrigins)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 2)

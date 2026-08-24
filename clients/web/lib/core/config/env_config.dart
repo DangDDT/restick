@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 /// Runtime configuration for Restick Web.
 ///
 /// Values are injected at build/run time via:
@@ -12,9 +14,21 @@ class EnvConfig {
   });
 
   factory EnvConfig.load() {
-    return const EnvConfig(
-      baseUrl: baseUrlDefine,
-    );
+    const fromBase = String.fromEnvironment('BASE_URL');
+    const fromRestick = String.fromEnvironment('RESTICK_BASE_URL');
+    const fromApi = String.fromEnvironment('API_BASE_URL');
+    const compiled = fromBase != ''
+        ? fromBase
+        : (fromRestick != '' ? fromRestick : fromApi);
+    final String base;
+    if (compiled.isNotEmpty) {
+      base = compiled;
+    } else if (kIsWeb) {
+      base = Uri.base.origin; // same-origin relative to the served domain
+    } else {
+      base = 'http://localhost';
+    }
+    return EnvConfig(baseUrl: base);
   }
 
   /// Single Unified Ingress URL for the entire Restick platform (API, Assets, Docs).
