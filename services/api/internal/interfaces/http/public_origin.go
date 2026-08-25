@@ -31,14 +31,7 @@ func clientReachableOrigin(configured string, r *http.Request) string {
 	if clientHost == "" || isLoopbackHost(clientHost) {
 		return configured
 	}
-	ftpPort := parsed.Port()
-	if ftpPort == "" {
-		ftpPort = "80"
-		if parsed.Scheme == "https" {
-			ftpPort = "443"
-		}
-	}
-	parsed.Host = net.JoinHostPort(clientHost, ftpPort)
+	parsed.Host = clientHost
 	if proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); proto == "http" || proto == "https" {
 		parsed.Scheme = proto
 	}

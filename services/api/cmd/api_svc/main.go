@@ -32,7 +32,7 @@ func main() {
 		slog.Error("seed", "err", err)
 		os.Exit(1)
 	}
-	httpServer := httpx.NewServer(store, cfg.JWTSecret, cfg.WebOrigin, cfg.PublicFTPOrigin)
+	httpServer := httpx.NewServer(store, cfg.JWTSecret, cfg.WebOrigins, cfg.PublicFTPOrigin)
 	errCh := make(chan error, 2)
 	go func() {
 		errCh <- httpx.Listen(ctx, cfg.HTTPAddr, httpServer.Handler())

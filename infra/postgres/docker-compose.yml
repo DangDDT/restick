@@ -2,15 +2,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: restick
-      POSTGRES_PASSWORD: restick
-      POSTGRES_DB: restick
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-restick}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-restick}
+      POSTGRES_DB: ${POSTGRES_DB:-restick}
     volumes:
       - restick_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U restick -d restick"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-restick} -d ${POSTGRES_DB:-restick}"]
       interval: 5s
       timeout: 3s
       retries: 10

@@ -15,7 +15,7 @@ type Config struct {
 	PostgresDSN         string
 	JWTSecret           string
 	InternalToken       string
-	WebOrigin           string
+	WebOrigins          []string
 	PublicFTPOrigin     string
 	BootstrapAdminEmail string
 	BootstrapAdminPass  string
@@ -33,7 +33,7 @@ func Load() Config {
 		PostgresDSN:         envOr("POSTGRES_DSN", "postgres://restick:restick@postgres:5432/restick?sslmode=disable"),
 		JWTSecret:           envOr("JWT_SECRET", "change-me-jwt"),
 		InternalToken:       envOr("INTERNAL_TOKEN", ""),
-		WebOrigin:           envOr("WEB_ORIGIN", "http://localhost"),
+		WebOrigins:          splitCSV(envOr("WEB_ORIGIN", "http://localhost")),
 		PublicFTPOrigin:     envOr("PUBLIC_FTP_ORIGIN", "http://localhost"),
 		BootstrapAdminEmail: envOr("BOOTSTRAP_ADMIN_EMAIL", "admin@restick.local"),
 		BootstrapAdminPass:  envOr("BOOTSTRAP_ADMIN_PASSWORD", "changeme"),
@@ -47,4 +47,16 @@ func envOr(key string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func splitCSV(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }

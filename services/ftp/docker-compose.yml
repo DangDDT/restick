@@ -13,13 +13,11 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-restick}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-resticksecret}
       MINIO_BUCKET: ${MINIO_BUCKET:-restick-assets}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt}
       API_KEYS: ${BOOTSTRAP_API_KEY:-dev-api-key}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost}
-    ports:
-      - "8081:8080"
-      - "50052:50052"
     networks:
       - restick
 
