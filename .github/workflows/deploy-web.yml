@@ -1,0 +1,83 @@
+name: Build & Publish Web Admin Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clients/web/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+    inputs:
+      deploy_to_server:
+        description: 'Trigger remote server deployment via SSH if configured'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build Web & Publish to GHCR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Lowercase Repository Owner
+        id: repo_owner
+        run: |
+          echo "owner=${OWNER,,}" >> $GITHUB_OUTPUT
+        env:
+          OWNER: ${{ github.repository_owner }}
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Web Dependencies
+        working-directory: clients/web
+        run: flutter pub get
+
+      - name: Generate Code
+        working-directory: clients/web
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: Build Flutter Web Release
+        working-directory: clients/web
+        run: flutter build web --release --dart-define-from-file=configuration.dev.json
+
+      - name: Login to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: clients/web
+          push: true
+          tags: |
+            ghcr.io/${{ steps.repo_owner.outputs.owner }}/restick-web:latest
+            ghcr.io/${{ steps.repo_owner.outputs.owner }}/restick-web:${{ github.sha }}
+
+      - name: Optional Deploy to Remote Host via SSH
+        if: ${{ env.SERVER_HOST != '' && (github.event_name == 'push' || inputs.deploy_to_server == true) }}
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd ${{ secrets.SERVER_DEPLOY_PATH || '~/restick' }}
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose pull web
+            docker compose up -d web

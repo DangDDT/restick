@@ -19,3 +19,4 @@ build/
 coverage/
 .tools/
 custom_lint.log
+.widget_preview/

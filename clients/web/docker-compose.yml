@@ -1,5 +1,6 @@
 services:
   web:
+    image: ${WEB_IMAGE:-ghcr.io/dangddt/restick-web:latest}
     build:
       context: .
       dockerfile: Dockerfile
