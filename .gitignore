@@ -18,3 +18,4 @@ venv/
 build/
 coverage/
 .tools/
+custom_lint.log

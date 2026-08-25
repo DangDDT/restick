@@ -1,10 +1,26 @@
-name: CI
+name: CI — Backend & Infra
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'services/**'
+      - 'infra/**'
+      - 'clients/web/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.override.yml'
+      - '.env.example'
+      - '.github/workflows/ci-backend.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'services/**'
+      - 'infra/**'
+      - 'clients/web/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.override.yml'
+      - '.env.example'
+      - '.github/workflows/ci-backend.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,9 +34,7 @@ jobs:
     name: Compose Config Validation
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Validate Docker Compose Configuration
         run: |
           docker compose config --quiet
@@ -30,120 +44,67 @@ jobs:
   # 2. Go Backend Services (api, ftp)
   # -------------------------------------------------------------
   go-services:
-    name: Go Services (api, ftp)
+    name: Go Services (${{ matrix.service }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
         service: [services/api, services/ftp]
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.24.x'
-          cache-dependency-path: |
-            ${{ matrix.service }}/go.sum
-            contracts/go.sum
-
-      - name: Vet & Test ${{ matrix.service }}
+          cache-dependency-path: ${{ matrix.service }}/go.sum
+      - name: Vet & Test
         working-directory: ${{ matrix.service }}
         run: |
           go vet ./...
           go test -v -race ./...
 
   # -------------------------------------------------------------
-  # 3. Python Image Processing Worker & CLI (img_tool)
+  # 3. Python Image Processing Worker (img_tool)
   # -------------------------------------------------------------
   python-worker:
     name: Python Worker (img_tool)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
+          cache: pip
           cache-dependency-path: services/img_tool/pyproject.toml
-
       - name: Install dependencies & linter
         run: |
           python -m pip install --upgrade pip
           pip install ruff
           pip install -e services/img_tool
-
-      - name: Run Ruff Linter
-        run: |
-          ruff check services/img_tool
-
+      - name: Ruff Lint
+        run: ruff check services/img_tool
       - name: Verify CLI Entrypoint
-        run: |
-          img_tool --help
+        run: img_tool --help
 
   # -------------------------------------------------------------
-  # 4. Flutter Mobile SDK (clients/flutter/restick)
-  # -------------------------------------------------------------
-  flutter-sdk:
-    name: Flutter Mobile SDK
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          cache: true
-
-      - name: Install SDK Dependencies
-        working-directory: clients/flutter/restick
-        run: flutter pub get
-
-      - name: Generate SDK Code
-        working-directory: clients/flutter/restick
-        run: flutter pub run build_runner build --delete-conflicting-outputs
-
-      - name: Analyze SDK Code
-        working-directory: clients/flutter/restick
-        run: flutter analyze
-
-      - name: Run SDK Tests
-        working-directory: clients/flutter/restick
-        run: flutter test
-
-  # -------------------------------------------------------------
-  # 5. Flutter Web Admin Console (clients/web)
+  # 4. Flutter Web Admin Console (clients/web)
   # -------------------------------------------------------------
   flutter-web:
     name: Flutter Web Admin
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: stable
           cache: true
-
-      - name: Install Web Dependencies
+      - name: Install Dependencies
         working-directory: clients/web
         run: flutter pub get
-
-      - name: Generate Web Code
+      - name: Generate Code
         working-directory: clients/web
         run: flutter pub run build_runner build --delete-conflicting-outputs
-
-      - name: Analyze Web Code
+      - name: Analyze
         working-directory: clients/web
         run: flutter analyze
-
       - name: Build Web Release
         working-directory: clients/web
         run: flutter build web --release --dart-define-from-file=configuration.dev.json

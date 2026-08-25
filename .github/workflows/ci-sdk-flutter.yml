@@ -1,0 +1,79 @@
+name: CI — Flutter SDK
+
+on:
+  push:
+    branches:
+      - main
+      - 'support/flutter-*'
+    paths:
+      - 'clients/flutter/**'
+      - '.github/workflows/ci-sdk-flutter.yml'
+  pull_request:
+    branches:
+      - main
+      - 'support/flutter-*'
+    paths:
+      - 'clients/flutter/**'
+      - '.github/workflows/ci-sdk-flutter.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------
+  # Guard: backend must never diverge from main on support/* branches.
+  # Fails fast if any file outside clients/flutter/** differs from main.
+  # -------------------------------------------------------------
+  backend-diverge-guard:
+    name: Backend Diverge Guard
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/heads/support/') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'support/'))
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ensure backend is identical to main
+        run: |
+          git fetch origin main --depth=1
+          BACKEND_DIFF=$(git diff origin/main...HEAD -- \
+            services/ infra/ \
+            docker-compose.yml \
+            docker-compose.override.yml \
+            .env.example \
+            | wc -l)
+          if [ "$BACKEND_DIFF" -gt "0" ]; then
+            echo ""
+            echo "::error::Backend code has diverged from main on a support/* branch."
+            echo "::error::Backend changes MUST be committed to main first, then cherry-picked or rebased here."
+            echo ""
+            git diff origin/main...HEAD -- services/ infra/ docker-compose.yml docker-compose.override.yml .env.example
+            exit 1
+          fi
+          echo "Backend is clean — no divergence from main."
+
+  # -------------------------------------------------------------
+  # Flutter Mobile SDK CI
+  # -------------------------------------------------------------
+  flutter-sdk:
+    name: Flutter Mobile SDK
+    runs-on: ubuntu-latest
+    needs: []
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install SDK Dependencies
+        working-directory: clients/flutter/restick
+        run: flutter pub get
+      - name: Generate SDK Code
+        working-directory: clients/flutter/restick
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+      - name: Analyze SDK Code
+        working-directory: clients/flutter/restick
+        run: flutter analyze
+      - name: Run SDK Tests
+        working-directory: clients/flutter/restick
+        run: flutter test

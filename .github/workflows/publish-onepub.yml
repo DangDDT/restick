@@ -1,9 +1,14 @@
-name: Publish to OnePub
+name: Publish Flutter SDK to OnePub
 
+# Trigger convention:
+#   sdk/v0.2.0              → publishes from main   (Flutter stable / 3.47+)
+#   sdk/v0.2.0-flutter3.32  → publishes from support/flutter-3.32
+#
+# Run manually via workflow_dispatch when needed.
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
+      - 'sdk/v[0-9]+.[0-9]+.[0-9]+*'
   workflow_dispatch:
 
 jobs:
@@ -11,18 +16,20 @@ jobs:
     name: Publish Flutter SDK to OnePub
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: stable
           cache: true
 
       - name: Install SDK Dependencies
         working-directory: clients/flutter/restick
         run: flutter pub get
+
+      - name: Generate SDK Code
+        working-directory: clients/flutter/restick
+        run: flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Run Tests & Static Analysis
         working-directory: clients/flutter/restick
@@ -38,7 +45,7 @@ jobs:
           ONEPUB_TOKEN: ${{ secrets.ONEPUB_TOKEN }}
         run: |
           if [ -z "$ONEPUB_TOKEN" ]; then
-            echo "::error::ONEPUB_TOKEN secret is not set. Please configure it in GitHub Repository Settings -> Secrets."
+            echo "::error::ONEPUB_TOKEN secret is not set."
             exit 1
           fi
           onepub import-token "$ONEPUB_TOKEN"
