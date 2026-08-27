@@ -13,7 +13,7 @@ function PackCard({ pack }: { pack: PackListResponse["items"][number] }) {
   const { t } = useI18n();
   return (
     <Link
-      href={`/packs/detail?id=${pack.id}`}
+      href={`/packs/${pack.id}`}
       className="group overflow-hidden rounded-xl border border-zinc-200 bg-white transition-shadow hover:shadow-md"
     >
       <div className="aspect-square w-full bg-zinc-100">

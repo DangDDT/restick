@@ -1,10 +1,9 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import { useApi } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
 import type { PackDetail } from "@/lib/types";
 import {
   REJECTION_CODES,
@@ -23,6 +22,7 @@ import {
   Spinner,
   StatusPill,
 } from "@/components/ui";
+import { useI18n } from "@/lib/i18n";
 
 function RejectDialog({
   onConfirm,
@@ -124,7 +124,7 @@ function QueueDetail({ id }: { id: string }) {
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
       {data.reject_reason && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <span className="font-semibold">Rejection reason:</span> {data.reject_reason}
+          <span className="font-semibold">{t("rejectionReason")}</span> {data.reject_reason}
         </div>
       )}
 
@@ -176,9 +176,11 @@ function QueueDetail({ id }: { id: string }) {
   );
 }
 
-function DetailPage() {
+export default function Page() {
   const { t } = useI18n();
-  const id = useSearchParams().get("id");
+  const params = useParams<{ id: string }>();
+  const id = params?.id;
+
   return (
     <RequireAdmin>
       <AppShell>
@@ -189,13 +191,5 @@ function DetailPage() {
         )}
       </AppShell>
     </RequireAdmin>
-  );
-}
-
-export default function Page() {
-  return (
-    <Suspense fallback={<Spinner />}>
-      <DetailPage />
-    </Suspense>
   );
 }

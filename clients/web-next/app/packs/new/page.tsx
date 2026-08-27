@@ -95,7 +95,7 @@ function NewPack() {
       }
 
       await request<void>(`/api/v1/packs/${created.id}/submit`, { method: "POST" });
-      router.replace(`/packs/detail?id=${created.id}`);
+      router.replace(`/packs/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("uploadFailed"));
     } finally {

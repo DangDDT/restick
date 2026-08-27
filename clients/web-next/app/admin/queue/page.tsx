@@ -43,7 +43,7 @@ function Queue() {
                 <tr key={p.id} className="hover:bg-zinc-50">
                   <td className="px-4 py-3">
                     <Link
-                      href={`/admin/queue/detail?id=${p.id}`}
+                      href={`/admin/queue/${p.id}`}
                       className="font-medium text-indigo-600 hover:underline"
                     >
                       {p.name}

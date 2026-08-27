@@ -1,11 +1,10 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Suspense, useState } from "react";
 import { useApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useI18n } from "@/lib/i18n";
 import type { PackDetail, Sticker } from "@/lib/types";
 import {
   REJECTION_CODES,
@@ -27,6 +26,7 @@ import {
   Spinner,
   StatusPill,
 } from "@/components/ui";
+import { useI18n } from "@/lib/i18n";
 
 function ReasonDialog({
   title,
@@ -53,7 +53,6 @@ function ReasonDialog({
 }) {
   const [code, setCode] = useState(codes[0]);
   const [text, setText] = useState(defaults[codes[0]]);
-
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -232,7 +231,6 @@ function PackDetailView({ id }: { id: string }) {
     setEditing(true);
   }
 
-
   return (
     <>
       <PageHeader
@@ -262,14 +260,14 @@ function PackDetailView({ id }: { id: string }) {
         <div className="space-y-6">
           <div className="max-w-2xl space-y-4 rounded-xl border border-zinc-200 bg-white p-6">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Name">
+              <Field label={t("packName")}>
                 <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
               </Field>
-              <Field label="Slug">
+              <Field label={t("packSlug")}>
                 <input value={slug} onChange={(e) => setSlug(e.target.value)} className={inputClass} />
               </Field>
             </div>
-            <Field label="Tags" hint="Comma-separated">
+            <Field label={t("packTags")}>
               <input value={tags} onChange={(e) => setTags(e.target.value)} className={inputClass} />
             </Field>
             <div className="flex justify-end gap-2">
@@ -437,7 +435,9 @@ function PackDetailView({ id }: { id: string }) {
 
 function DetailPage() {
   const { t } = useI18n();
-  const id = useSearchParams().get("id");
+  const params = useParams<{ id: string }>();
+  const id = params?.id;
+
   return (
     <RequireAuth>
       <AppShell>
