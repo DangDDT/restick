@@ -1,9 +1,0 @@
-{
-  "name": "Restick",
-  "short_name": "Restick",
-  "start_url": ".",
-  "display": "standalone",
-  "background_color": "#FAFAFA",
-  "theme_color": "#0F766E",
-  "description": "Restick contributor and admin UI"
-}

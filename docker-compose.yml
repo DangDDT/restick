@@ -7,4 +7,4 @@ include:
   - path: services/ftp/docker-compose.yml
   - path: services/img_tool/docker-compose.yml
   - path: services/gateway/docker-compose.yml
-  - path: clients/web/docker-compose.yml
+  - path: clients/web-next/docker-compose.yml

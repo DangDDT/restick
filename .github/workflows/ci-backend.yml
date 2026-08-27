@@ -6,7 +6,7 @@ on:
     paths:
       - 'services/**'
       - 'infra/**'
-      - 'clients/web/**'
+      - 'clients/web-next/**'
       - 'docker-compose.yml'
       - 'docker-compose.override.yml'
       - '.env.example'
@@ -16,7 +16,7 @@ on:
     paths:
       - 'services/**'
       - 'infra/**'
-      - 'clients/web/**'
+      - 'clients/web-next/**'
       - 'docker-compose.yml'
       - 'docker-compose.override.yml'
       - '.env.example'
@@ -85,26 +85,24 @@ jobs:
         run: img_tool --help
 
   # -------------------------------------------------------------
-  # 4. Flutter Web Admin Console (clients/web)
+  # 4. Next.js Web Admin Console (clients/web-next)
   # -------------------------------------------------------------
-  flutter-web:
-    name: Flutter Web Admin
+  web-next:
+    name: Next.js Web Admin
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: actions/setup-node@v4
         with:
-          channel: stable
-          cache: true
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: clients/web-next/package-lock.json
       - name: Install Dependencies
-        working-directory: clients/web
-        run: flutter pub get
-      - name: Generate Code
-        working-directory: clients/web
-        run: flutter pub run build_runner build --delete-conflicting-outputs
-      - name: Analyze
-        working-directory: clients/web
-        run: flutter analyze
-      - name: Build Web Release
-        working-directory: clients/web
-        run: flutter build web --release --dart-define-from-file=configuration.dev.json
+        working-directory: clients/web-next
+        run: npm ci
+      - name: Lint
+        working-directory: clients/web-next
+        run: npm run lint
+      - name: Build Static Export
+        working-directory: clients/web-next
+        run: npm run build

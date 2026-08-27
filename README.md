@@ -61,7 +61,7 @@ Restick is designed around a **Single Ingress Edge Gateway** paired with an inte
 flowchart TD
     subgraph Clients["Clients & Consumers"]
         SDK["Flutter Mobile SDK\n(iOS / Android / Desktop)"]
-        WEB["Admin & Contributor Portal\n(Flutter Web SPA)"]
+        WEB["Admin & Contributor Portal\n(Next.js Web App)"]
         CLI["Developer CLI / 3rd Party Integrators"]
     end
 
@@ -72,7 +72,7 @@ flowchart TD
     subgraph Internal_HTTP["Internal HTTP Endpoints"]
         API_HTTP["api_svc (:8080)\n/api/*, /docs, /openapi.yaml"]
         FTP_HTTP["ftp_svc (:8080)\n/v1/objects/*, /v1/bundles/*"]
-        WEB_HTTP["web (:8080)\nFlutter Web Nginx SPA"]
+        WEB_HTTP["web (:8080)\nNext.js Static Export Nginx"]
     end
 
     subgraph Mesh["Internal gRPC Mesh (:50051 - :50053)"]
@@ -131,7 +131,7 @@ flowchart TD
 │   ├── ftp/                       # High-throughput asset streaming & pack bundler (Go 1.25)
 │   └── img_tool/                  # Slicing worker & standalone CLI (Python 3.12, OpenCV)
 ├── clients/
-│   ├── web/                       # Contributor & Admin Web Dashboard (Flutter Web SPA)
+│   ├── web-next/                  # Contributor & Admin Web Dashboard (Next.js Static Export)
 │   └── flutter/restick/           # Official Mobile Client SDK & Example App
 └── scripts/
     └── gen-proto.sh               # Protobuf code generation script for Go & Python
@@ -145,7 +145,7 @@ flowchart TD
 - **Docker Engine 24+** & **Docker Compose v2.20+**
 - **Go 1.25+** (optional, for backend development)
 - **Python 3.12+** & **pip** (optional, for image tool development)
-- **Flutter 3.47+** (optional, for Web & Mobile SDK development)
+- **Node.js 24+ & npm** (optional, for web-next development)
 
 ### 2. Clone & Configure Environment
 ```bash
@@ -156,15 +156,10 @@ cd restick
 cp .env.example .env
 ```
 
-### 3. Build Web Assets & Start Stack
+### 3. Start Stack
 ```bash
-# 1. Compile Flutter Web release assets
-cd clients/web
-flutter build web --release --dart-define-from-file=configuration.dev.json
-cd ../..
-
-# 2. Launch all services with Docker Compose
-# In local development, docker compose automatically merges docker-compose.override.yml
+# The web dashboard (clients/web-next) is built inside Docker (multi-stage
+# Node build → nginx static export). No host-side web build step needed.
 docker compose up --build -d
 ```
 
@@ -528,7 +523,6 @@ class ChatScreen extends StatelessWidget {
 | `IMG_GRPC_ADDR` | `:50053` | Internal bind address for `img_tool` gRPC worker |
 | `IMG_TOOL_ENGINE` | `simple` | Slicing algorithm (`simple` or `contour`) |
 | `PUBLIC_FTP_ORIGIN` | `http://localhost` | Base origin for generating asset download URLs |
-| `RESTICK_PUBLIC_API_BASE` | `http://localhost:8080` | Public API base URL used by Flutter Web |
 | `API_SVC_GRPC_ADDR` | `api_svc:50051` | gRPC address of `api_svc` |
 | `FTP_SVC_GRPC_ADDR` | `ftp_svc:50052` | gRPC address of `ftp_svc` |
 | `IMG_TOOL_GRPC_ADDR` | `img_tool:50053` | gRPC address of `img_tool` |
@@ -566,9 +560,10 @@ go test -v ./...
 cd ../ftp
 go test -v ./...
 
-# 3. Analyze & Test Web Client (Flutter)
-cd ../../clients/web
-flutter analyze
+# 3. Lint & Build Web Dashboard (Next.js)
+cd ../../clients/web-next
+npm run lint
+npm run build
 
 # 4. Analyze & Test Mobile SDK (Flutter)
 cd ../flutter/restick
