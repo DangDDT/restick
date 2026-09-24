@@ -18,5 +18,11 @@ venv/
 build/
 coverage/
 .tools/
+
+# Local orchestrator progress
+.slim/deepwork/
+
+# Local deployment backups
+backups/
 custom_lint.log
 .widget_preview/
