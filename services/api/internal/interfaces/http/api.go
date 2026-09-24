@@ -339,7 +339,11 @@ func (s *Server) updatePack(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		taken, err := s.store.IsSlugTaken(r.Context(), body.Slug, p.ID)
-		if err != nil || taken {
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+			return
+		}
+		if taken {
 			writeErr(w, http.StatusConflict, "conflict", "slug taken")
 			return
 		}
