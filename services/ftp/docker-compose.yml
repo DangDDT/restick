@@ -18,6 +18,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt}
       API_KEYS: ${BOOTSTRAP_API_KEY:-dev-api-key}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost}
+    depends_on:
+      api_svc:
+        condition: service_healthy
+        restart: true
+      minio-init:
+        condition: service_completed_successfully
     networks:
       - restick
 

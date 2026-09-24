@@ -12,6 +12,13 @@ services:
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
       IMG_TOOL_ENGINE: ${IMG_TOOL_ENGINE:-simple}
       FTP_HTTP_URL: ${FTP_HTTP_URL:-http://ftp_svc:8080}
+    depends_on:
+      api_svc:
+        condition: service_healthy
+        restart: true
+      ftp_svc:
+        condition: service_healthy
+        restart: true
     networks:
       - restick
 

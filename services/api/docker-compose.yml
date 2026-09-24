@@ -17,6 +17,10 @@ services:
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@restick.local}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-changeme}
       BOOTSTRAP_API_KEY: ${BOOTSTRAP_API_KEY:-dev-api-key}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
     networks:
       - restick
 

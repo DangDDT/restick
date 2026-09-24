@@ -18,7 +18,9 @@ services:
   minio-init:
     image: minio/mc:latest
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
+        restart: true
     restart: "no"
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-restick}
@@ -34,7 +36,8 @@ services:
           if [ "$$i" -gt 30 ]; then exit 1; fi
           sleep 1
         done
-        mc mb -p local/$$MINIO_BUCKET || true
+        mc mb --ignore-existing local/$$MINIO_BUCKET
+        mc stat local/$$MINIO_BUCKET >/dev/null
     networks:
       - restick
 

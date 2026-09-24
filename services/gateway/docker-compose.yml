@@ -9,10 +9,13 @@ services:
     depends_on:
       api_svc:
         condition: service_healthy
+        restart: true
       ftp_svc:
         condition: service_healthy
+        restart: true
       web:
         condition: service_healthy
+        restart: true
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:80/healthz"]
       interval: 10s
