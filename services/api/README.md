@@ -45,8 +45,7 @@ services/api/
     ├── application/          # Application use-cases and service orchestrators
     ├── infrastructure/
     │   ├── config/           # Environment variable loading and multi-origin CSV parsing
-    │   ├── postgres/         # Database migrations, queries, and store implementation
-    │   └── grpcclient/       # Outbound gRPC client connections (ftp_svc, img_tool)
+    │   └── postgres/         # Database migrations, queries, and store implementation
     └── interfaces/
         ├── http/             # REST HTTP Handlers, Chi router, CORS, Swagger docs
         └── grpc/             # Inbound gRPC Servers (AuthService, JobService, PingService)
