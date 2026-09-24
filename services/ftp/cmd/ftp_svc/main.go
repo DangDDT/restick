@@ -40,8 +40,7 @@ func main() {
 		errCh <- grpcx.Listen(ctx, cfg.GRPCAddr, cfg.ServiceName, objects, cfg.InternalToken)
 	}()
 	go grpcclient.PingPeers(ctx, cfg.ServiceName, map[string]string{
-		"api_svc":  cfg.APISvcGRPCAddr,
-		"img_tool": cfg.ImgToolGRPCAddr,
+		"api_svc": cfg.APISvcGRPCAddr,
 	})
 	slog.Info("ftp_svc listening", "http", cfg.HTTPAddr, "grpc", cfg.GRPCAddr)
 	select {

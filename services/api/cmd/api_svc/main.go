@@ -8,7 +8,6 @@ import (
 	"syscall"
 
 	"github.com/eykh/restick/api_svc/internal/infrastructure/config"
-	"github.com/eykh/restick/api_svc/internal/infrastructure/grpcclient"
 	"github.com/eykh/restick/api_svc/internal/infrastructure/postgres"
 	grpcx "github.com/eykh/restick/api_svc/internal/interfaces/grpc"
 	httpx "github.com/eykh/restick/api_svc/internal/interfaces/http"
@@ -18,7 +17,7 @@ func main() {
 	cfg := config.Load()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	store, err := postgres.Connect(ctx, cfg.PostgresDSN)
+	store, err := connectWithRetry(ctx, postgres.Connect, cfg.PostgresDSN, defaultPostgresConnectAttempts, defaultPostgresConnectDelay)
 	if err != nil {
 		slog.Error("postgres", "err", err)
 		os.Exit(1)
@@ -40,10 +39,6 @@ func main() {
 	go func() {
 		errCh <- grpcx.Listen(ctx, cfg.GRPCAddr, cfg.ServiceName, store, cfg.InternalToken)
 	}()
-	go grpcclient.PingPeers(ctx, cfg.ServiceName, map[string]string{
-		"ftp_svc":  cfg.FTPSvcGRPCAddr,
-		"img_tool": cfg.ImgToolGRPCAddr,
-	})
 	slog.Info("api_svc listening", "http", cfg.HTTPAddr, "grpc", cfg.GRPCAddr)
 	select {
 	case err := <-errCh:
