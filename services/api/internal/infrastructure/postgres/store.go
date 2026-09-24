@@ -14,9 +14,18 @@ import (
 	"github.com/eykh/restick/api_svc/internal/domain/user"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// isUniqueViolation reports whether err is a PostgreSQL unique constraint
+// violation (SQLSTATE 23505), letting callers map it to a domain conflict
+// instead of leaking a raw driver error.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -91,12 +100,14 @@ func (s *Store) Seed(ctx context.Context, adminEmail string, adminPassword strin
 	}
 	return nil
 }
-
 func (s *Store) CreateUser(ctx context.Context, email string, passwordHash string, displayName string, role string) (user.User, error) {
 	id := uuid.NewString()
 	_, err := s.pool.Exec(ctx, `INSERT INTO users (id, email, password_hash, display_name, role) VALUES ($1,$2,$3,$4,$5)`,
 		id, email, passwordHash, displayName, role)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return user.User{}, user.ErrEmailTaken
+		}
 		return user.User{}, err
 	}
 	return s.GetUserByEmail(ctx, email)
@@ -272,9 +283,15 @@ func (s *Store) APIKeyValid(ctx context.Context, raw string) (bool, error) {
 func (s *Store) CreateDraft(ctx context.Context, submitterID string, slug string, name string, author string, tags []string, sourceKind string) (pack.Pack, error) {
 	id := uuid.NewString()
 	prefix := "uploads/" + submitterID + "/" + id + "/"
+	if tags == nil {
+		tags = []string{}
+	}
 	_, err := s.pool.Exec(ctx, `INSERT INTO packs (id, submitter_id, slug, name, author, tags, status, source_kind, source_prefix)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, id, submitterID, slug, name, author, tags, pack.StatusDraft, sourceKind, prefix)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return pack.Pack{}, pack.ErrSlugTaken
+		}
 		return pack.Pack{}, err
 	}
 	return s.GetPack(ctx, id)

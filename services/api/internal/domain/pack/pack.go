@@ -31,6 +31,7 @@ var (
 	ErrConflict          = errors.New("conflict")
 	ErrNotFound          = errors.New("not found")
 	ErrRevoked           = errors.New("pack_revoked")
+	ErrSlugTaken         = errors.New("slug taken")
 )
 
 type Pack struct {

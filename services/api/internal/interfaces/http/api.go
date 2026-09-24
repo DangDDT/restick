@@ -95,7 +95,11 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	}
 	u, err := s.store.CreateUser(r.Context(), strings.ToLower(strings.TrimSpace(body.Email)), string(hash), name, user.RoleContributor)
 	if err != nil {
-		writeErr(w, http.StatusConflict, "conflict", "email taken")
+		if errors.Is(err, user.ErrEmailTaken) {
+			writeErr(w, http.StatusConflict, "conflict", "email taken")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
 	s.writeToken(w, u)
@@ -284,7 +288,11 @@ func (s *Server) createPack(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := s.store.CreateDraft(r.Context(), u.ID, body.Slug, body.Name, author, body.Tags, kind)
 	if err != nil {
-		writeErr(w, http.StatusConflict, "conflict", "slug taken")
+		if errors.Is(err, pack.ErrSlugTaken) {
+			writeErr(w, http.StatusConflict, "conflict", "slug taken")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": p.ID, "upload_prefix": p.SourcePrefix, "status": p.Status})

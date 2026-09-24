@@ -23,4 +23,7 @@ func (u User) IsAdmin() bool {
 	return u.Role == RoleAdmin
 }
 
-var ErrInvalidRole = errors.New("invalid role")
+var (
+	ErrInvalidRole = errors.New("invalid role")
+	ErrEmailTaken  = errors.New("email taken")
+)
