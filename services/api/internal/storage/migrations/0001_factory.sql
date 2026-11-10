@@ -13,7 +13,7 @@ CREATE TABLE admin_sessions (
     id         TEXT PRIMARY KEY,
     token_hash BLOB NOT NULL UNIQUE,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    expires_at TEXT NOT NULL
+    expires_at TEXT NOT NULL CHECK (length(expires_at) = 20 AND expires_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z')
 );
 
 CREATE INDEX admin_sessions_expires_at ON admin_sessions (expires_at);
@@ -178,7 +178,7 @@ CREATE TABLE api_keys (
     key_hash    BLOB NOT NULL UNIQUE,
     active      INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    expires_at  TEXT,
+    expires_at  TEXT CHECK (expires_at IS NULL OR (length(expires_at) = 20 AND expires_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z')),
     disabled_at TEXT
 );
 
@@ -188,7 +188,7 @@ CREATE TABLE pack_tombstones (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     pack_id         TEXT NOT NULL UNIQUE REFERENCES packs (id) ON DELETE RESTRICT,
     version         INTEGER NOT NULL CHECK (version > 0),
-    revoked_at      TEXT NOT NULL,
+    revoked_at      TEXT NOT NULL CHECK (length(revoked_at) = 20 AND revoked_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'),
     reason_code     TEXT NOT NULL,
     checksum_sha256 TEXT NOT NULL CHECK (length(checksum_sha256) = 64)
 );

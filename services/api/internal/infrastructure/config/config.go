@@ -60,13 +60,17 @@ func normalizePublicBaseURL(raw string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("config: RESTICK_PUBLIC_BASE_URL is not a valid URL: %w", err)
 	}
-	if parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+	if parsed.Scheme != "https" || parsed.User != nil {
 		return "", fmt.Errorf("config: RESTICK_PUBLIC_BASE_URL must be an https origin, got %q", raw)
 	}
 	if (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return "", fmt.Errorf("config: RESTICK_PUBLIC_BASE_URL must not carry a path, query or fragment, got %q", raw)
 	}
-	return parsed.Scheme + "://" + parsed.Host, nil
+	host := strings.ToLower(parsed.Host)
+	if host == "" || strings.HasPrefix(host, ":") || strings.HasSuffix(host, ":") {
+		return "", fmt.Errorf("config: RESTICK_PUBLIC_BASE_URL must name a host without a dangling port, got %q", raw)
+	}
+	return parsed.Scheme + "://" + host, nil
 }
 
 func parseCIDRs(raw string) ([]netip.Prefix, error) {

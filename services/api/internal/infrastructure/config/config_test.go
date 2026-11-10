@@ -35,6 +35,8 @@ func TestConfigRejectsInvalidPublicOrigin(t *testing.T) {
 		"https://user:pass@restick.example.com",
 		"https://restick.example.com/api",
 		"https://restick.example.com?x=1",
+		"https://restick.example.com:",
+		"https://:8080",
 	} {
 		clearFactoryEnv(t)
 		t.Setenv("RESTICK_PUBLIC_BASE_URL", raw)
@@ -46,7 +48,7 @@ func TestConfigRejectsInvalidPublicOrigin(t *testing.T) {
 
 func TestConfigFactoryDefaultsAndOverrides(t *testing.T) {
 	clearFactoryEnv(t)
-	t.Setenv("RESTICK_PUBLIC_BASE_URL", "https://restick.example.com/")
+	t.Setenv("RESTICK_PUBLIC_BASE_URL", "https://Restick.Example.COM/")
 	cfg, err := LoadFactory()
 	if err != nil {
 		t.Fatalf("LoadFactory: %v", err)

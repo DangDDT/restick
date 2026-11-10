@@ -248,3 +248,93 @@ func TestOpenRejectsUnusableDataDir(t *testing.T) {
 		t.Fatalf("Open on file path = (%v, %v), want error and no fallback", db, err)
 	}
 }
+
+func TestOpenAppliesPragmas(t *testing.T) {
+	db, _ := openTemp(t)
+
+	var journalMode string
+	if err := db.QueryRow(`PRAGMA journal_mode`).Scan(&journalMode); err != nil {
+		t.Fatalf("read journal_mode: %v", err)
+	}
+	if journalMode != "wal" {
+		t.Errorf("journal_mode = %q, want wal", journalMode)
+	}
+	var synchronous, foreignKeys, busyTimeout int
+	if err := db.QueryRow(`PRAGMA synchronous`).Scan(&synchronous); err != nil {
+		t.Fatalf("read synchronous: %v", err)
+	}
+	if synchronous != 2 {
+		t.Errorf("synchronous = %d, want 2 (FULL)", synchronous)
+	}
+	if err := db.QueryRow(`PRAGMA foreign_keys`).Scan(&foreignKeys); err != nil {
+		t.Fatalf("read foreign_keys: %v", err)
+	}
+	if foreignKeys != 1 {
+		t.Errorf("foreign_keys = %d, want 1", foreignKeys)
+	}
+	if err := db.QueryRow(`PRAGMA busy_timeout`).Scan(&busyTimeout); err != nil {
+		t.Fatalf("read busy_timeout: %v", err)
+	}
+	if busyTimeout != 5000 {
+		t.Errorf("busy_timeout = %d, want 5000", busyTimeout)
+	}
+	if stats := db.Stats(); stats.MaxOpenConnections != 1 {
+		t.Errorf("MaxOpenConnections = %d, want 1", stats.MaxOpenConnections)
+	}
+}
+
+func TestOpenHandlesURISpecialDataPath(t *testing.T) {
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "data ?#dir")
+
+	db, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("Open(%q): %v", dir, err)
+	}
+	execSQL(t, db, `INSERT INTO fragment_groups (id, name) VALUES ('g1', 'Group')`)
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	reopened, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("reopen(%q): %v", dir, err)
+	}
+	defer reopened.Close()
+	var name string
+	if err := reopened.QueryRow(`SELECT name FROM fragment_groups WHERE id = 'g1'`).Scan(&name); err != nil {
+		t.Fatalf("record lost through URI-escaped path: %v", err)
+	}
+	if name != "Group" {
+		t.Fatalf("name = %q", name)
+	}
+}
+
+func TestTimestampTextRejectsOffsetsAndFractions(t *testing.T) {
+	db, _ := openTemp(t)
+	execSQL(t, db, `INSERT INTO packs (id, slug, name, author) VALUES ('p1', 'pack', 'Pack', 'Restick')`)
+
+	for _, bad := range []string{
+		"2026-11-10T00:00:00+07:00",
+		"2026-11-10T00:00:00.123Z",
+		"2026-11-10 00:00:00Z",
+	} {
+		if _, err := db.Exec(`INSERT INTO pack_tombstones (pack_id, version, revoked_at, reason_code, checksum_sha256) VALUES ('p1', 1, ?, 'author_request', ?)`, bad, checksum); err == nil {
+			t.Errorf("tombstone revoked_at %q was accepted", bad)
+		}
+	}
+	execSQL(t, db, `INSERT INTO pack_tombstones (pack_id, version, revoked_at, reason_code, checksum_sha256) VALUES ('p1', 1, '2026-11-10T00:00:00Z', 'author_request', ?)`, checksum)
+
+	for i, bad := range []string{"2026-11-10T00:00:00.5Z", "2026-11-10T00:00:00-03:00"} {
+		if _, err := db.Exec(`INSERT INTO admin_sessions (id, token_hash, expires_at) VALUES (?, x'01', ?)`, "sess-"+string(rune('a'+i)), bad); err == nil {
+			t.Errorf("session expires_at %q was accepted", bad)
+		}
+	}
+	execSQL(t, db, `INSERT INTO admin_sessions (id, token_hash, expires_at) VALUES ('sess-ok', x'01', '2026-11-11T00:00:00Z')`)
+
+	if _, err := db.Exec(`INSERT INTO api_keys (id, name, prefix, key_hash, expires_at) VALUES ('key-bad', 'k', 'rsk_', x'01', '2026-12-01T00:00:00+05:00')`); err == nil {
+		t.Error("api key expires_at with offset was accepted")
+	}
+	execSQL(t, db, `INSERT INTO api_keys (id, name, prefix, key_hash) VALUES ('key-null', 'k', 'rsk_', x'01')`)
+	execSQL(t, db, `INSERT INTO api_keys (id, name, prefix, key_hash, expires_at) VALUES ('key-ok', 'k', 'rsk_', x'02', '2026-12-01T00:00:00Z')`)
+}

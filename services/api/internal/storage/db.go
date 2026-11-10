@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"path/filepath"
 
 	_ "modernc.org/sqlite"
@@ -48,7 +49,8 @@ func Open(ctx context.Context, dataDir string) (*sql.DB, error) {
 }
 
 func dsn(dbPath string) string {
-	return "file:" + filepath.ToSlash(dbPath) +
+	u := url.URL{Scheme: "file", Path: dbPath}
+	return u.String() +
 		"?_pragma=foreign_keys(1)" +
 		"&_pragma=journal_mode(WAL)" +
 		"&_pragma=synchronous(FULL)" +
