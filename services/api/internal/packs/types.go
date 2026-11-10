@@ -1,0 +1,125 @@
+// Package packs owns the catalog records: pack metadata, tags, versions and
+// immutable sticker metadata. File bytes and manifests belong to the assets
+// package.
+package packs
+
+import (
+	"errors"
+	"time"
+)
+
+// Status is the pack lifecycle state.
+type Status string
+
+const (
+	StatusDraft   Status = "draft"
+	StatusReady   Status = "ready"
+	StatusRevoked Status = "revoked"
+)
+
+var (
+	ErrNotFound        = errors.New("packs: pack not found")
+	ErrVersionNotFound = errors.New("packs: version not found")
+	ErrSlugTaken       = errors.New("packs: slug already reserved")
+	ErrJobActive       = errors.New("packs: pack has an active job")
+	ErrNotDraft        = errors.New("packs: only draft packs can be deleted")
+	ErrRevoked         = errors.New("packs: pack is revoked")
+	ErrInvalid         = errors.New("packs: invalid pack")
+)
+
+// Metadata is the mutable catalog part of a pack. It never affects committed
+// version bytes or their manifest snapshot.
+type Metadata struct {
+	Name        string
+	Author      string
+	Description string
+	Tags        []string
+	DesignID    string
+}
+
+// PackDraft creates a new pack. Slug is permanent and case-insensitively
+// unique for the lifetime of the row, including after revoke.
+type PackDraft struct {
+	Slug        string
+	Name        string
+	Author      string
+	Description string
+	Tags        []string
+	DesignID    string
+}
+
+// PackSource is the persisted upload currently attached to a pack. The ID is
+// the assets source directory id, never a client supplied path.
+type PackSource struct {
+	ID             string
+	Filename       string
+	ChecksumSHA256 string
+	Width          int
+	Height         int
+	ByteSize       int64
+}
+
+// Pack is the catalog view. Summary fields refer to the current committed
+// version; paths are data-root relative.
+type Pack struct {
+	ID             string
+	Slug           string
+	Name           string
+	Author         string
+	Description    string
+	Tags           []string
+	DesignID       string
+	Status         Status
+	CurrentVersion int
+	StickerCount   int
+	ChecksumSHA256 string
+	ThumbnailPath  string
+	Source         *PackSource
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// Filter selects ready packs. Page starts at 1; PageSize defaults to 20 and is
+// capped at 100.
+type Filter struct {
+	Tag      string
+	Page     int
+	PageSize int
+}
+
+// Page is one stable page ordered by updated_at then id.
+type Page struct {
+	Items    []Pack
+	Page     int
+	PageSize int
+	Total    int
+}
+
+// Version is an immutable committed version snapshot.
+type Version struct {
+	PackID         string
+	Version        int
+	JobID          string
+	ChecksumSHA256 string
+	StickerCount   int
+	ManifestJSON   []byte
+	BundlePath     string
+	BundleByteSize int64
+	ThumbnailPath  string
+	OutputDir      string
+	CreatedAt      time.Time
+	Stickers       []Sticker
+}
+
+// Sticker is one immutable sticker row; both paths are data-root relative.
+type Sticker struct {
+	SortOrder      int
+	Filename       string
+	ObjectPath     string
+	ThumbPath      string
+	ChecksumSHA256 string
+	Width          int
+	Height         int
+	EmojiHint      string
+	Keywords       []string
+}
