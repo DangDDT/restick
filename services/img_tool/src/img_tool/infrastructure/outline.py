@@ -29,8 +29,9 @@ def compose_sticker(image: Image.Image, outline_width: int, outline_color: str) 
     kernel = cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE, (2 * outline_width + 1, 2 * outline_width + 1)
     )
-    # Keep the band strictly outside the foreground so interior alpha is untouched.
-    band = np.where(alpha == 0, cv2.dilate(alpha, kernel), 0).astype(np.uint8)
+    # Keep a fully opaque band strictly outside the foreground; interior alpha stays exact.
+    dilated = cv2.dilate(alpha, kernel)
+    band = np.where((alpha == 0) & (dilated > 0), 255, 0).astype(np.uint8)
     layer = Image.new(
         "RGBA",
         canvas.size,

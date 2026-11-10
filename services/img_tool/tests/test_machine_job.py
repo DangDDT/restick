@@ -236,6 +236,12 @@ class ProcessJobRequestFailureTest(ProcessJobTestCase):
         self.write_request()
         self.assert_processing_error("animation_not_supported")
 
+    def test_oversized_sheet_fails_before_decode(self) -> None:
+        Image.new("RGB", (4097, 16), (255, 255, 255)).save(self.sheet)
+        self.write_request()
+        result = self.assert_processing_error("image_too_large")
+        self.assertIn("4096", str(result["error"]["message"]))
+
     def test_undecodable_sheet_fails(self) -> None:
         self.sheet.write_bytes(b"not an image")
         self.write_request()

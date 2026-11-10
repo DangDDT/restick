@@ -55,6 +55,7 @@ class ComposeStickerTest(unittest.TestCase):
     def test_outline_keeps_translucent_interior_alpha(self) -> None:
         canvas = compose_sticker(Image.new("RGBA", (64, 64), (0, 0, 255, 128)), 4, "#FFFFFF")
         self.assertAlmostEqual(canvas.getpixel((256, 256))[3], 128, delta=3)
+        self.assertEqual(canvas.getpixel((5, 256)), (255, 255, 255, 255))
 
     def test_rejects_invalid_color(self) -> None:
         with self.assertRaises(ValueError):

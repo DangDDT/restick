@@ -20,7 +20,6 @@ MAX_REQUEST_BYTES: int = 1 << 20
 MAX_RESULT_BYTES: int = 1 << 20
 MAX_SHEET_BYTES: int = 8 << 20
 MAX_GRID: int = 8
-MAX_CELLS: int = 64
 ALLOWED_FORMATS: frozenset[str] = frozenset({"PNG", "JPEG", "WEBP"})
 COLOR_PATTERN: re.Pattern[str] = re.compile(r"^#[0-9A-Fa-f]{6}$")
 MIN_FOREGROUND_RATIO: float = 0.005
@@ -98,8 +97,6 @@ def read_request(request_path: Path, identity: dict[str, object]) -> JobRequest:
         raise ProcessingError("invalid_schema", f"schema must be {REQUEST_SCHEMA}")
     rows = _integer(payload, "rows", 1, MAX_GRID)
     columns = _integer(payload, "columns", 1, MAX_GRID)
-    if rows * columns > MAX_CELLS:
-        raise ProcessingError("invalid_field", f"rows*columns must not exceed {MAX_CELLS}")
     outline_color = _text(payload, "outline_color")
     if not COLOR_PATTERN.match(outline_color):
         raise ProcessingError("invalid_field", "outline_color must be #RRGGBB")
@@ -179,6 +176,8 @@ def _open_sheet(path: Path) -> Image.Image:
         image = Image.open(path)
         if image.format not in ALLOWED_FORMATS:
             raise ProcessingError("unsupported_image", "sheet must be PNG, JPEG or WebP")
+        if max(image.size) > MAX_SHEET_SIDE:
+            raise ProcessingError("image_too_large", f"sheet side must not exceed {MAX_SHEET_SIDE} px")
         if getattr(image, "is_animated", False) or getattr(image, "n_frames", 1) > 1:
             raise ProcessingError("animation_not_supported", "animated sheets are not supported")
         image.load()
@@ -187,8 +186,6 @@ def _open_sheet(path: Path) -> Image.Image:
     except Exception as exc:  # noqa: BLE001 - any decoder failure is the same protocol error
         message = f"sheet decode failed: {type(exc).__name__}"
         raise ProcessingError("decode_failed", message) from exc
-    if max(image.size) > MAX_SHEET_SIDE:
-        raise ProcessingError("image_too_large", f"sheet side must not exceed {MAX_SHEET_SIDE} px")
     return image.convert("RGBA")
 
 
