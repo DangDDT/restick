@@ -173,20 +173,25 @@ def _open_sheet(path: Path) -> Image.Image:
     if path.stat().st_size > MAX_SHEET_BYTES:
         raise ProcessingError("image_too_large", "sheet exceeds 8 MiB")
     try:
-        image = Image.open(path)
-        if image.format not in ALLOWED_FORMATS:
-            raise ProcessingError("unsupported_image", "sheet must be PNG, JPEG or WebP")
-        if max(image.size) > MAX_SHEET_SIDE:
-            raise ProcessingError("image_too_large", f"sheet side must not exceed {MAX_SHEET_SIDE} px")
-        if getattr(image, "is_animated", False) or getattr(image, "n_frames", 1) > 1:
-            raise ProcessingError("animation_not_supported", "animated sheets are not supported")
-        image.load()
+        # The context manager closes the underlying file on every rejection path too.
+        with Image.open(path) as image:
+            if image.format not in ALLOWED_FORMATS:
+                raise ProcessingError("unsupported_image", "sheet must be PNG, JPEG or WebP")
+            if max(image.size) > MAX_SHEET_SIDE:
+                raise ProcessingError(
+                    "image_too_large", f"sheet side must not exceed {MAX_SHEET_SIDE} px"
+                )
+            if getattr(image, "is_animated", False) or getattr(image, "n_frames", 1) > 1:
+                raise ProcessingError(
+                    "animation_not_supported", "animated sheets are not supported"
+                )
+            image.load()
+            return image.convert("RGBA")
     except ProcessingError:
         raise
     except Exception as exc:  # noqa: BLE001 - any decoder failure is the same protocol error
         message = f"sheet decode failed: {type(exc).__name__}"
         raise ProcessingError("decode_failed", message) from exc
-    return image.convert("RGBA")
 
 
 def _text(payload: dict[str, object], key: str, limit: int = 200) -> str:
