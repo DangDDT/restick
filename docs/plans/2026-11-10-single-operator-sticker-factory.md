@@ -59,7 +59,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 
 ---
 
-### T1: SQLite, cấu hình và data-root lock
+### Task 1: SQLite, cấu hình và data-root lock
 
 **Review:** per-task — persisted format, concurrency
 
@@ -72,7 +72,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 - [ ] Pin Go1.26.0 + driver v1.62.0. Viết schema toàn bộ tables từ spec §8.2, constraints/indices; UTC timestamp dùng representation nhất quán và tombstone giây; JSON snapshots có schema_version. Open không tạo memory fallback; app lock từ chối sai quyền/khóa đang giữ.
 - [ ] Chạy lại đúng hai package test. Khi pass, commit đúng storage/config/go.mod/go.sum và tests bằng path, thông điệp `feat(storage): add durable single-instance SQLite store`.
 
-### T2: Một owner, session và API key chỉ đọc
+### Task 2: Một owner, session và API key chỉ đọc
 
 **Review:** per-task — authentication/security
 
@@ -85,7 +85,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 - [ ] Implement services trên storage T1. Không plaintext log/DB; không viết last_used cho mỗi download. Phân tách validation session/key, không suy ra quyền admin từ key.
 - [ ] Chạy lại package test; commit `feat(auth): add single-owner sessions and read-only client keys` với path task.
 
-### T3: File store local, catalog và ZIP an toàn
+### Task 3: File store local, catalog và ZIP an toàn
 
 **Review:** per-task — security/persisted format
 
@@ -98,7 +98,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 - [ ] Implement source magic/decode/size/path boundary, identity server cấp và ZIP unique members; checksum bằng streaming WebP bytes theo manifest. File/member resolution từ allowlist DB, không join trực tiếp key HTTP không validate. Metadata catalog và immutable manifest tách rõ.
 - [ ] Chạy lại hai package tests; commit `feat(assets): store catalog and versioned packs on local disk`.
 
-### T4: Thư viện đầy đủ và prompt studio có snapshot
+### Task 4: Thư viện đầy đủ và prompt studio có snapshot
 
 **Review:** per-task — persisted format
 
@@ -112,7 +112,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 - [ ] Implement CRUD/archive, private reference assets, group constraints và snapshot. Suggest chỉ đổi nhóm tham gia/unpinned; không API provider/keyword DSL/compatibility engine. Compile mô tả có quan hệ + technical template từ spec.
 - [ ] Chạy lại tests; commit `feat(studio): add reusable fragment library and prompt composition`.
 
-### T5: Python machine-job, kiểm lưới và tạo viền
+### Task 5: Python machine-job, kiểm lưới và tạo viền
 
 **Review:** per-task — parser/security/persisted format
 
@@ -126,7 +126,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 - [ ] Chạy lại `python -m unittest discover -s services/img_tool/tests -p 'test_*.py'`; trong `test_machine_job_cli_roundtrip`, gọi module CLI bằng subprocess với request/result nằm trong TemporaryDirectory, assert exit0 + files đúng kích thước/thứ tự và dùng lại manifest inputs ở T6. Kiểm output thật, không chỉ mock argv hoặc assert không throw.
 - [ ] Commit `feat(processor): process validated sticker sheets with configurable outlines` đúng Python files/tests.
 
-### T6: Durable jobs, publication nguyên tử và revoke
+### Task 6: Durable jobs, publication nguyên tử và revoke
 
 **Review:** per-task — concurrency/persisted format
 
@@ -139,7 +139,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 - [ ] Implement claim/short transactions, process bounded timeout/result, stage/validate files rồi DB publish. Revoke transaction đổi queued/running→interrupted và tombstone một lần; completion/worker failure không ghi đè trạng thái terminal. Startup cleanup chỉ orphan không referenced; không xóa committed data.
 - [ ] Chạy lại targeted tests với `-race`; chạy một real Python invocation vào TempDir (không chỉ fake Processor); commit `feat(jobs): make image processing durable and revocation-safe`.
 
-### T7: Public read/file API và an toàn SDK ZIP
+### Task 7: Public read/file API và an toàn SDK ZIP
 
 **Review:** per-task — security/public contract
 
@@ -153,7 +153,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 - [ ] Implement handlers stream/range/private cache với auth/pack-status trước mọi304; URLs từ PublicBaseURL; tombstone inclusive. Guard ZIP member và manifest paths trước extraction, không bỏ validation ZIP phía server.
 - [ ] Chạy lại đúng tests Go/Dart; commit `feat(api): serve authenticated local packs with SDK-compatible downloads` với Go và Dart paths T7; cập nhật Flutter CHANGELOG cùng thay đổi bảo mật của package.
 
-### T8: Admin API, session middleware và OpenAPI một nguồn
+### Task 8: Admin API, session middleware và OpenAPI một nguồn
 
 **Review:** per-task — authentication/security
 
@@ -166,7 +166,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 - [ ] Implement đầy đủ route list spec §9.2, transport validation/error mapping và auth order. Freeze request/response DTO trong canonical OpenAPI, không thêm endpoint stub. Resource deleted/referenced giữ invariant snapshot; HTTP400/401/403/404/409/410/413/422 theo lỗi thực tế; failures processing ở job object không biến thành reject nghiệp vụ.
 - [ ] Chạy lại package tests; kiểm OpenAPI parse bằng công cụ tạm hoặc validator sẵn có, không thêm dependency runtime chỉ cho validation. Commit `feat(admin): expose single-owner factory management API`.
 
-### T9: Studio UI và static export thật
+### Task 9: Studio UI và static export thật
 
 **Files:** Modify `clients/web-next/next.config.ts`, package.json, `app/layout.tsx`, `app/page.tsx`, `app/providers.tsx`, `lib/{auth.tsx,api.ts,types.ts,i18n-messages.ts}`, `components/{app-shell.tsx,guards.tsx,ui.tsx}`; Create `app/{factory,library,characters}/page.tsx`, `app/packs/detail/page.tsx`; Modify existing `/login`, `/packs`, `/packs/new`, `/keys`, `/api-docs`; Remove `/register`, `/admin/**`, `/packs/[id]` UI and obsolete review constants/callers.
 
@@ -179,7 +179,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 - [ ] Ghi bàn giao browser scenario cho T12: actual backend/TLS chỉ có sau T11, nên không tạo vòng phụ thuộc yêu cầu T9 chờ T11. T9 kết thúc bằng static artifact đã build; **chưa coi UI end-to-end được kiểm chứng** cho đến browser proof desktop/mobile ở T12. Không thêm UI test framework chỉ để test wording.
 - [ ] Commit `feat(web): replace community console with static sticker studio` chỉ web paths.
 
-### T10: Offline backup, restore và credential reset
+### Task 10: Offline backup, restore và credential reset
 
 **Review:** per-task — destructive operation/security/persisted format
 
@@ -192,7 +192,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 - [ ] Implement offline snapshot + backup manifest, integrity/reference validation; restore copy vào staging cùng filesystem, finalize khi đã validate, không overwrite target. Set owner bcrypt mới, clear sessions, disable keys trước nhận traffic. Document trusted-backup threat model; không hứa checksum chống forgery.
 - [ ] Chạy lại package tests và restore một backup generated từ fixture pack T3; commit `feat(maintenance): add safe offline factory backup and restore`.
 
-### T11: Một runtime Docker, entrypoint và xóa đường cũ
+### Task 11: Một runtime Docker, entrypoint và xóa đường cũ
 
 **Review:** per-task — deployment/security/destructive cutover
 
@@ -208,7 +208,7 @@ Quy tắc interface: service dùng `*sql.DB` + struct rõ nghĩa, không thêm r
 - [ ] Chạy targeted tests, `docker compose config --quiet`, build image khi được approval thực thi; start trên **data dir tạm mới**, kiểm only restick service, log không lỗi thiếu shared libs/Node/PG/S3. Không `down -v`, prune hay xóa volume cũ. Cập nhật README/env/changelog liên quan như phần của cutover.
 - [ ] Commit `refactor(runtime): consolidate factory into one Docker application` bằng explicit path; obsolete removals chỉ stage bằng danh sách path đã review, không `git add -A`.
 
-### T12: Chứng minh end-to-end và bàn giao vận hành
+### Task 12: Chứng minh end-to-end và bàn giao vận hành
 
 **Files:** Create `services/api/internal/integration/factory_test.go`; bổ sung acceptance evidence vào tài liệu vận hành khi chạy thực tế, không tạo báo cáo pass giả.
 
