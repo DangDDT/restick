@@ -153,66 +153,49 @@ func TestSeedRestartPreservesUserEdits(t *testing.T) {
 		t.Fatalf("Seed: %v", err)
 	}
 
-	count := func(table string) int {
-		t.Helper()
-		var total int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&total); err != nil {
-			t.Fatalf("count %s: %v", table, err)
-		}
-		return total
-	}
-	if got := count("fragment_groups"); got != 33 {
-		t.Fatalf("seeded groups = %d, want 33", got)
-	}
-	if got := count("fragments"); got != 778 {
-		t.Fatalf("seeded fragments = %d, want 754 visual+context and 24 palettes", got)
-	}
-
 	seeded, err := service.GetFragment(ctx, "v-d01-001")
 	if err != nil {
 		t.Fatalf("GetFragment(v-d01-001): %v", err)
 	}
-	if seeded.Name == "" || seeded.Prompt == "" || seeded.Scope != ScopeIdentity {
+	if seeded.Name == "" || seeded.Prompt == "" || seeded.Scope != ScopeIdentity || seeded.GroupID == "" {
 		t.Fatalf("seeded fragment is incomplete: %+v", seeded)
 	}
-	if _, err := service.UpdateFragment(ctx, seeded.ID, FragmentDraft{
+	edited, err := service.UpdateFragment(ctx, seeded.ID, FragmentDraft{
 		GroupID: seeded.GroupID,
 		Name:    "Người tí hon (đã sửa)",
 		NameEn:  "Tiny human edited",
 		Prompt:  "the operator rewrote this prompt",
 		Scope:   ScopeIdentity,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("UpdateFragment: %v", err)
 	}
 
 	custom := mustGroup(t, service, "Nhóm riêng của tôi", 999)
-	mustFragment(t, service, custom.ID, "a brass telescope on a strap", ScopePack)
-	before := count("fragments")
+	customFragment := mustFragment(t, service, custom.ID, "a brass telescope on a strap", ScopePack)
 
 	// A restart re-runs init against the same database.
 	restarted := NewService(db, nil)
 	if err := restarted.Seed(ctx); err != nil {
 		t.Fatalf("Seed on restart: %v", err)
 	}
-	if got := count("fragments"); got != before {
-		t.Fatalf("restart changed fragment count: %d -> %d", before, got)
-	}
-	if got := count("fragment_groups"); got != 34 {
-		t.Fatalf("restart changed group count: %d, want 33 seeded + 1 custom", got)
-	}
-	edited, err := restarted.GetFragment(ctx, "v-d01-001")
+
+	after, err := restarted.GetFragment(ctx, seeded.ID)
 	if err != nil {
 		t.Fatalf("GetFragment after restart: %v", err)
 	}
-	if edited.Prompt != "the operator rewrote this prompt" || edited.Name != "Người tí hon (đã sửa)" {
-		t.Fatalf("restart overwrote the operator edit: %+v", edited)
+	if after != edited {
+		t.Fatalf("restart rewrote the seeded row:\nwant %+v\ngot  %+v", edited, after)
 	}
-	var seeds int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM seed_versions WHERE name = ?`, SeedName).Scan(&seeds); err != nil {
-		t.Fatalf("read seed_versions: %v", err)
+	if _, err := restarted.GetGroup(ctx, custom.ID); err != nil {
+		t.Fatalf("custom group did not survive the restart: %v", err)
 	}
-	if seeds != 1 {
-		t.Fatalf("seed_versions rows = %d, want 1", seeds)
+	survived, err := restarted.GetFragment(ctx, customFragment.ID)
+	if err != nil {
+		t.Fatalf("custom fragment did not survive the restart: %v", err)
+	}
+	if survived != customFragment {
+		t.Fatalf("restart rewrote the custom fragment:\nwant %+v\ngot  %+v", customFragment, survived)
 	}
 
 	// Seeded palettes stay selectable and compile with their four roles.

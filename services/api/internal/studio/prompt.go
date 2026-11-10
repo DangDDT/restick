@@ -13,7 +13,13 @@ import (
 const MaxCells = 64
 
 // DefaultOutlineColor is the outline colour used when a draft leaves it empty.
-const DefaultOutlineColor = "#FFFFFF"
+// DefaultOutlineWidth is the width the HTTP/UI layer preinitialises on a new
+// draft; Compile keeps a plain int, so an explicit 0 stays "no outline" and is
+// never silently replaced by this default.
+const (
+	DefaultOutlineColor = "#FFFFFF"
+	DefaultOutlineWidth = 4
+)
 
 // Compile resolves a draft against the library and renders the English prompt.
 // The returned snapshot freezes every fragment text used, so the prompt never

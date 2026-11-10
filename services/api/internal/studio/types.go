@@ -113,7 +113,9 @@ type Cell struct {
 }
 
 // Draft is the editable composition. IDs reference the library; free text is
-// always kept verbatim. An empty OutlineColor means the 4 px #FFFFFF default.
+// always kept verbatim. An empty OutlineColor means the #FFFFFF default, while
+// OutlineWidth is a plain int: a new-draft caller (UI or HTTP) preinitialises it
+// with DefaultOutlineWidth, and an explicit 0 means no outline.
 type Draft struct {
 	ID                string   `json:"id,omitempty"`
 	Name              string   `json:"name"`
