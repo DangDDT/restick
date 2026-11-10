@@ -36,19 +36,23 @@ const (
 // fixture is one committed factory data dir plus the values a restore must
 // reproduce, captured before the app is stopped.
 type fixture struct {
-	dataDir        string
-	oldSession     string
-	rotatedKey     string // created, then rotated away: inactive before the backup
-	activeKey      string
-	sourceRel      string
-	sourceChecksum string
-	objectPath     string
-	thumbPath      string
-	thumbnailPath  string
-	bundlePath     string
-	objectChecksum string
-	thumbChecksum  string
-	bundleBytes    []byte
+	dataDir                   string
+	oldSession                string
+	rotatedKey                string // created, then rotated away: inactive before the backup
+	activeKey                 string
+	sourceRel                 string
+	sourceChecksum            string
+	referenceRel              string
+	referenceChecksum         string
+	archivedReferenceRel      string
+	archivedReferenceChecksum string
+	objectPath                string
+	thumbPath                 string
+	thumbnailPath             string
+	bundlePath                string
+	objectChecksum            string
+	thumbChecksum             string
+	bundleBytes               []byte
 }
 
 // buildFixture produces a real data dir: SQLite rows from storage.Open, a real
@@ -71,6 +75,22 @@ func buildFixture(t *testing.T) fixture {
 	if err != nil {
 		t.Fatalf("SaveSource: %v", err)
 	}
+	reference, err := store.SaveSource(ctx, bytes.NewReader(append(encodePNG(t), 0x01)), "reference.png")
+	if err != nil {
+		t.Fatalf("SaveSource reference: %v", err)
+	}
+	archivedReference, err := store.SaveSource(ctx, bytes.NewReader(append(encodePNG(t), 0x02)), "archived-reference.png")
+	if err != nil {
+		t.Fatalf("SaveSource archived reference: %v", err)
+	}
+	for id, asset := range map[string]assets.Source{"char-active": reference, "char-archived": archivedReference} {
+		execSQL(t, db, `INSERT INTO reference_assets (id, filename, content_type, byte_size, width, height, checksum_sha256)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			asset.ID, asset.Filename, asset.MediaType, asset.ByteSize, asset.Width, asset.Height, asset.ChecksumSHA256)
+		execSQL(t, db, `INSERT INTO characters (id, name, reference_asset_id) VALUES (?, ?, ?)`, id, id, asset.ID)
+	}
+	// Archived characters keep their source file; restore must still validate it.
+	execSQL(t, db, `UPDATE characters SET archived_at = '2026-11-10T00:00:00Z' WHERE id = 'char-archived'`)
 
 	service := auth.NewService(db)
 	if err := service.BootstrapOwner(ctx, []byte(oldPassword)); err != nil {
@@ -162,19 +182,23 @@ func buildFixture(t *testing.T) fixture {
 	thumbChecksum, _ := digestOf(t, filepath.Join(dir, filepath.FromSlash(committed.Stickers[0].ThumbPath)))
 
 	return fixture{
-		dataDir:        dir,
-		oldSession:     session,
-		rotatedKey:     first.Raw,
-		activeKey:      active.Raw,
-		sourceRel:      source.RelativePath,
-		sourceChecksum: source.ChecksumSHA256,
-		objectPath:     committed.Stickers[0].ObjectPath,
-		thumbPath:      committed.Stickers[0].ThumbPath,
-		thumbnailPath:  committed.ThumbnailPath,
-		bundlePath:     committed.BundlePath,
-		objectChecksum: committed.Stickers[0].ChecksumSHA256,
-		thumbChecksum:  thumbChecksum,
-		bundleBytes:    bundleBytes,
+		dataDir:                   dir,
+		oldSession:                session,
+		rotatedKey:                first.Raw,
+		activeKey:                 active.Raw,
+		sourceRel:                 source.RelativePath,
+		sourceChecksum:            source.ChecksumSHA256,
+		referenceRel:              reference.RelativePath,
+		referenceChecksum:         reference.ChecksumSHA256,
+		archivedReferenceRel:      archivedReference.RelativePath,
+		archivedReferenceChecksum: archivedReference.ChecksumSHA256,
+		objectPath:                committed.Stickers[0].ObjectPath,
+		thumbPath:                 committed.Stickers[0].ThumbPath,
+		thumbnailPath:             committed.ThumbnailPath,
+		bundlePath:                committed.BundlePath,
+		objectChecksum:            committed.Stickers[0].ChecksumSHA256,
+		thumbChecksum:             thumbChecksum,
+		bundleBytes:               bundleBytes,
 	}
 }
 
@@ -279,6 +303,27 @@ func TestBackupOutputMustBeEmptyOutsideDataDir(t *testing.T) {
 			t.Fatalf("Backup error = %v, want ErrInvalidBackupOutput", err)
 		}
 	})
+
+	t.Run("symlink into data dir", func(t *testing.T) {
+		inside := filepath.Join(f.dataDir, "exports")
+		if err := os.MkdirAll(inside, 0o755); err != nil {
+			t.Fatalf("create data dir subdir: %v", err)
+		}
+		link := filepath.Join(t.TempDir(), "backup-link")
+		if err := os.Symlink(inside, link); err != nil {
+			t.Fatalf("symlink output: %v", err)
+		}
+		if err := Backup(ctx, f.dataDir, link); !errors.Is(err, ErrInvalidBackupOutput) {
+			t.Fatalf("Backup error = %v, want ErrInvalidBackupOutput", err)
+		}
+		entries, err := os.ReadDir(inside)
+		if err != nil {
+			t.Fatalf("read data dir subdir: %v", err)
+		}
+		if len(entries) != 0 {
+			t.Fatalf("backup wrote %d entries inside the data dir", len(entries))
+		}
+	})
 }
 
 func TestRestoreRefusesExistingData(t *testing.T) {
@@ -331,6 +376,7 @@ func TestRestoreRejectsTamperedOrEscapingFiles(t *testing.T) {
 
 	cases := []struct {
 		name   string
+		want   string
 		tamper func(t *testing.T, backupDir string)
 	}{
 		{
@@ -397,6 +443,34 @@ func TestRestoreRejectsTamperedOrEscapingFiles(t *testing.T) {
 			},
 		},
 		{
+			name: "missing archived reference source",
+			want: "has no source file",
+			tamper: func(t *testing.T, backupDir string) {
+				if err := os.Remove(filepath.Join(backupDir, filepath.FromSlash(f.archivedReferenceRel))); err != nil {
+					t.Fatalf("remove reference asset: %v", err)
+				}
+				editManifest(t, backupDir, func(m *backupManifest) {
+					removeEntry(m, f.archivedReferenceRel)
+				})
+			},
+		},
+		{
+			name: "replaced reference asset bytes",
+			want: "does not match its recorded checksum",
+			tamper: func(t *testing.T, backupDir string) {
+				reference := filepath.Join(backupDir, filepath.FromSlash(f.referenceRel))
+				body, err := os.ReadFile(reference)
+				if err != nil {
+					t.Fatalf("read reference asset: %v", err)
+				}
+				writeFile(t, reference, append(body, 0x00))
+				digest, size := digestOf(t, reference)
+				editManifest(t, backupDir, func(m *backupManifest) {
+					setEntry(m, f.referenceRel, digest, size)
+				})
+			},
+		},
+		{
 			name: "unknown manifest schema",
 			tamper: func(t *testing.T, backupDir string) {
 				editManifest(t, backupDir, func(m *backupManifest) { m.Schema = "restick.backup.v2" })
@@ -411,8 +485,12 @@ func TestRestoreRejectsTamperedOrEscapingFiles(t *testing.T) {
 			tc.tamper(t, backupDir)
 
 			target := filepath.Join(t.TempDir(), "data")
-			if err := Restore(ctx, backupDir, target, password); !errors.Is(err, ErrBackupInvalid) {
+			err := Restore(ctx, backupDir, target, password)
+			if !errors.Is(err, ErrBackupInvalid) {
 				t.Fatalf("Restore error = %v, want ErrBackupInvalid", err)
+			}
+			if tc.want != "" && !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Restore error = %v, want it to mention %q", err, tc.want)
 			}
 			assertOnlyLock(t, target)
 		})
@@ -495,6 +573,8 @@ func TestRestoredFilesMatchDatabase(t *testing.T) {
 		{f.thumbPath, f.thumbChecksum},
 		{f.thumbnailPath, f.thumbChecksum},
 		{f.sourceRel, f.sourceChecksum},
+		{f.referenceRel, f.referenceChecksum},
+		{f.archivedReferenceRel, f.archivedReferenceChecksum},
 	} {
 		digest, _ := digestOf(t, filepath.Join(target, filepath.FromSlash(check.rel)))
 		if digest != check.digest {

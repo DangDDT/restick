@@ -287,7 +287,14 @@ func checkForeignKeys(ctx context.Context, db *sql.DB) error {
 // checkReferencedFiles proves every file the database points at is present in the
 // backup with the size and digest the database recorded.
 func checkReferencedFiles(ctx context.Context, db *sql.DB, files map[string]manifestFile) error {
-	if err := checkSourceFiles(ctx, db, files); err != nil {
+	sources, err := sourceIndex(files)
+	if err != nil {
+		return err
+	}
+	if err := checkPackSources(ctx, db, sources); err != nil {
+		return err
+	}
+	if err := checkReferenceAssets(ctx, db, sources); err != nil {
 		return err
 	}
 	if err := checkVersionFiles(ctx, db, files); err != nil {
@@ -296,7 +303,9 @@ func checkReferencedFiles(ctx context.Context, db *sql.DB, files map[string]mani
 	return checkStickerFiles(ctx, db, files)
 }
 
-func checkSourceFiles(ctx context.Context, db *sql.DB, files map[string]manifestFile) error {
+// sourceIndex maps a sources/<id>/original.<ext> backup path to its id. Every
+// source folder holds exactly one original file.
+func sourceIndex(files map[string]manifestFile) (map[string]manifestFile, error) {
 	bySource := make(map[string]manifestFile)
 	for rel, entry := range files {
 		parts := strings.Split(rel, "/")
@@ -304,11 +313,14 @@ func checkSourceFiles(ctx context.Context, db *sql.DB, files map[string]manifest
 			continue
 		}
 		if _, duplicate := bySource[parts[1]]; duplicate {
-			return fmt.Errorf("%w: source %s has more than one file", ErrBackupInvalid, parts[1])
+			return nil, fmt.Errorf("%w: source %s has more than one file", ErrBackupInvalid, parts[1])
 		}
 		bySource[parts[1]] = entry
 	}
+	return bySource, nil
+}
 
+func checkPackSources(ctx context.Context, db *sql.DB, sources map[string]manifestFile) error {
 	rows, err := db.QueryContext(ctx, `SELECT id, source_id, source_checksum_sha256, source_byte_size FROM packs WHERE source_id IS NOT NULL`)
 	if err != nil {
 		return fmt.Errorf("%w: read pack sources: %v", ErrBackupInvalid, err)
@@ -322,7 +334,7 @@ func checkSourceFiles(ctx context.Context, db *sql.DB, files map[string]manifest
 		if err := rows.Scan(&packID, &sourceID, &checksum, &byteSize); err != nil {
 			return fmt.Errorf("%w: read pack sources: %v", ErrBackupInvalid, err)
 		}
-		entry, ok := bySource[sourceID]
+		entry, ok := sources[sourceID]
 		if !ok {
 			return fmt.Errorf("%w: pack %s references missing source %s", ErrBackupInvalid, packID, sourceID)
 		}
@@ -335,6 +347,40 @@ func checkSourceFiles(ctx context.Context, db *sql.DB, files map[string]manifest
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("%w: read pack sources: %v", ErrBackupInvalid, err)
+	}
+	return nil
+}
+
+// checkReferenceAssets validates the private reference images against
+// sources/<asset-id>/original.<ext> (spec §8.1). Archived references are
+// validated too: the file stays on disk for as long as the row exists.
+func checkReferenceAssets(ctx context.Context, db *sql.DB, sources map[string]manifestFile) error {
+	rows, err := db.QueryContext(ctx, `SELECT id, byte_size, checksum_sha256 FROM reference_assets`)
+	if err != nil {
+		return fmt.Errorf("%w: read reference assets: %v", ErrBackupInvalid, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			id, checksum string
+			byteSize     int64
+		)
+		if err := rows.Scan(&id, &byteSize, &checksum); err != nil {
+			return fmt.Errorf("%w: read reference assets: %v", ErrBackupInvalid, err)
+		}
+		entry, ok := sources[id]
+		if !ok {
+			return fmt.Errorf("%w: reference asset %s has no source file", ErrBackupInvalid, id)
+		}
+		if entry.SHA256 != checksum {
+			return fmt.Errorf("%w: reference asset %s does not match its recorded checksum", ErrBackupInvalid, id)
+		}
+		if entry.ByteSize != byteSize {
+			return fmt.Errorf("%w: reference asset %s does not match its recorded size", ErrBackupInvalid, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("%w: read reference assets: %v", ErrBackupInvalid, err)
 	}
 	return nil
 }

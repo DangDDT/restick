@@ -99,8 +99,13 @@ func Backup(ctx context.Context, dataDir, outputDir string) error {
 	if err != nil {
 		return err
 	}
-	if within(dir, out) || within(dir, resolvedTarget(out)) {
-		return fmt.Errorf("%w: %s is inside the data dir", ErrInvalidBackupOutput, out)
+	resolved, err := canonicalTarget(out)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidBackupOutput, err)
+	}
+	out = resolved
+	if within(dir, out) {
+		return fmt.Errorf("%w: %s is inside the data dir", ErrInvalidBackupOutput, outputDir)
 	}
 	switch entries, err := os.ReadDir(out); {
 	case err == nil && len(entries) > 0:
@@ -355,14 +360,27 @@ func canonicalDir(p string) (string, error) {
 	return resolved, nil
 }
 
-// resolvedTarget resolves the symlinks of p's parent, for a p that does not
-// exist yet.
-func resolvedTarget(p string) string {
-	parent, err := filepath.EvalSymlinks(filepath.Dir(p))
-	if err != nil {
-		return p
+// canonicalTarget resolves symlinks in p, including p itself when it exists and
+// the deepest existing parent otherwise, so a symlinked output directory cannot
+// hide that the target lives inside the data dir.
+func canonicalTarget(p string) (string, error) {
+	var tail []string
+	current := p
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			return filepath.Join(append([]string{resolved}, tail...)...), nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", fmt.Errorf("maintenance: resolve %s: %w", p, err)
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return p, nil
+		}
+		tail = append([]string{filepath.Base(current)}, tail...)
+		current = parent
 	}
-	return filepath.Join(parent, filepath.Base(p))
 }
 
 // within reports whether p is root or lies below it.
