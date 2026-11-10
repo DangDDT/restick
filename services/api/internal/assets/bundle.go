@@ -191,33 +191,31 @@ func (s *Store) StageBundle(ctx context.Context, jobID string, manifest PackMani
 
 	aggregate := sha256.New()
 	stickers := make([]CommittedSticker, len(manifest.Stickers))
-	var copied int64
+	budget := newCopyBudget(MaxBundleBytes)
 	for i, sticker := range manifest.Stickers {
 		if err := ctx.Err(); err != nil {
 			return StagedVersion{}, err
 		}
 		objectPath := filepath.Join(outputDir, sticker.File)
-		if err := verifyWebP(objectPath, sticker.Width, sticker.Height); err != nil {
-			return StagedVersion{}, fmt.Errorf("%w: %s: %v", ErrInvalidManifest, sticker.File, err)
-		}
-		sum, n, err := copyFile(filepath.Join(packDir, sticker.File), objectPath, aggregate)
+		stagedObject := filepath.Join(packDir, sticker.File)
+		sum, _, err := copyFile(stagedObject, objectPath, aggregate, budget)
 		if err != nil {
-			return StagedVersion{}, err
+			return StagedVersion{}, memberError(sticker.File, err)
 		}
-		copied += n
-		if copied > MaxBundleBytes {
-			return StagedVersion{}, ErrBundleTooLarge
+		if err := verifyWebP(stagedObject, sticker.Width, sticker.Height); err != nil {
+			return StagedVersion{}, memberError(sticker.File, err)
 		}
 		thumbPath := filepath.Join(outputDir, sticker.ThumbFile)
-		if err := verifyWebP(thumbPath, 0, 0); err != nil {
-			return StagedVersion{}, fmt.Errorf("%w: %s: %v", ErrInvalidManifest, sticker.ThumbFile, err)
+		stagedThumb := filepath.Join(packDir, "thumbs", sticker.ThumbFile)
+		if _, _, err := copyFile(stagedThumb, thumbPath, nil, budget); err != nil {
+			return StagedVersion{}, memberError(sticker.ThumbFile, err)
 		}
-		if _, _, err := copyFile(filepath.Join(packDir, "thumbs", sticker.ThumbFile), thumbPath, nil); err != nil {
-			return StagedVersion{}, err
+		if err := verifyWebP(stagedThumb, 0, 0); err != nil {
+			return StagedVersion{}, memberError(sticker.ThumbFile, err)
 		}
 		if i == 0 {
-			if _, _, err := copyFile(filepath.Join(packDir, "thumb.webp"), thumbPath, nil); err != nil {
-				return StagedVersion{}, err
+			if _, _, err := copyFile(filepath.Join(packDir, "thumb.webp"), stagedThumb, nil, budget); err != nil {
+				return StagedVersion{}, memberError("thumb.webp", err)
 			}
 		}
 		stickers[i] = CommittedSticker{
@@ -389,7 +387,51 @@ func verifyWebP(p string, width, height int) error {
 	return nil
 }
 
-func copyFile(dst, src string, extra io.Writer) (string, int64, error) {
+func memberError(name string, err error) error {
+	if errors.Is(err, ErrBundleTooLarge) {
+		return ErrBundleTooLarge
+	}
+	return fmt.Errorf("%w: %s: %w", ErrInvalidManifest, name, err)
+}
+
+// copyBudget caps the total bytes written into a staged version across every
+// object, thumbnail and pack thumbnail. The bounded writer stops at the cap
+// instead of staging an unbounded work artifact first.
+type copyBudget struct {
+	remaining int64
+	exceeded  bool
+}
+
+func newCopyBudget(limit int64) *copyBudget {
+	return &copyBudget{remaining: limit}
+}
+
+type budgetWriter struct {
+	dst    io.Writer
+	budget *copyBudget
+}
+
+func (w *budgetWriter) Write(p []byte) (int, error) {
+	if w.budget.remaining <= 0 {
+		w.budget.exceeded = true
+		return 0, ErrBundleTooLarge
+	}
+	if int64(len(p)) > w.budget.remaining {
+		allowed := int(w.budget.remaining)
+		n, err := w.dst.Write(p[:allowed])
+		w.budget.remaining -= int64(n)
+		w.budget.exceeded = true
+		if err != nil {
+			return n, err
+		}
+		return n, ErrBundleTooLarge
+	}
+	n, err := w.dst.Write(p)
+	w.budget.remaining -= int64(n)
+	return n, err
+}
+
+func copyFile(dst, src string, extra io.Writer, budget *copyBudget) (string, int64, error) {
 	in, err := openNoFollow(src)
 	if err != nil {
 		return "", 0, err
@@ -400,18 +442,21 @@ func copyFile(dst, src string, extra io.Writer) (string, int64, error) {
 		return "", 0, fmt.Errorf("assets: create %s: %w", dst, err)
 	}
 	digest := sha256.New()
-	writers := []io.Writer{out, digest}
+	writers := []io.Writer{&budgetWriter{dst: out, budget: budget}, digest}
 	if extra != nil {
 		writers = append(writers, extra)
 	}
-	n, copyErr := io.Copy(io.MultiWriter(writers...), in)
+	n, copyErr := io.Copy(io.MultiWriter(writers...), io.LimitReader(in, budget.remaining+1))
 	if copyErr == nil {
 		copyErr = out.Sync()
 	}
 	if err := out.Close(); copyErr == nil && err != nil {
 		copyErr = err
 	}
-	if copyErr != nil {
+	switch {
+	case budget.exceeded || errors.Is(copyErr, ErrBundleTooLarge):
+		return "", n, ErrBundleTooLarge
+	case copyErr != nil:
 		return "", n, fmt.Errorf("assets: copy %s: %w", src, copyErr)
 	}
 	return hex.EncodeToString(digest.Sum(nil)), n, nil
@@ -467,9 +512,6 @@ func writeBundle(packDir, bundlePath string, manifest PackManifest) (int64, erro
 	}
 	if writeErr != nil {
 		return 0, fmt.Errorf("assets: write bundle: %w", writeErr)
-	}
-	if limited.written > MaxBundleBytes {
-		return 0, ErrBundleTooLarge
 	}
 	return limited.written, nil
 }

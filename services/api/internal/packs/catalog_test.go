@@ -209,6 +209,16 @@ func TestDraftDeleteRejectsActiveJob(t *testing.T) {
 	if _, err := svc.Get(ctx, draft.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("deleted draft Get error = %v, want ErrNotFound", err)
 	}
+	var orphanTags int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pack_tags WHERE pack_id = ?`, draft.ID).Scan(&orphanTags); err != nil {
+		t.Fatal(err)
+	}
+	if orphanTags != 0 {
+		t.Errorf("pack_tags rows survived delete: %d", orphanTags)
+	}
+	if _, err := svc.Create(ctx, PackDraft{Slug: "draft-pack", Name: "Recreated", Author: "Owner"}); err != nil {
+		t.Errorf("deleted draft slug was not freed: %v", err)
+	}
 
 	ready, err := svc.Create(ctx, PackDraft{Slug: "ready-pack", Name: "Ready", Author: "Owner"})
 	if err != nil {

@@ -308,50 +308,113 @@ func TestStageBundleRejectsUnsafeMembers(t *testing.T) {
 }
 
 func TestOversizedBundleLeavesNoCommittedArtifact(t *testing.T) {
-	store := newTestStore(t)
-	ctx := context.Background()
-	packID := uuid.NewString()
-	jobID := "job_" + uuid.NewString()
-	workDir, err := store.WorkDir(jobID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	output := filepath.Join(workDir, "output")
-	if err := os.MkdirAll(output, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	object := mustWebP(t, tinyWebP2x2)
-	manifest := testManifest(packID, 5)
-	for i := range 5 {
-		path := filepath.Join(output, fixedObjectName(i))
-		f, err := os.Create(path)
+	t.Run("shared budget rejects huge object", func(t *testing.T) {
+		store := newTestStore(t)
+		ctx := context.Background()
+		packID := uuid.NewString()
+		jobID := "job_" + uuid.NewString()
+		workDir, err := store.WorkDir(jobID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := f.Write(object); err != nil {
+		output := filepath.Join(workDir, "output")
+		if err := os.MkdirAll(output, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := f.Truncate(7 << 20); err != nil {
-			t.Fatal(err)
+		object := mustWebP(t, tinyWebP2x2)
+		manifest := testManifest(packID, 5)
+		for i := range 5 {
+			writeSparse(t, filepath.Join(output, fixedObjectName(i)), object, 7<<20)
+			writeSparse(t, filepath.Join(output, fixedThumbName(i)), object, int64(len(object)))
 		}
-		if err := f.Close(); err != nil {
-			t.Fatal(err)
+		if _, err := store.StageBundle(ctx, jobID, manifest); !errors.Is(err, ErrBundleTooLarge) {
+			t.Fatalf("error = %v, want ErrBundleTooLarge", err)
 		}
-		if err := os.WriteFile(filepath.Join(output, fixedThumbName(i)), object, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+		assertNoCommittedArtifact(t, store, packID, jobID)
+	})
 
-	if _, err := store.StageBundle(ctx, jobID, manifest); !errors.Is(err, ErrBundleTooLarge) {
-		t.Fatalf("error = %v, want ErrBundleTooLarge", err)
+	t.Run("thumbs count against the shared budget", func(t *testing.T) {
+		store := newTestStore(t)
+		ctx := context.Background()
+		packID := uuid.NewString()
+		jobID := "job_" + uuid.NewString()
+		workDir, err := store.WorkDir(jobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		output := filepath.Join(workDir, "output")
+		if err := os.MkdirAll(output, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		object := mustWebP(t, tinyWebP2x2)
+		manifest := testManifest(packID, 3)
+		for i := range 3 {
+			writeSparse(t, filepath.Join(output, fixedObjectName(i)), object, int64(len(object)))
+			writeSparse(t, filepath.Join(output, fixedThumbName(i)), object, 12<<20)
+		}
+		// Objects are tiny; only counting objects would stay far below 32 MiB.
+		if _, err := store.StageBundle(ctx, jobID, manifest); !errors.Is(err, ErrBundleTooLarge) {
+			t.Fatalf("error = %v, want ErrBundleTooLarge", err)
+		}
+		assertNoCommittedArtifact(t, store, packID, jobID)
+	})
+
+	t.Run("ZIP overhead exceeds cap with staged bytes under cap", func(t *testing.T) {
+		store := newTestStore(t)
+		ctx := context.Background()
+		packID := uuid.NewString()
+		jobID := "job_" + uuid.NewString()
+		workDir, err := store.WorkDir(jobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		output := filepath.Join(workDir, "output")
+		if err := os.MkdirAll(output, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		object := mustWebP(t, tinyWebP2x2)
+		const thumbSize = int64(16 << 10)
+		// Staged raw bytes are just under the public cap; pack.json and ZIP
+		// headers push the actual archive over it.
+		objectSize := int64(MaxBundleBytes) - 2*thumbSize - 100
+		writeSparse(t, filepath.Join(output, fixedObjectName(0)), object, objectSize)
+		writeSparse(t, filepath.Join(output, fixedThumbName(0)), object, thumbSize)
+		manifest := testManifest(packID, 1)
+		if _, err := store.StageBundle(ctx, jobID, manifest); !errors.Is(err, ErrBundleTooLarge) {
+			t.Fatalf("error = %v, want ErrBundleTooLarge", err)
+		}
+		assertNoCommittedArtifact(t, store, packID, jobID)
+	})
+}
+
+func writeSparse(t *testing.T, path string, header []byte, size int64) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if _, err := f.Write(header); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Truncate(size); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertNoCommittedArtifact(t *testing.T, store *Store, packID, jobID string) {
+	t.Helper()
 	if _, err := os.Stat(filepath.Join(store.dataDir, "packs", packID)); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("pack artifacts were published: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(store.dataDir, "bundles", packID)); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("bundle artifacts were published: %v", err)
 	}
-	entries, err := os.ReadDir(workDir)
+	entries, err := os.ReadDir(filepath.Join(store.dataDir, "work", jobID))
 	if err != nil {
 		t.Fatal(err)
 	}
