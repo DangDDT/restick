@@ -1,0 +1,30 @@
+{
+  "schema": "restick.seed.v1",
+  "group_id": "palette",
+  "palettes": [
+    {"id": "p-001", "name": "Cà phê phin", "name_en": "Phin coffee", "prompt": "a coffee-brown and caramel palette with a warm golden accent and dark brown outlines", "primary": "#6F4E37", "secondary": "#C89B75", "accent": "#E8B44F", "line": "#302521"},
+    {"id": "p-002", "name": "Trà xanh", "name_en": "Green tea", "prompt": "a tea-green and pale lime palette with a warm orange accent and deep green outlines", "primary": "#73945A", "secondary": "#B7C99A", "accent": "#D59252", "line": "#27382C"},
+    {"id": "p-003", "name": "Bánh dâu", "name_en": "Strawberry cake", "prompt": "a strawberry-pink and pale blush palette with a soft green accent and deep mauve outlines", "primary": "#D97A90", "secondary": "#F2C5CB", "accent": "#A0B866", "line": "#51333D"},
+    {"id": "p-004", "name": "Cam quýt", "name_en": "Tangerine", "prompt": "a tangerine and soft amber palette with a green accent and dark umber outlines", "primary": "#E98A3F", "secondary": "#F4C66A", "accent": "#5D9980", "line": "#46332B"},
+    {"id": "p-005", "name": "Biển nông", "name_en": "Shallow sea", "prompt": "a shallow-sea teal and pale aqua palette with a warm peach accent and deep navy outlines", "primary": "#438F9B", "secondary": "#A8D5D1", "accent": "#EDAA69", "line": "#203F4B"},
+    {"id": "p-006", "name": "Đêm có sao", "name_en": "Starry night", "prompt": "a starry indigo and pale lavender palette with a gold accent and near-black outlines", "primary": "#414C79", "secondary": "#7986AF", "accent": "#E9C96F", "line": "#22283E"},
+    {"id": "p-007", "name": "Đồng quê", "name_en": "Countryside", "prompt": "a meadow-green and warm sand palette with a terracotta accent and dark olive outlines", "primary": "#8C9F65", "secondary": "#D2BB8F", "accent": "#BE6F4A", "line": "#3C4230"},
+    {"id": "p-008", "name": "Đất nung", "name_en": "Terracotta", "prompt": "a terracotta and clay-pink palette with a teal accent and deep brown outlines", "primary": "#BB7151", "secondary": "#D8AA85", "accent": "#548F8E", "line": "#49372F"},
+    {"id": "p-009", "name": "Bạc hà và đào", "name_en": "Mint and peach", "prompt": "a mint-green and peach palette with a coral accent and dark teal outlines", "primary": "#8DC7B2", "secondary": "#E8B2A0", "accent": "#D87562", "line": "#36544C"},
+    {"id": "p-010", "name": "Mực xanh", "name_en": "Ink blue", "prompt": "an ink-blue and pale steel-blue palette with a brass accent and deep navy outlines", "primary": "#315C80", "secondary": "#8DB1C9", "accent": "#D7A353", "line": "#1F3044"},
+    {"id": "p-011", "name": "Công xưởng", "name_en": "Workshop", "prompt": "a workshop-grey and light-steel palette with a safety-yellow accent and graphite outlines", "primary": "#78838B", "secondary": "#BAC0C3", "accent": "#D9A53F", "line": "#2E383E"},
+    {"id": "p-012", "name": "Cứu hộ nhỏ", "name_en": "Little rescue", "prompt": "a rescue-red and sand palette with a mustard accent and dark brown outlines", "primary": "#C75A4A", "secondary": "#D1B79A", "accent": "#D5A83E", "line": "#473332"},
+    {"id": "p-013", "name": "Rừng mưa", "name_en": "Rainforest", "prompt": "a rainforest-green and soft leaf-green palette with a warm ochre accent and deep forest outlines", "primary": "#39775E", "secondary": "#8FB88B", "accent": "#D68D52", "line": "#213F35"},
+    {"id": "p-014", "name": "Băng và san hô", "name_en": "Ice and coral", "prompt": "an ice-blue and pale mist palette with a coral accent and deep slate outlines", "primary": "#8BBBC8", "secondary": "#CCDDE1", "accent": "#D77468", "line": "#2B4855"},
+    {"id": "p-015", "name": "Mùa thu", "name_en": "Autumn", "prompt": "an autumn-orange and amber palette with an olive accent and dark umber outlines", "primary": "#B66B3D", "secondary": "#D8AE58", "accent": "#7A8C59", "line": "#49362D"},
+    {"id": "p-016", "name": "Mận chín", "name_en": "Ripe plum", "prompt": "a plum and muted-mauve palette with a gold accent and deep plum outlines", "primary": "#82506F", "secondary": "#C897AE", "accent": "#D6B46B", "line": "#3D293D"},
+    {"id": "p-017", "name": "Lễ hội giấy", "name_en": "Paper festival", "prompt": "a festive-red and paper-gold palette with a teal accent and dark brown outlines", "primary": "#D55B52", "secondary": "#E2B84F", "accent": "#478E8B", "line": "#453534"},
+    {"id": "p-018", "name": "Đồ chơi gỗ", "name_en": "Wooden toy", "prompt": "a wood-brown and light-oak palette with a dusty blue accent and dark walnut outlines", "primary": "#B88557", "secondary": "#D2AF7E", "accent": "#6C91A2", "line": "#4D382A"},
+    {"id": "p-019", "name": "Vũ trụ kẹo", "name_en": "Candy universe", "prompt": "a candy-violet and pink-lilac palette with a mint accent and deep indigo outlines", "primary": "#806AB4", "secondary": "#D79EC5", "accent": "#73C1BB", "line": "#3A3259"},
+    {"id": "p-020", "name": "Kẹo chanh", "name_en": "Lemon drop", "prompt": "a lemon-yellow and pale cream palette with an olive accent and dark olive outlines", "primary": "#D1BD4E", "secondary": "#E8D998", "accent": "#8A9A4C", "line": "#4F492C"},
+    {"id": "p-021", "name": "Than và hổ phách", "name_en": "Charcoal and amber", "prompt": "a charcoal and warm-grey palette with an amber accent and near-black outlines", "primary": "#494A4C", "secondary": "#98928A", "accent": "#D59A3B", "line": "#22262A"},
+    {"id": "p-022", "name": "Giấy mực đỏ", "name_en": "Paper and red ink", "prompt": "an aged-paper and stone-grey palette with a brick-red accent and deep slate outlines", "primary": "#CEBEA4", "secondary": "#8E887A", "accent": "#BD594D", "line": "#343B3D"},
+    {"id": "p-023", "name": "Hồ tím", "name_en": "Violet lake", "prompt": "a lake-violet and pale periwinkle palette with a sand accent and dark slate-purple outlines", "primary": "#7776AD", "secondary": "#B5B5D6", "accent": "#E1B579", "line": "#353651"},
+    {"id": "p-024", "name": "Nắng trên mái", "name_en": "Sun on the roof", "prompt": "a sunlit-ochre and warm-clay palette with a teal accent and dark brown outlines", "primary": "#D9A055", "secondary": "#B9785D", "accent": "#66979A", "line": "#514139"}
+  ]
+}
