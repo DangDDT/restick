@@ -403,9 +403,9 @@ func jobManifest(request JobRequest, result JobResult) (assets.PackManifest, err
 			return assets.PackManifest{}, fmt.Errorf("%w: member %q is not the fixed name for index %d", errInvalidResult, sticker.File, i)
 		case sticker.ThumbFile != fmt.Sprintf("thumb_%03d.webp", i):
 			return assets.PackManifest{}, fmt.Errorf("%w: thumb %q is not the fixed name for index %d", errInvalidResult, sticker.ThumbFile, i)
-		case sticker.Width < 1 || sticker.Width > assets.MaxImageDimension ||
-			sticker.Height < 1 || sticker.Height > assets.MaxImageDimension:
-			return assets.PackManifest{}, fmt.Errorf("%w: invalid dimensions for %s", errInvalidResult, sticker.File)
+		case sticker.Width != assets.StickerDimension || sticker.Height != assets.StickerDimension:
+			return assets.PackManifest{}, fmt.Errorf("%w: %s is %dx%d, want %dx%d", errInvalidResult,
+				sticker.File, sticker.Width, sticker.Height, assets.StickerDimension, assets.StickerDimension)
 		}
 		manifest.Stickers[i] = assets.ManifestSticker{
 			File:      sticker.File,

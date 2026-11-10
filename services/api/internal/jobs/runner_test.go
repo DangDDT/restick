@@ -25,9 +25,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// tinyWebP is a real 2x2 lossless WebP; assets.StageBundle verifies the decoded
-// dimensions of every staged member.
-const tinyWebP = "UklGRiwAAABXRUJQVlA4TB8AAAAvAUAAAB8gEEjeHzqN+RcQFPwf3fxHZA/gBgwR/Q8BAA=="
+// Real lossless WebP at the fixed output sizes of spec §7.2: 512x512 stickers
+// and 128x128 thumbnails. assets.StageBundle verifies the decoded dimensions of
+// every staged member.
+const (
+	stickerWebP = "UklGRi4AAABXRUJQVlA4TCIAAAAv/8F/AAdQlHIXpf8BgUCyv/cMRfQ/4z//+c9//vOf//wf"
+	thumbWebP   = "UklGRhgAAABXRUJQVlA4TAsAAAAvf8AfAEVRShv9DwA="
+)
 
 type harness struct {
 	t       *testing.T
@@ -115,9 +119,9 @@ func encodePNG(t *testing.T, width, height int) []byte {
 	return buf.Bytes()
 }
 
-func webpBytes(t *testing.T) []byte {
+func webpBytes(t *testing.T, encoded string) []byte {
 	t.Helper()
-	data, err := base64.StdEncoding.DecodeString(tinyWebP)
+	data, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		t.Fatalf("decode webp fixture: %v", err)
 	}
@@ -164,14 +168,16 @@ func writeProcessedOutput(t *testing.T, request JobRequest, count int) (JobResul
 	for i := range count {
 		file := fmt.Sprintf("%03d.webp", i)
 		thumb := "thumb_" + file
-		for _, name := range []string{file, thumb} {
-			if err := os.WriteFile(filepath.Join(output, name), webpBytes(t), 0o644); err != nil {
+		files := map[string]string{file: stickerWebP, thumb: thumbWebP}
+		for name, encoded := range files {
+			if err := os.WriteFile(filepath.Join(output, name), webpBytes(t, encoded), 0o644); err != nil {
 				t.Errorf("write work output: %v", err)
 				return JobResult{}, err
 			}
 		}
 		result.Stickers = append(result.Stickers, ResultSticker{
-			File: file, ThumbFile: thumb, Width: 2, Height: 2,
+			File: file, ThumbFile: thumb,
+			Width: assets.StickerDimension, Height: assets.StickerDimension,
 		})
 	}
 	return result, nil
@@ -420,13 +426,15 @@ func TestCrashWindowDoesNotExposeVersion(t *testing.T) {
 	for i := range 4 {
 		file := fmt.Sprintf("%03d.webp", i)
 		thumb := "thumb_" + file
-		for _, name := range []string{file, thumb} {
-			if err := os.WriteFile(filepath.Join(workDir, "output", name), webpBytes(t), 0o644); err != nil {
+		files := map[string]string{file: stickerWebP, thumb: thumbWebP}
+		for name, encoded := range files {
+			if err := os.WriteFile(filepath.Join(workDir, "output", name), webpBytes(t, encoded), 0o644); err != nil {
 				t.Fatalf("write output: %v", err)
 			}
 		}
 		manifest.Stickers = append(manifest.Stickers, assets.ManifestSticker{
-			File: file, ThumbFile: thumb, Width: 2, Height: 2,
+			File: file, ThumbFile: thumb,
+			Width: assets.StickerDimension, Height: assets.StickerDimension,
 		})
 	}
 	staged, err := h.store.StageBundle(ctx, job.ID, manifest)

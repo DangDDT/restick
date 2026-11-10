@@ -19,8 +19,14 @@ import (
 	"golang.org/x/image/webp"
 )
 
-// PackSchema is the immutable manifest schema version written into pack.json.
-const PackSchema = "restick.pack.v1"
+const (
+	// PackSchema is the immutable manifest schema version written into pack.json.
+	PackSchema = "restick.pack.v1"
+	// StickerDimension is the fixed square edge of every committed sticker.
+	StickerDimension = 512
+	// ThumbnailDimension is the fixed square edge of every sticker thumbnail.
+	ThumbnailDimension = 128
+)
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
@@ -202,7 +208,7 @@ func (s *Store) StageBundle(ctx context.Context, jobID string, manifest PackMani
 		if err != nil {
 			return StagedVersion{}, memberError(sticker.File, err)
 		}
-		if err := verifyWebP(stagedObject, sticker.Width, sticker.Height); err != nil {
+		if err := verifyWebP(stagedObject, StickerDimension, StickerDimension); err != nil {
 			return StagedVersion{}, memberError(sticker.File, err)
 		}
 		thumbPath := filepath.Join(outputDir, sticker.ThumbFile)
@@ -210,7 +216,7 @@ func (s *Store) StageBundle(ctx context.Context, jobID string, manifest PackMani
 		if _, _, err := copyFile(stagedThumb, thumbPath, nil, budget); err != nil {
 			return StagedVersion{}, memberError(sticker.ThumbFile, err)
 		}
-		if err := verifyWebP(stagedThumb, 0, 0); err != nil {
+		if err := verifyWebP(stagedThumb, ThumbnailDimension, ThumbnailDimension); err != nil {
 			return StagedVersion{}, memberError(sticker.ThumbFile, err)
 		}
 		if i == 0 {
@@ -353,8 +359,10 @@ func (m PackManifest) validate() error {
 		if sticker.ThumbFile != fmt.Sprintf("thumb_%03d.webp", i) {
 			return fmt.Errorf("%w: member %q is not the fixed thumb name for index %d", ErrInvalidManifest, sticker.ThumbFile, i)
 		}
-		if sticker.Width < 1 || sticker.Height < 1 || sticker.Width > MaxImageDimension || sticker.Height > MaxImageDimension {
-			return fmt.Errorf("%w: invalid dimensions for %s", ErrInvalidManifest, sticker.File)
+		if sticker.Width != StickerDimension || sticker.Height != StickerDimension {
+			return fmt.Errorf("%w: %s must be declared %dx%d, got %dx%d",
+				ErrInvalidManifest, sticker.File,
+				StickerDimension, StickerDimension, sticker.Width, sticker.Height)
 		}
 		for _, keyword := range sticker.Keywords {
 			if strings.TrimSpace(keyword) == "" {
@@ -365,6 +373,9 @@ func (m PackManifest) validate() error {
 	return nil
 }
 
+// verifyWebP checks the staged bytes: the decoded edge must be exactly the
+// required output size, so a self-consistent but wrong-size processor result is
+// rejected before anything becomes public.
 func verifyWebP(p string, width, height int) error {
 	f, err := openNoFollow(p)
 	if err != nil {

@@ -28,7 +28,8 @@ const (
 	newPassword     = "new-owner-password"
 	fixturePackID   = "11111111-1111-4111-8111-111111111111"
 	fixtureJobID    = "job-maintenance"
-	tinyWebP        = "UklGRiwAAABXRUJQVlA4TB8AAAAvAUAAAB8gEEjeHzqN+RcQFPwf3fxHZA/gBgwR/Q8BAA=="
+	stickerWebP     = "UklGRi4AAABXRUJQVlA4TCIAAAAv/8F/AAdQlHIXpf8BgUCyv/cMRfQ/4z//+c9//vOf//wf"
+	thumbWebP       = "UklGRhgAAABXRUJQVlA4TAsAAAAvf8AfAEVRShv9DwA="
 	escapingPath    = "../escaped.txt"
 	replacementHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 )
@@ -118,9 +119,8 @@ func buildFixture(t *testing.T) fixture {
 	if err := os.MkdirAll(output, 0o755); err != nil {
 		t.Fatalf("create work output: %v", err)
 	}
-	webp := mustWebP(t)
-	writeFile(t, filepath.Join(output, "000.webp"), webp)
-	writeFile(t, filepath.Join(output, "thumb_000.webp"), webp)
+	writeFile(t, filepath.Join(output, "000.webp"), mustWebP(t, stickerWebP))
+	writeFile(t, filepath.Join(output, "thumb_000.webp"), mustWebP(t, thumbWebP))
 
 	manifest := assets.PackManifest{
 		PackID:      fixturePackID,
@@ -133,8 +133,8 @@ func buildFixture(t *testing.T) fixture {
 		Stickers: []assets.ManifestSticker{{
 			File:      "000.webp",
 			ThumbFile: "thumb_000.webp",
-			Width:     2,
-			Height:    2,
+			Width:     assets.StickerDimension,
+			Height:    assets.StickerDimension,
 			EmojiHint: "🙂",
 			Keywords:  []string{"demo"},
 		}},
@@ -803,9 +803,9 @@ func mustWorkDir(t *testing.T, store *assets.Store) string {
 	return dir
 }
 
-func mustWebP(t *testing.T) []byte {
+func mustWebP(t *testing.T, encoded string) []byte {
 	t.Helper()
-	body, err := base64.StdEncoding.DecodeString(tinyWebP)
+	body, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		t.Fatalf("decode webp fixture: %v", err)
 	}

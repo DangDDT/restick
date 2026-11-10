@@ -18,6 +18,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// Real lossless WebP at the fixed output sizes of spec §7.2: 512x512 stickers
+// and 128x128 thumbnails. The two pairs differ so checksum and order
+// assertions stay meaningful.
+const (
+	stickerAWebP = "UklGRi4AAABXRUJQVlA4TCIAAAAv/8F/AAdQlHIXpf8BgUCyv/cMRfQ/4z//+c9//vOf//wf"
+	stickerBWebP = "UklGRi4AAABXRUJQVlA4TCIAAAAv/8F/AAdQraJUuv8BgUCyv/cMRfQ/4z//+c9//vOf//wf"
+	thumbAWebP   = "UklGRhgAAABXRUJQVlA4TAsAAAAvf8AfAEVRShv9DwA="
+	thumbBWebP   = "UklGRhgAAABXRUJQVlA4TAwAAAAvf8AfAKhWUSrd/wA="
+)
+
 func testManifest(packID string, count int) PackManifest {
 	manifest := PackManifest{
 		PackID:      packID,
@@ -32,8 +42,8 @@ func testManifest(packID string, count int) PackManifest {
 		manifest.Stickers = append(manifest.Stickers, ManifestSticker{
 			File:      fixedObjectName(i),
 			ThumbFile: fixedThumbName(i),
-			Width:     2,
-			Height:    2,
+			Width:     StickerDimension,
+			Height:    StickerDimension,
 			EmojiHint: "🙂",
 			Keywords:  []string{"demo"},
 		})
@@ -72,17 +82,17 @@ func TestBundleLayoutAndStickerChecksum(t *testing.T) {
 	ctx := context.Background()
 	packID := uuid.NewString()
 	jobID := "job_" + uuid.NewString()
-	object0 := mustWebP(t, tinyWebP2x2)
-	object1 := mustWebP(t, tinyWebP3x3)
+	object0 := mustWebP(t, stickerAWebP)
+	object1 := mustWebP(t, stickerBWebP)
+	thumb0 := mustWebP(t, thumbAWebP)
+	thumb1 := mustWebP(t, thumbBWebP)
 	writeOutput(t, store, jobID, map[string][]byte{
 		"000.webp":       object0,
-		"thumb_000.webp": object0,
+		"thumb_000.webp": thumb0,
 		"001.webp":       object1,
-		"thumb_001.webp": object1,
+		"thumb_001.webp": thumb1,
 	})
 	manifest := testManifest(packID, 2)
-	manifest.Stickers[1].Width = 3
-	manifest.Stickers[1].Height = 3
 
 	staged, err := store.StageBundle(ctx, jobID, manifest)
 	if err != nil {
@@ -188,10 +198,13 @@ func TestBundleLayoutAndStickerChecksum(t *testing.T) {
 	}
 
 	if !bytes.Equal(readZipMember(t, zipReader, "000.webp"), object0) ||
-		!bytes.Equal(readZipMember(t, zipReader, "thumbs/thumb_001.webp"), object1) {
+		!bytes.Equal(readZipMember(t, zipReader, "001.webp"), object1) {
 		t.Errorf("zip sticker bytes differ")
 	}
-	if !bytes.Equal(readZipMember(t, zipReader, "thumb.webp"), object0) {
+	if !bytes.Equal(readZipMember(t, zipReader, "thumbs/thumb_001.webp"), thumb1) {
+		t.Errorf("zip thumbnail bytes differ")
+	}
+	if !bytes.Equal(readZipMember(t, zipReader, "thumb.webp"), thumb0) {
 		t.Errorf("pack thumbnail is not the first sticker thumbnail")
 	}
 	zipSum := sha256.Sum256(mustReadFile(t, bundleAbs))
@@ -226,10 +239,10 @@ func TestStageBundleRejectsUnsafeMembers(t *testing.T) {
 	ctx := context.Background()
 	packID := uuid.NewString()
 	jobID := "job_" + uuid.NewString()
-	object := mustWebP(t, tinyWebP2x2)
+	object := mustWebP(t, stickerAWebP)
 	writeOutput(t, store, jobID, map[string][]byte{
 		"000.webp":       object,
-		"thumb_000.webp": object,
+		"thumb_000.webp": mustWebP(t, thumbAWebP),
 	})
 	valid := testManifest(packID, 1)
 
@@ -242,7 +255,7 @@ func TestStageBundleRejectsUnsafeMembers(t *testing.T) {
 			name: "traversal member",
 			manifest: func() PackManifest {
 				m := valid
-				m.Stickers = []ManifestSticker{{File: "../000.webp", ThumbFile: "thumb_000.webp", Width: 2, Height: 2}}
+				m.Stickers = []ManifestSticker{{File: "../000.webp", ThumbFile: "thumb_000.webp", Width: StickerDimension, Height: StickerDimension}}
 				return m
 			}(),
 			expected: ErrInvalidManifest,
@@ -251,7 +264,7 @@ func TestStageBundleRejectsUnsafeMembers(t *testing.T) {
 			name: "renamed member",
 			manifest: func() PackManifest {
 				m := valid
-				m.Stickers = []ManifestSticker{{File: "001.webp", ThumbFile: "thumb_000.webp", Width: 2, Height: 2}}
+				m.Stickers = []ManifestSticker{{File: "001.webp", ThumbFile: "thumb_000.webp", Width: StickerDimension, Height: StickerDimension}}
 				return m
 			}(),
 			expected: ErrInvalidManifest,
@@ -260,7 +273,7 @@ func TestStageBundleRejectsUnsafeMembers(t *testing.T) {
 			name: "missing file",
 			manifest: func() PackManifest {
 				m := valid
-				m.Stickers = []ManifestSticker{{File: "002.webp", ThumbFile: "thumb_002.webp", Width: 2, Height: 2}}
+				m.Stickers = []ManifestSticker{{File: "002.webp", ThumbFile: "thumb_002.webp", Width: StickerDimension, Height: StickerDimension}}
 				return m
 			}(),
 			expected: ErrInvalidManifest,
@@ -288,7 +301,7 @@ func TestStageBundleRejectsUnsafeMembers(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifest := valid
-	manifest.Stickers = []ManifestSticker{{File: "003.webp", ThumbFile: "thumb_000.webp", Width: 2, Height: 2}}
+	manifest.Stickers = []ManifestSticker{{File: "003.webp", ThumbFile: "thumb_000.webp", Width: StickerDimension, Height: StickerDimension}}
 	if _, err := store.StageBundle(ctx, jobID, manifest); !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("non-webp member error = %v", err)
 	}
@@ -301,9 +314,46 @@ func TestStageBundleRejectsUnsafeMembers(t *testing.T) {
 	if err := os.Symlink(secret, linked); err != nil {
 		t.Fatal(err)
 	}
-	manifest.Stickers = []ManifestSticker{{File: "004.webp", ThumbFile: "thumb_000.webp", Width: 2, Height: 2}}
+	manifest.Stickers = []ManifestSticker{{File: "004.webp", ThumbFile: "thumb_000.webp", Width: StickerDimension, Height: StickerDimension}}
 	if _, err := store.StageBundle(ctx, jobID, manifest); !errors.Is(err, ErrInvalidManifest) && !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("symlinked member error = %v", err)
+	}
+}
+
+// TestStageBundleRejectsWrongOutputSizes pins the spec §7.2 output contract:
+// 512x512 stickers and 128x128 thumbnails are verified from the staged bytes,
+// so a self-consistent processor claim cannot publish a wrong-size output.
+func TestStageBundleRejectsWrongOutputSizes(t *testing.T) {
+	sticker := mustWebP(t, stickerAWebP)
+	thumb := mustWebP(t, thumbAWebP)
+	cases := []struct {
+		name     string
+		object   []byte
+		thumb    []byte
+		declared int
+	}{
+		{name: "sticker is 128 instead of 512", object: thumb, thumb: thumb, declared: StickerDimension},
+		{name: "thumb is 512 instead of 128", object: sticker, thumb: sticker, declared: StickerDimension},
+		{name: "declared sticker size is not 512", object: sticker, thumb: thumb, declared: 128},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newTestStore(t)
+			ctx := context.Background()
+			packID := uuid.NewString()
+			jobID := "job_" + uuid.NewString()
+			writeOutput(t, store, jobID, map[string][]byte{
+				"000.webp":       tc.object,
+				"thumb_000.webp": tc.thumb,
+			})
+			manifest := testManifest(packID, 1)
+			manifest.Stickers[0].Width = tc.declared
+			manifest.Stickers[0].Height = tc.declared
+			if _, err := store.StageBundle(ctx, jobID, manifest); !errors.Is(err, ErrInvalidManifest) {
+				t.Fatalf("error = %v, want ErrInvalidManifest", err)
+			}
+			assertNoCommittedArtifact(t, store, packID, jobID)
+		})
 	}
 }
 
@@ -321,11 +371,12 @@ func TestOversizedBundleLeavesNoCommittedArtifact(t *testing.T) {
 		if err := os.MkdirAll(output, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		object := mustWebP(t, tinyWebP2x2)
+		object := mustWebP(t, stickerAWebP)
+		thumb := mustWebP(t, thumbAWebP)
 		manifest := testManifest(packID, 5)
 		for i := range 5 {
 			writeSparse(t, filepath.Join(output, fixedObjectName(i)), object, 7<<20)
-			writeSparse(t, filepath.Join(output, fixedThumbName(i)), object, int64(len(object)))
+			writeSparse(t, filepath.Join(output, fixedThumbName(i)), thumb, int64(len(thumb)))
 		}
 		if _, err := store.StageBundle(ctx, jobID, manifest); !errors.Is(err, ErrBundleTooLarge) {
 			t.Fatalf("error = %v, want ErrBundleTooLarge", err)
@@ -346,11 +397,12 @@ func TestOversizedBundleLeavesNoCommittedArtifact(t *testing.T) {
 		if err := os.MkdirAll(output, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		object := mustWebP(t, tinyWebP2x2)
+		object := mustWebP(t, stickerAWebP)
+		thumb := mustWebP(t, thumbAWebP)
 		manifest := testManifest(packID, 3)
 		for i := range 3 {
 			writeSparse(t, filepath.Join(output, fixedObjectName(i)), object, int64(len(object)))
-			writeSparse(t, filepath.Join(output, fixedThumbName(i)), object, 12<<20)
+			writeSparse(t, filepath.Join(output, fixedThumbName(i)), thumb, 12<<20)
 		}
 		// Objects are tiny; only counting objects would stay far below 32 MiB.
 		if _, err := store.StageBundle(ctx, jobID, manifest); !errors.Is(err, ErrBundleTooLarge) {
@@ -372,13 +424,14 @@ func TestOversizedBundleLeavesNoCommittedArtifact(t *testing.T) {
 		if err := os.MkdirAll(output, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		object := mustWebP(t, tinyWebP2x2)
+		object := mustWebP(t, stickerAWebP)
+		thumb := mustWebP(t, thumbAWebP)
 		const thumbSize = int64(16 << 10)
 		// Staged raw bytes are just under the public cap; pack.json and ZIP
 		// headers push the actual archive over it.
 		objectSize := int64(MaxBundleBytes) - 2*thumbSize - 100
 		writeSparse(t, filepath.Join(output, fixedObjectName(0)), object, objectSize)
-		writeSparse(t, filepath.Join(output, fixedThumbName(0)), object, thumbSize)
+		writeSparse(t, filepath.Join(output, fixedThumbName(0)), thumb, thumbSize)
 		manifest := testManifest(packID, 1)
 		if _, err := store.StageBundle(ctx, jobID, manifest); !errors.Is(err, ErrBundleTooLarge) {
 			t.Fatalf("error = %v, want ErrBundleTooLarge", err)
