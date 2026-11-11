@@ -42,7 +42,9 @@ export const vi = {
   factorySubtitle:
     "Chọn mảnh, giữ lựa chọn, biên dịch prompt tiếng Anh rồi copy sang công cụ AI bên ngoài.",
   externalAiHint:
-    "Restick không tạo ảnh. Hãy copy prompt và dán vào công cụ AI bên ngoài, sau đó tải sheet kết quả về.",
+    "Restick không tạo ảnh. Mở một công cụ AI ở khối bên cạnh prompt, dán prompt, rồi tải sheet kết quả về.",
+  aiOpenTitle: "Mở công cụ tạo ảnh",
+  aiOpenHint: "Bấm sẽ tự copy prompt rồi mở công cụ ở tab mới. Chỉ cần dán và tạo.",
   newDesign: "Thiết kế mới",
   savedDesigns: "Thiết kế đã lưu",
   deleteDesign: "Xóa thiết kế",
@@ -99,6 +101,8 @@ export const vi = {
   saveDesign: "Lưu thiết kế",
   updateDesign: "Cập nhật thiết kế",
   designSaved: "Đã lưu thiết kế.",
+  saveCopy: "Lưu thành bản sao",
+  copySuffix: "bản sao",
   noSelection: "Chưa chọn mảnh nào.",
 
   libraryTitle: "Thư viện mảnh ghép",
@@ -346,6 +350,8 @@ const en: Partial<Record<MessageKey, string>> = {
   loading: "Loading…",
   cancel: "Cancel",
   copy: "Copy",
+  saveCopy: "Save as copy",
+  copySuffix: "copy",
   copied: "Copied!",
   delete: "Delete",
   edit: "Edit",

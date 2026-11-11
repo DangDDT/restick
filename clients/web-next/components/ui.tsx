@@ -290,7 +290,7 @@ export function Kbd({ children }: { children: React.ReactNode }) {
 
 type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
-const BUTTON_VARIANT: Record<ButtonVariant, string> = {
+export const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   primary: "bg-cut text-on-cut shadow-[0_3px_0_var(--cut-hover)] hover:-translate-y-px hover:bg-cut-hover active:translate-y-[2px] active:shadow-[0_1px_0_var(--cut-hover)]",
   secondary: "border border-line-strong bg-panel text-ink hover:border-ink-3 hover:bg-sunk active:translate-y-px",
   danger: "border border-danger/50 bg-panel text-danger hover:bg-danger-soft active:translate-y-px",

@@ -36,6 +36,7 @@ await scenario("default");
   await step("Escape closes palette and restores focus", async () => { await p.waitForSelector("#main h1"); await p.waitForLoadState("networkidle"); await p.keyboard.press("Control+k"); await p.waitForSelector("dialog[open]"); await p.keyboard.press("Escape"); await p.waitForSelector("dialog[open]", { state: "detached", timeout: 2000 }); });
   await step("theme toggle sets data-theme=dark and persists", async () => { await p.click("aside button[aria-label*='tối']"); const t = await p.evaluate(() => document.documentElement.dataset.theme); if (t !== "dark") throw new Error("theme=" + t); await p.reload(); await p.waitForLoadState("networkidle"); if ((await p.evaluate(() => document.documentElement.dataset.theme)) !== "dark") throw new Error("not persisted"); });
   await step("tab order: skip link first", async () => { await p.goto(`${BASE}/factory`); await p.waitForSelector("#main"); await p.keyboard.press("Tab"); const t = await p.evaluate(() => document.activeElement?.textContent?.trim()); if (!/Bỏ qua/.test(t ?? "")) throw new Error("first focus: " + t); });
+  await step("factory: 10 AI provider links open in a new tab", async () => { await p.goto(`${BASE}/factory`); await p.waitForSelector("a[href='https://chatgpt.com']"); const r = await p.$$eval("a[target=_blank][rel*=noopener]", (a) => a.filter((x) => !x.href.includes("localhost")).length); if (r < 10) throw new Error("links: " + r); });
   await step("no uncaught page errors", async () => { if (errs.length) throw new Error(errs[0]); });
   await c.close(); }
 

@@ -14,6 +14,7 @@ class StickerGridTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
+      key: ValueKey('sticker.grid.tile.${asset.file.path}'),
       onTap: () => onSelected(asset),
       child: Image.file(
         asset.preview,

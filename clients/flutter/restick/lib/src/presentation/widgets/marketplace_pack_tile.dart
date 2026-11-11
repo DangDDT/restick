@@ -67,8 +67,16 @@ class _MarketplacePackActions extends StatelessWidget {
       );
     }
     if (pack.isDownloaded) {
-      return TextButton(onPressed: onDelete, child: const Text("Remove"));
+      return TextButton(
+        key: ValueKey('marketplace.pack.remove.${pack.id}'),
+        onPressed: onDelete,
+        child: const Text("Remove"),
+      );
     }
-    return TextButton(onPressed: onDownload, child: const Text("Download"));
+    return TextButton(
+      key: ValueKey('marketplace.pack.download.${pack.id}'),
+      onPressed: onDownload,
+      child: const Text("Download"),
+    );
   }
 }

@@ -26,3 +26,13 @@ coverage/
 backups/
 custom_lint.log
 .widget_preview/
+
+# CodeGraph index
+.codegraph/
+
+# local run data and bootstrap password
+/secrets/
+/.localdata/
+
+# superpowers scratch (SDD ledgers, brainstorm)
+.superpowers/

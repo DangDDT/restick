@@ -256,7 +256,7 @@ func normalizeDraft(draft Draft) Draft {
 func renderPrompt(draft Draft, snapshot Snapshot) string {
 	var b strings.Builder
 	total := snapshot.Rows * snapshot.Columns
-	fmt.Fprintf(&b, "Task: draw one sticker sheet containing exactly %d separate sticker illustrations of the same subject, laid out in a regular grid. Software will cut the sheet automatically, so the layout rules at the end matter as much as the artwork.\n", total)
+	fmt.Fprintf(&b, "Task: draw one sticker sheet containing exactly %d separate sticker illustrations of the same subject, laid out in a regular grid. Software will cut the sheet automatically, so the Technical rules below matter as much as the artwork.\n", total)
 	if character := snapshot.Character; character != nil {
 		fmt.Fprintf(&b, "Character: %s.", character.Name)
 		if character.Description != "" {
@@ -294,11 +294,12 @@ func renderPrompt(draft Draft, snapshot Snapshot) string {
 	}
 	fmt.Fprintf(&b, "Sheet: %d rows by %d columns, %d stickers in total, read left to right then top to bottom. Every sticker sits in its own equal-sized area of the sheet.\n",
 		snapshot.Rows, snapshot.Columns, total)
-	b.WriteString("Stickers:\n")
+	b.WriteString(layoutRules(snapshot.Rows, snapshot.Columns))
+	b.WriteString("Stickers: read each description as a drawing instruction, never as text to write on the image; it may be written in Vietnamese.\n")
 	for index, cell := range snapshot.Cells {
 		fmt.Fprintf(&b, "%d. (row %d, column %d) %s\n", index+1, cell.Row, cell.Column, cellSentence(cell))
 	}
-	b.WriteString(technicalLine(draft.OutlineWidth, draft.OutlineColor))
+	b.WriteString(outlineLine(draft.OutlineWidth, draft.OutlineColor))
 	return strings.TrimRight(b.String(), " \n") + "\n"
 }
 
@@ -322,22 +323,36 @@ func cellSentence(cell SnapshotCell) string {
 	return strings.Join(parts, "; ") + "."
 }
 
-// technicalLine states the extraction contract once: one flat white sheet
-// background, no second background requirement, no drawn furniture.
-func technicalLine(outlineWidth int, outlineColor string) string {
+// layoutRules states the extraction contract once, before the cells: the sheet
+// is cut by software into an equal grid, so every rule maps to a way the cut
+// fails (touching stickers, a second background, a box crossing a grid line).
+func layoutRules(rows, columns int) string {
+	total := rows * columns
+	d := gcd(columns, rows)
 	var b strings.Builder
-	b.WriteString("Technical: output one single square sheet image with a uniform flat pure-white background. ")
-	b.WriteString("Keep each sticker whole inside its own area, centred, with generous empty space around it, so no two stickers touch or overlap and nothing is cropped at the sheet edge or at an area boundary. ")
-	b.WriteString("Keep any scenery to one small context element attached to the character, not a full scene. ")
-	b.WriteString("Draw every sticker as one connected shape with a clear closed contour, thick even lines, flat colours and no gradients, soft shadows, glow or texture. ")
-	b.WriteString("Do not draw grid lines, cell frames, numbers, text, captions, watermarks, signatures or background shadows, and do not add extra stickers or duplicate one.\n")
-	if outlineWidth == 0 {
-		b.WriteString("Outline: none is added after cutting; keep the artwork edge solid and clean.\n")
-		return b.String()
-	}
-	fmt.Fprintf(&b, "Outline: after cutting, each sticker gets a %d px %s outline at 512 px export plus a 4 px empty margin. Do not draw that outer outline or any white die-cut border yourself; the software adds it.\n",
-		outlineWidth, outlineColor)
+	b.WriteString("Technical (software cuts this sheet automatically, so follow every rule exactly):\n")
+	fmt.Fprintf(&b, "- Output one single image with aspect ratio %d:%d (width:height), divided into %d rows by %d columns of equal areas, so every area is square. The areas are imaginary: do not draw them.\n", columns/d, rows/d, rows, columns)
+	b.WriteString("- Use one uniform flat pure white background (#FFFFFF) everywhere: no scenery, ground, sky, floor, shadow, gradient or vignette.\n")
+	b.WriteString("- Centre each sticker in its own area and keep it at most about 70% of that area's width and height, leaving even empty white margin on every side. Stickers never touch, overlap or cross an area boundary, and nothing touches the sheet edge.\n")
+	b.WriteString("- Draw each sticker as one connected shape with a clear closed contour, thick even lines and flat colours. No gradients, glow, texture or soft shadows. A prop or small context element must stay attached to the character.\n")
+	fmt.Fprintf(&b, "- Exactly %d stickers: do not add, merge, duplicate or leave out any.\n", total)
+	b.WriteString("- Do not draw grid lines, frames, numbers, text, captions, watermarks or signatures.\n")
 	return b.String()
+}
+
+func outlineLine(outlineWidth int, outlineColor string) string {
+	if outlineWidth == 0 {
+		return "Outline: none is added after cutting; keep the artwork edge solid and clean.\n"
+	}
+	return fmt.Sprintf("Outline: after cutting, each sticker gets a %d px %s outline at 512 px export plus a 4 px empty margin. Do not draw that outer outline or any white die-cut border yourself; the software adds it.\n",
+		outlineWidth, outlineColor)
+}
+
+func gcd(a, b int) int {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
 }
 
 func (s *Service) loadFragments(ctx context.Context, ids []string) (map[string]Fragment, error) {

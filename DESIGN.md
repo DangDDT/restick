@@ -1,6 +1,6 @@
 ---
-name: Restick Studio, Proof Table
-description: A sticker is a print job. Neutral proofing grounds, one cut-line magenta accent, inked stamps, crop-mark artwork frames.
+name: Restick Studio, Proof Table (playful)
+description: A sticker is a print job, dressed friendly. Station-ordered production line, candy tints per station, cut-line magenta action colour, bear mascot, crop-mark artwork frames.
 colors:
   paper: "#f5f5f2"
   panel: "#fcfcfa"
@@ -19,6 +19,7 @@ colors:
   dark-paper: "#1a1a1d"
   dark-panel: "#222226"
   dark-cut: "#ff7fba"
+  tints: "pink, lilac, mint, sky, butter, peach (each with -soft and -ink)"
 typography:
   display:
     fontFamily: "Bricolage Grotesque, Be Vietnam Pro, sans-serif"
@@ -36,8 +37,8 @@ typography:
     fontSize: "0.6875rem"
     fontWeight: 400
 rounded:
-  ctl: "4px"
-  panel: "8px"
+  ctl: "10px"
+  panel: "16px"
 spacing:
   unit: "4px"
   row: "36px"
@@ -57,34 +58,37 @@ components:
     rounded: "{rounded.panel}"
 ---
 
-# Design System: Restick Studio, Proof Table
+# Design System: Restick Studio, Proof Table (playful)
 
-Source of truth for values: `clients/web-next/app/globals.css` (OKLCH tokens; hex above are sRGB approximations). Components: `components/ui.tsx`, icons `components/icons.tsx`, shell `components/app-shell.tsx`.
-
-> **Update:** the studio is now playful (candy tints `pink/lilac/mint/sky/butter/peach`, 10px/16px radii, bear mascot). The "one accent / neutral" text below is partly superseded; brand rules are in `docs/brand/BRAND.md`.
+**Status: locked 2026-11-11** (commit 416832c plus the AI provider launcher). Source of truth for values: `clients/web-next/app/globals.css` (OKLCH tokens; hex above are sRGB approximations). Components: `components/ui.tsx`, icons and mascot `components/icons.tsx`, shell `components/app-shell.tsx`, guide `components/guide.tsx`. Brand assets and rules: `docs/brand/BRAND.md`. Rationale: `docs/redesign/DIRECTION.md`.
 
 ## Overview
-Operate-mode production tool for one owner on desktop and phone. World: a print-shop job traveler on a proofing table. Neutral ground (chroma <= 0.01) keeps sticker colour true; structure comes from hairline rules and station order, never card stacks. Light and dark themes share tokens; default follows the OS, user override persists.
+Operate-mode production tool for one owner on desktop and phone. Structure is the **Proof Table**: stations in order (Soạn → Tải sheet → Cắt → Pack → Key), ruled sections, job numbers. The surface is **playful**: soft candy tints, round corners, a bear mascot, plain warm Vietnamese copy. Tagline: "Làm sticker dễ như chơi." Light and dark themes share tokens; default follows the OS, user override persists.
 
 ## Colors
-- **Roles:** `paper` page, `panel` raised work surface, `sunk` recessed wells and artwork ground, `line`/`line-strong` hairlines, `ink` / `ink-2` / `ink-3` text (all >= 4.5:1 on paper).
-- **One accent, cut-line magenta (`cut`)**: primary action, active station, kiss-cut selection (`.cutline`), focus ring. Never decorative. `cut-soft`/`cut-ink` for selected rows.
-- **State:** `ok`, `warn`, `danger` each with a `-soft` tint; always paired with text or icon, never colour alone.
+- **Roles:** `paper` page (faint pink wash), `panel` raised surface, `sunk` recessed wells and artwork ground, `line`/`line-strong` hairlines, `ink` / `ink-2` / `ink-3` text (>= 4.5:1).
+- **Action colour: cut-line magenta (`cut`)**: the single primary button per screen, active station, kiss-cut selection (`.cutline`), focus ring. `cut-soft`/`cut-ink` for selected rows.
+- **Candy tints** `pink lilac mint sky butter peach`, each as `-soft` ground + `-ink` text (>= 4.5:1 both themes): one per station/section icon tile (`IconTile`). Decorative grouping only, never state.
+- **State:** `ok`, `warn`, `danger` each with `-soft`; always paired with text or icon.
+- **Brand violet** `#A98BF0` is mascot, logo and app icon only; it is not a UI action colour.
 
 ## Typography
-Bricolage Grotesque for headings (500-700, tight tracking), Be Vietnam Pro for UI (full Vietnamese support), JetBrains Mono tabular only for ids, hex, counts (`.mono`, `.num`). Base 14px; inputs 16px under 768px to prevent iOS zoom. Body measure <= 68ch.
+Bricolage Grotesque for headings, Be Vietnam Pro for UI (full Vietnamese), JetBrains Mono tabular for ids, hex, counts and the prompt text. Base 14px; inputs 16px under 768px (iOS zoom). Body measure <= 68ch.
 
 ## Elevation and shape
-Hairlines, not shadows. Shadow only on overlays (`--shadow-pop`). Radii: 4px controls, 8px panels, 3px stamps. Never nest panels; group with ruled `Section`.
+Radii: 10px controls, 16px panels, 3px stamps. Soft shadows (`--shadow-soft`) on raised panels; `--shadow-pop` on overlays. Primary button is a "sticker": solid `cut` with a 3px lower edge that presses down on `:active`. Never nest panels; group with `Section`.
 
 ## Components
-Button (primary/secondary/danger/ghost, sm/md, loading, 44px on mobile), IconButton, Field (+error), input/select/check classes, Switch, Tabs (underline/segmented, arrow keys), Panel, Section, PageHeader, Stamp/StatusPill (inked rectangle, pulsing when running), JobTag (`№ abc123`), ArtFrame (crop marks / checker proof ground / `cutline` when selected), Dialog (native `<dialog>`, centered / drawer / mobile sheet), ConfirmDialog (only red element is the action), CopyButton, EmptyState, Skeleton, banners, Pager, Kbd, CommandPalette (⌘K).
+Button (primary/secondary/danger/ghost, sm/md, loading, 44px on mobile; `BUTTON_VARIANT` exported for anchors), IconButton, IconTile, Field, Switch, Tabs, Panel, Section, PageHeader, Stamp/StatusPill, JobTag, ArtFrame (crop marks / checker ground / `cutline`), Dialog (centered / drawer / mobile sheet), ConfirmDialog, CopyButton, **AiProviderLinks**, EmptyState, Skeleton, banners, Pager, Kbd, CommandPalette (⌘K), Mascot, step strip + `/start` guide.
+
+### AiProviderLinks (`/factory`)
+Under the compiled prompt (desktop aside and mobile prompt sheet): ten secondary link buttons (ChatGPT, Gemini, Ideogram, Leonardo, Midjourney, Adobe Firefly, Recraft, Flux, Kling, Runway) in a 2-column grid. Click copies the prompt (best effort) and opens the tool in a new tab (`noopener noreferrer`). Data lives in `lib/ai-providers.ts`; URLs checked 2026-11-11, no pricing shown. Copy stays the only magenta primary.
 
 ## Motion
-120-220ms exponential ease-out. One authored moment: `cut-draw` selection outline and `peel` staggered grid reveal once per mount. `prefers-reduced-motion` disables all.
+120-220ms ease-out. Authored moments: `cut-draw` selection outline, `peel` staggered grid reveal once per mount, `wiggle` on icon-tile hover, `bob` on the mascot (splash, login, empty, 404 only). `prefers-reduced-motion` disables all.
 
 ## Responsive
-Desktop (>=768): sticky station rail with traveler line. Mobile: top bar, 5-slot bottom tab bar (+ More sheet), fixed prompt bar on `/factory`, 44px touch targets, no horizontal page scroll.
+Desktop (>=768): sticky station rail with traveler line. Mobile: top bar, 5-slot bottom tab bar (+ More sheet), fixed prompt bar on `/factory` opening the prompt sheet (with provider links), 44px touch targets, no horizontal page scroll.
 
 ## Do / Don't
-Do: one magenta primary per screen; show real artwork on the proof ground; confirm destructive actions naming the consequence. Don't: pastel pills, side-stripe borders, gradient text, eyebrow labels, emoji icons, raw palette classes (zinc/indigo/...), nested cards.
+Do: one magenta primary per screen; show real artwork on the proof ground; confirm destructive actions naming the consequence; keep tints decorative. Don't: tints as status, gradient text, emoji icons, raw palette classes (zinc/indigo/...), nested cards, recolouring the bear.

@@ -382,10 +382,47 @@ func TestCompileDoesNotMixWhiteAndTransparentRequirements(t *testing.T) {
 			t.Fatalf("prompt mixes a second background requirement (%q):\n%s", banned, compiled.Text)
 		}
 	}
-	// The technical block comes last and states the outline once.
-	technical := strings.Index(compiled.Text, "Technical:")
-	if technical < 0 || technical < strings.Index(compiled.Text, "Stickers:") {
-		t.Fatalf("technical block must follow the cells:\n%s", compiled.Text)
+	// Cutting rules come before the cells so long-context tools do not skip them;
+	// the outline line stays last and is stated once.
+	technical := strings.Index(compiled.Text, "Technical")
+	stickers := strings.Index(compiled.Text, "Stickers:")
+	outline := strings.Index(compiled.Text, "Outline:")
+	if technical < 0 || stickers < technical || outline < stickers || strings.Count(compiled.Text, "Outline:") != 1 {
+		t.Fatalf("want Technical, then Stickers, then one Outline line:\n%s", compiled.Text)
+	}
+}
+
+func TestCompileGivesCuttingContract(t *testing.T) {
+	service, _ := newTestService(t)
+	ctx := context.Background()
+	draft := Draft{
+		Rows: 1, Columns: 3, OutlineWidth: 4,
+		Cells: []Cell{{Action: "Chạy nhanh", Expression: "Vui vẻ"}, {Action: "Chỉ tay"}, {Action: "Ngủ gật"}},
+	}
+	compiled, err := service.Compile(ctx, draft)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	for _, want := range []string{
+		"aspect ratio 3:1",
+		"1 rows by 3 columns",
+		"#FFFFFF",
+		"at most about 70%",
+		"Exactly 3 stickers",
+		"may be written in Vietnamese",
+		"1. (row 1, column 1) Chạy nhanh; Vui vẻ.",
+		"3. (row 1, column 3) Ngủ gật.",
+	} {
+		if !strings.Contains(compiled.Text, want) {
+			t.Errorf("prompt missing %q:\n%s", want, compiled.Text)
+		}
+	}
+	square, err := service.Compile(ctx, sheetDraft(nil, nil))
+	if err != nil {
+		t.Fatalf("Compile 2x2: %v", err)
+	}
+	if !strings.Contains(square.Text, "aspect ratio 1:1") {
+		t.Errorf("2x2 must reduce to 1:1:\n%s", square.Text)
 	}
 }
 
@@ -646,4 +683,27 @@ func pngBytes(t *testing.T) []byte {
 		t.Fatalf("png.Encode: %v", err)
 	}
 	return buffer.Bytes()
+}
+
+func TestSeedVietnamPack(t *testing.T) {
+	service, _ := newTestService(t)
+	ctx := context.Background()
+	for i := 0; i < 2; i++ { // second pass proves a restart adds nothing
+		if err := service.Seed(ctx); err != nil {
+			t.Fatalf("Seed #%d: %v", i+1, err)
+		}
+	}
+	characters, err := service.ListCharacters(ctx)
+	if err != nil || len(characters) != 10 {
+		t.Fatalf("characters = %d, %v; want 10", len(characters), err)
+	}
+	designs, err := service.ListDesigns(ctx, DesignFilter{PageSize: 100})
+	if err != nil || len(designs.Items) != 10 {
+		t.Fatalf("designs = %d, %v; want 10", len(designs.Items), err)
+	}
+	for _, design := range designs.Items {
+		if !strings.Contains(design.Prompt, "Character: ") || !strings.Contains(design.Prompt, "Palette: ") {
+			t.Fatalf("design %q prompt lacks character or palette:\n%s", design.Name, design.Prompt)
+		}
+	}
 }

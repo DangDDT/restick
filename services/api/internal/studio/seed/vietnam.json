@@ -1,0 +1,2101 @@
+{
+ "schema": "restick.seed.vn.v1",
+ "groups": [
+  {
+   "id": "vn-food",
+   "name": "Việt Nam · Ẩm thực",
+   "description": "Món ăn, đồ uống và bánh đặc trưng, vẽ thành đồ vật dễ nhận ra.",
+   "sort_order": 400
+  },
+  {
+   "id": "vn-costume",
+   "name": "Việt Nam · Trang phục",
+   "description": "Trang phục và phụ kiện truyền thống các vùng.",
+   "sort_order": 410
+  },
+  {
+   "id": "vn-festival",
+   "name": "Việt Nam · Lễ hội & ngày lễ",
+   "description": "Tết, Trung thu và các ngày lễ theo âm lịch, dương lịch.",
+   "sort_order": 420
+  },
+  {
+   "id": "vn-nature",
+   "name": "Việt Nam · Hoa, cây & trái",
+   "description": "Quốc hoa sen, hoa theo mùa, cây quen thuộc và trái cây nhiệt đới.",
+   "sort_order": 430
+  },
+  {
+   "id": "vn-animal",
+   "name": "Việt Nam · Con vật & linh vật",
+   "description": "Con vật nông thôn, linh vật dân gian và biểu tượng văn hoá.",
+   "sort_order": 440
+  },
+  {
+   "id": "vn-place",
+   "name": "Việt Nam · Cảnh & nơi chốn",
+   "description": "Danh thắng và khung cảnh ba miền, vẽ một góc nhỏ.",
+   "sort_order": 450
+  },
+  {
+   "id": "vn-art",
+   "name": "Việt Nam · Nghệ thuật & nhạc cụ",
+   "description": "Nghệ thuật dân gian, nhạc cụ và thủ công truyền thống.",
+   "sort_order": 460
+  },
+  {
+   "id": "vn-life",
+   "name": "Việt Nam · Đời sống thường ngày",
+   "description": "Đồ vật và khung cảnh đời thường: xe máy, quán vỉa hè, chợ sáng.",
+   "sort_order": 470
+  },
+  {
+   "id": "vn-chat",
+   "name": "Việt Nam · Câu cửa miệng & cử chỉ",
+   "description": "Cách nói và cử chỉ người Việt dùng hằng ngày, vẽ thành hành động cho từng sticker.",
+   "sort_order": 480
+  }
+ ],
+ "fragments": [
+  {
+   "id": "vn-food-01",
+   "group_id": "vn-food",
+   "name": "Phở bò",
+   "name_en": "Beef phở",
+   "prompt": "a bowl of beef phở with flat rice noodles, thin beef slices, herbs and a lime wedge, steam rising",
+   "notes": "Món quốc dân; vẽ tô nhỏ có hành, rau thơm, không cần đủ topping.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-02",
+   "group_id": "vn-food",
+   "name": "Bánh mì",
+   "name_en": "Bánh mì",
+   "prompt": "a crusty Vietnamese baguette sandwich stuffed with pickled carrot, cilantro and chilli",
+   "notes": "Ổ bánh mì nhỏ giòn, nhân thò ra hai đầu.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-03",
+   "group_id": "vn-food",
+   "name": "Bún chả Hà Nội",
+   "name_en": "Hanoi bún chả",
+   "prompt": "a dish of grilled pork patties in dipping broth beside rice vermicelli and fresh herbs",
+   "notes": "Đặc sản Hà Nội, thường có nem rán đi kèm.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-04",
+   "group_id": "vn-food",
+   "name": "Bún bò Huế",
+   "name_en": "Huế beef noodle soup",
+   "prompt": "a bowl of spicy lemongrass beef noodle soup with a chilli-red broth and a pork knuckle",
+   "notes": "Đặc sản Huế, nước dùng đỏ sả ớt.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-05",
+   "group_id": "vn-food",
+   "name": "Cà phê sữa đá",
+   "name_en": "Iced condensed-milk coffee",
+   "prompt": "a tall glass of iced coffee with a layer of condensed milk at the bottom and a metal phin on top",
+   "notes": "Thức uống biểu tượng, nhìn thấy hai lớp nâu và trắng.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-06",
+   "group_id": "vn-food",
+   "name": "Cà phê phin",
+   "name_en": "Phin drip coffee",
+   "prompt": "a small steel phin filter dripping dark coffee into a glass cup",
+   "notes": "Dụng cụ pha cà phê truyền thống, chi tiết kim loại dễ nhận ra.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-07",
+   "group_id": "vn-food",
+   "name": "Bánh chưng",
+   "name_en": "Bánh chưng",
+   "prompt": "a square sticky-rice cake wrapped in green dong leaves and tied with bamboo strips",
+   "notes": "Gắn với Tết Nguyên đán và truyền thuyết Lang Liêu; miền Nam gói bánh tét hình trụ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-08",
+   "group_id": "vn-food",
+   "name": "Bánh tét",
+   "name_en": "Bánh tét",
+   "prompt": "a cylindrical sticky-rice cake wrapped in banana leaf and tied with string, one end sliced to show the filling",
+   "notes": "Bánh Tết miền Trung và miền Nam.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-09",
+   "group_id": "vn-food",
+   "name": "Gỏi cuốn",
+   "name_en": "Fresh spring rolls",
+   "prompt": "two translucent rice-paper rolls showing pink shrimp, herbs and vermicelli beside a peanut dipping sauce",
+   "notes": "Cuốn tươi, thấy tôm và rau qua lớp bánh tráng.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-10",
+   "group_id": "vn-food",
+   "name": "Chả giò / nem rán",
+   "name_en": "Fried spring rolls",
+   "prompt": "a plate of golden crispy fried spring rolls with lettuce and a dipping bowl",
+   "notes": "Gọi là chả giò ở miền Nam, nem rán ở miền Bắc.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-11",
+   "group_id": "vn-food",
+   "name": "Bánh xèo",
+   "name_en": "Bánh xèo",
+   "prompt": "a large golden crispy sizzling pancake folded over shrimp and bean sprouts, served with lettuce",
+   "notes": "Bánh vàng giòn, ăn kèm rau sống cuốn bánh tráng.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-12",
+   "group_id": "vn-food",
+   "name": "Cơm tấm sườn",
+   "name_en": "Broken rice with grilled pork chop",
+   "prompt": "a plate of broken rice topped with a grilled pork chop, a fried egg and pickles",
+   "notes": "Món Sài Gòn quen thuộc.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-13",
+   "group_id": "vn-food",
+   "name": "Mì Quảng",
+   "name_en": "Mì Quảng",
+   "prompt": "a shallow bowl of turmeric-yellow wide noodles with shrimp, peanuts and a rice cracker",
+   "notes": "Đặc sản Quảng Nam, ít nước, rắc đậu phộng.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-14",
+   "group_id": "vn-food",
+   "name": "Chè ba màu",
+   "name_en": "Three-colour dessert",
+   "prompt": "a tall glass of layered red bean, yellow mung bean and green jelly dessert with coconut milk and crushed ice",
+   "notes": "Món tráng miệng nhiều lớp màu.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-15",
+   "group_id": "vn-food",
+   "name": "Xôi",
+   "name_en": "Sticky rice",
+   "prompt": "a mound of sticky rice wrapped in a banana leaf, topped with mung bean and fried shallots",
+   "notes": "Món ăn sáng bình dân.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-16",
+   "group_id": "vn-food",
+   "name": "Bánh trung thu",
+   "name_en": "Mooncake",
+   "prompt": "a round mooncake with an embossed pattern, one wedge cut to show a salted egg yolk",
+   "notes": "Gắn với Tết Trung thu; có bánh nướng và bánh dẻo.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-17",
+   "group_id": "vn-food",
+   "name": "Cá kho tộ",
+   "name_en": "Caramelised fish in clay pot",
+   "prompt": "a small clay pot of caramelised braised fish with chilli slices beside a bowl of white rice",
+   "notes": "Món cơm nhà miền Nam.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-18",
+   "group_id": "vn-food",
+   "name": "Trà đá vỉa hè",
+   "name_en": "Sidewalk iced tea",
+   "prompt": "a plain glass of iced tea with a thermos and a low plastic stool beside it",
+   "notes": "Thức uống miễn phí hoặc rất rẻ ở vỉa hè.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-19",
+   "group_id": "vn-food",
+   "name": "Mâm ngũ quả",
+   "name_en": "Five-fruit tray",
+   "prompt": "a pedestal tray piled with five kinds of fruit: banana, pomelo, custard apple, mango and fig",
+   "notes": "Mâm cúng Tết, trái cây thay đổi theo vùng.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-food-20",
+   "group_id": "vn-food",
+   "name": "Nước mía",
+   "name_en": "Sugarcane juice",
+   "prompt": "a clear glass of pale green sugarcane juice with ice beside a short stalk of cane",
+   "notes": "Thức uống giải nhiệt đường phố.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-costume-01",
+   "group_id": "vn-costume",
+   "name": "Áo dài",
+   "name_en": "Áo dài",
+   "prompt": "a long fitted tunic with high collar and side slits worn over loose trousers, in a single soft colour",
+   "notes": "Quốc phục được nhiều người xem là biểu tượng; vẽ tôn trọng, không làm lố.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-costume-02",
+   "group_id": "vn-costume",
+   "name": "Nón lá",
+   "name_en": "Conical leaf hat",
+   "prompt": "a wide conical hat woven from palm leaf with a thin silk chin strap",
+   "notes": "Biểu tượng quen thuộc; Huế có nón bài thơ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-costume-03",
+   "group_id": "vn-costume",
+   "name": "Áo bà ba",
+   "name_en": "Áo bà ba",
+   "prompt": "a loose two-piece cotton shirt and trousers with a buttoned front, in a plain dark tone",
+   "notes": "Trang phục miền Nam, thường đi kèm khăn rằn.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-costume-04",
+   "group_id": "vn-costume",
+   "name": "Khăn rằn",
+   "name_en": "Checkered scarf",
+   "prompt": "a red and white checkered cotton scarf knotted at the neck",
+   "notes": "Khăn của người Nam Bộ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-costume-05",
+   "group_id": "vn-costume",
+   "name": "Áo tứ thân",
+   "name_en": "Four-panel dress",
+   "prompt": "a four-panel dress with the two front flaps tied at the waist over a brown bodice",
+   "notes": "Trang phục phụ nữ miền Bắc xưa, gắn với quan họ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-costume-06",
+   "group_id": "vn-costume",
+   "name": "Nón quai thao",
+   "name_en": "Quai thao hat",
+   "prompt": "a flat wide-brimmed round hat with long silk tassels hanging beside the face",
+   "notes": "Nón của liền chị quan họ Bắc Ninh.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-costume-07",
+   "group_id": "vn-costume",
+   "name": "Khăn mỏ quạ",
+   "name_en": "Crow-beak headscarf",
+   "prompt": "a dark headscarf wrapped with a pointed front like a crow's beak",
+   "notes": "Khăn đội đầu của phụ nữ miền Bắc xưa.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-costume-08",
+   "group_id": "vn-costume",
+   "name": "Thổ cẩm",
+   "name_en": "Woven brocade",
+   "prompt": "a strip of hand-woven brocade with bold geometric stripes and diamond motifs",
+   "notes": "Dệt của nhiều dân tộc; dùng như hoạ tiết chung, không sao chép mẫu riêng của một nhóm.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-costume-09",
+   "group_id": "vn-costume",
+   "name": "Khăn đóng áo dài nam",
+   "name_en": "Men's turban and tunic",
+   "prompt": "a tight round turban and a long buttoned tunic in deep blue",
+   "notes": "Trang phục Huế.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-costume-10",
+   "group_id": "vn-costume",
+   "name": "Dép tổ ong",
+   "name_en": "Honeycomb sandals",
+   "prompt": "a pair of rubber sandals with a honeycomb sole",
+   "notes": "Đôi dép phổ biến.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-01",
+   "group_id": "vn-festival",
+   "name": "Hoa mai và hoa đào ngày Tết",
+   "name_en": "Mai and peach Tết blossoms",
+   "prompt": "a branch of yellow mai blossoms next to a branch of pink peach blossoms in a tall vase",
+   "notes": "Mai vàng miền Nam và miền Trung, đào miền Bắc.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-02",
+   "group_id": "vn-festival",
+   "name": "Lì xì",
+   "name_en": "Red envelope",
+   "prompt": "a small red envelope with gold patterns handed over with both hands",
+   "notes": "Mừng tuổi đầu năm.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-03",
+   "group_id": "vn-festival",
+   "name": "Câu đối đỏ",
+   "name_en": "Red couplet",
+   "prompt": "a pair of vertical red paper scrolls with gold brush-written characters beside a doorway",
+   "notes": "Chữ trang trí, không cần đọc được.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-04",
+   "group_id": "vn-festival",
+   "name": "Múa lân",
+   "name_en": "Lion dance",
+   "prompt": "a paper-mâché lion head with big round eyes and a swishing tail made of coloured fabric",
+   "notes": "Phổ biến dịp Tết và Trung thu.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-05",
+   "group_id": "vn-festival",
+   "name": "Chợ hoa Tết",
+   "name_en": "Tết flower market",
+   "prompt": "a stall in a flower market with potted kumquat trees, orchids and bundles of marigolds",
+   "notes": "Cảnh cuối năm ở các thành phố.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-06",
+   "group_id": "vn-festival",
+   "name": "Ông Công Ông Táo",
+   "name_en": "Kitchen gods farewell",
+   "prompt": "a carp placed in a bowl with small paper hats and a stick of incense by a stove",
+   "notes": "Ngày 23 tháng Chạp, cá chép tiễn Táo quân lên trời.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-07",
+   "group_id": "vn-festival",
+   "name": "Pháo hoa đêm giao thừa",
+   "name_en": "New Year's Eve fireworks",
+   "prompt": "colourful fireworks bursting over a river skyline at midnight",
+   "notes": "Bắn pháo hoa thay pháo nổ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-08",
+   "group_id": "vn-festival",
+   "name": "Đèn ông sao",
+   "name_en": "Star lantern",
+   "prompt": "a five-pointed paper star lantern in red and yellow with a small candle inside",
+   "notes": "Đồ chơi Trung thu.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-09",
+   "group_id": "vn-festival",
+   "name": "Đèn cá chép",
+   "name_en": "Carp lantern",
+   "prompt": "a paper carp lantern on a bamboo stick with big eyes and a bright orange tail",
+   "notes": "Đèn Trung thu truyền thống.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-10",
+   "group_id": "vn-festival",
+   "name": "Mâm cỗ Trung thu",
+   "name_en": "Mid-Autumn tray",
+   "prompt": "a round tray with mooncakes, pomelo, persimmons and a pair of lanterns under the full moon",
+   "notes": "15 tháng Tám âm lịch.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-11",
+   "group_id": "vn-festival",
+   "name": "Mặt nạ giấy bồi",
+   "name_en": "Paper-mâché mask",
+   "prompt": "a painted paper-mâché mask with exaggerated eyes and a wide smile",
+   "notes": "Đồ chơi Trung thu.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-12",
+   "group_id": "vn-festival",
+   "name": "Thả đèn hoa đăng",
+   "name_en": "Floating lantern",
+   "prompt": "a paper lotus lantern floating on the river at night with a glowing candle",
+   "notes": "Rằm; nổi tiếng ở Hội An.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-13",
+   "group_id": "vn-festival",
+   "name": "Hoa tặng thầy cô",
+   "name_en": "Flowers for teachers",
+   "prompt": "a small bouquet tied with ribbon being given to a teacher",
+   "notes": "Ngày Nhà giáo Việt Nam 20/11.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-14",
+   "group_id": "vn-festival",
+   "name": "Ngày khai trường",
+   "name_en": "First day of school",
+   "prompt": "a new schoolbag, a fresh bouquet and a first-day school uniform",
+   "notes": "Khai giảng ngày 5/9.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-15",
+   "group_id": "vn-festival",
+   "name": "Giỗ Tổ Hùng Vương",
+   "name_en": "Hùng Kings commemoration",
+   "prompt": "an incense bowl with a plate of square and round sticky-rice cakes on an altar",
+   "notes": "10 tháng Ba âm lịch, UNESCO 2012.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-festival-16",
+   "group_id": "vn-festival",
+   "name": "Lễ Vu Lan",
+   "name_en": "Vu Lan festival",
+   "prompt": "a small red rose pinned to a shirt pocket beside lotus lanterns",
+   "notes": "Rằm tháng Bảy, báo hiếu cha mẹ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-01",
+   "group_id": "vn-nature",
+   "name": "Hoa sen",
+   "name_en": "Lotus",
+   "prompt": "a pink lotus flower with a wide green leaf on a slender stem rising from calm water",
+   "notes": "Quốc hoa được nhiều người công nhận, chưa có văn bản pháp lý chính thức.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-02",
+   "group_id": "vn-nature",
+   "name": "Hoa mai vàng",
+   "name_en": "Yellow mai blossom",
+   "prompt": "a branch of five-petal yellow mai blossoms with small green leaf buds",
+   "notes": "Hoa Tết miền Nam.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-03",
+   "group_id": "vn-nature",
+   "name": "Hoa đào",
+   "name_en": "Peach blossom",
+   "prompt": "a branch of pink five-petal peach blossoms on a dark twig",
+   "notes": "Hoa Tết miền Bắc.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-04",
+   "group_id": "vn-nature",
+   "name": "Hoa ban",
+   "name_en": "Bauhinia",
+   "prompt": "a branch of white bauhinia flowers with soft pink centres against a mountain backdrop",
+   "notes": "Hoa mùa xuân Tây Bắc.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-05",
+   "group_id": "vn-nature",
+   "name": "Hoa phượng",
+   "name_en": "Flamboyant flower",
+   "prompt": "a cluster of red flamboyant flowers with feathery green leaves",
+   "notes": "Hoa của mùa hè học trò.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-06",
+   "group_id": "vn-nature",
+   "name": "Hoa sữa",
+   "name_en": "Milk flower",
+   "prompt": "clusters of tiny cream flowers on a tree-lined street at dusk",
+   "notes": "Mùi hương mùa thu Hà Nội.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-07",
+   "group_id": "vn-nature",
+   "name": "Hoa giấy",
+   "name_en": "Bougainvillea",
+   "prompt": "vivid magenta paper flowers spilling over a low wall",
+   "notes": "Rất hay thấy ở Đà Lạt, Huế.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-08",
+   "group_id": "vn-nature",
+   "name": "Lũy tre",
+   "name_en": "Bamboo hedge",
+   "prompt": "a clump of tall green bamboo with arching leaves along a village path",
+   "notes": "Biểu tượng làng quê Bắc Bộ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-09",
+   "group_id": "vn-nature",
+   "name": "Cánh đồng lúa",
+   "name_en": "Rice field",
+   "prompt": "rows of green rice seedlings in a flooded paddy with a distant hill",
+   "notes": "Có thể chuyển sang vàng chín.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-10",
+   "group_id": "vn-nature",
+   "name": "Dừa",
+   "name_en": "Coconut palm",
+   "prompt": "a coconut palm with a bunch of green coconuts and long fronds",
+   "notes": "Miền Tây, Bến Tre.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-11",
+   "group_id": "vn-nature",
+   "name": "Cây đa đầu làng",
+   "name_en": "Village banyan",
+   "prompt": "an old banyan tree with hanging roots beside a tiled communal house",
+   "notes": "Hình ảnh quen thuộc ở nông thôn.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-12",
+   "group_id": "vn-nature",
+   "name": "Cây quất",
+   "name_en": "Kumquat tree",
+   "prompt": "a small potted kumquat tree heavy with golden fruit",
+   "notes": "Cây Tết miền Bắc.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-13",
+   "group_id": "vn-nature",
+   "name": "Thanh long",
+   "name_en": "Dragon fruit",
+   "prompt": "a pink dragon fruit cut open to show white flesh with black seeds",
+   "notes": "Trái cây miền Nam.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-14",
+   "group_id": "vn-nature",
+   "name": "Chôm chôm",
+   "name_en": "Rambutan",
+   "prompt": "a bunch of rambutans with red hairy skins, one peeled to show white fruit",
+   "notes": "Trái cây miền Nam.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-15",
+   "group_id": "vn-nature",
+   "name": "Vải thiều",
+   "name_en": "Lychee",
+   "prompt": "a bunch of red bumpy-skinned lychees with green leaves",
+   "notes": "Đặc sản Lục Ngạn, Thanh Hà.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-nature-16",
+   "group_id": "vn-nature",
+   "name": "Xoài",
+   "name_en": "Mango",
+   "prompt": "a ripe yellow mango with a green leaf on its stalk",
+   "notes": "Trái cây nhiệt đới quen thuộc.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-animal-01",
+   "group_id": "vn-animal",
+   "name": "Trâu",
+   "name_en": "Water buffalo",
+   "prompt": "a calm water buffalo with swept-back horns and a rope through its nose ring",
+   "notes": "Con vật gắn với đồng ruộng.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-animal-02",
+   "group_id": "vn-animal",
+   "name": "Rồng Việt",
+   "name_en": "Vietnamese dragon",
+   "prompt": "a gentle serpentine dragon with a flowing mane, smooth scales and soft S-curves, with no wings",
+   "notes": "Rồng Việt hiền, uốn lượn, khác rồng phương Tây.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-animal-03",
+   "group_id": "vn-animal",
+   "name": "Lân",
+   "name_en": "Lion-unicorn",
+   "prompt": "a stylised lion-unicorn with curled mane, round eyes and small horns",
+   "notes": "Linh vật múa lân dịp Tết và Trung thu.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-animal-04",
+   "group_id": "vn-animal",
+   "name": "Cá chép",
+   "name_en": "Carp",
+   "prompt": "a plump orange carp with flowing fins swimming up through small waves",
+   "notes": "Cá chép hóa rồng, Ông Táo.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-animal-05",
+   "group_id": "vn-animal",
+   "name": "Chim Lạc",
+   "name_en": "Lạc bird",
+   "prompt": "a long-legged crested bird in the flat stylised outline seen on Đông Sơn bronze drums",
+   "notes": "Dùng như họa tiết, không sao chép nguyên mẫu.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-animal-06",
+   "group_id": "vn-animal",
+   "name": "Cóc",
+   "name_en": "Toad",
+   "prompt": "a round toad with warty skin and big wide eyes, sitting upright",
+   "notes": "Cậu ông trời trong truyện dân gian.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-animal-07",
+   "group_id": "vn-animal",
+   "name": "Cò trắng",
+   "name_en": "White egret",
+   "prompt": "a slender white egret standing in a paddy with one leg raised",
+   "notes": "Biểu tượng nông thôn.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-animal-08",
+   "group_id": "vn-animal",
+   "name": "Gà trống Đông Hồ",
+   "name_en": "Đông Hồ rooster",
+   "prompt": "a proud rooster in the flat woodblock style of Đông Hồ folk paintings",
+   "notes": "Tranh dân gian Đông Hồ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-animal-09",
+   "group_id": "vn-animal",
+   "name": "Lợn âm dương",
+   "name_en": "Yin-yang pigs",
+   "prompt": "a pair of round pigs with swirled markings in the Đông Hồ style",
+   "notes": "Tranh Đông Hồ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-animal-10",
+   "group_id": "vn-animal",
+   "name": "Voi Tây Nguyên",
+   "name_en": "Highlands elephant",
+   "prompt": "a gentle elephant with a woven blanket on its back",
+   "notes": "Con voi Đắk Lắk; không vẽ cưỡi voi gây hại.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-animal-11",
+   "group_id": "vn-animal",
+   "name": "Tắc kè",
+   "name_en": "Gecko",
+   "prompt": "a green gecko with orange spots clinging to a wall",
+   "notes": "Con vật quen thuộc.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-01",
+   "group_id": "vn-place",
+   "name": "Vịnh Hạ Long",
+   "name_en": "Hạ Long Bay",
+   "prompt": "emerald water dotted with steep limestone islets and a single junk with brown sails",
+   "notes": "Di sản thế giới UNESCO.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-02",
+   "group_id": "vn-place",
+   "name": "Ruộng bậc thang",
+   "name_en": "Terraced rice fields",
+   "prompt": "stepped terraces on a mountain slope in green with thin mist",
+   "notes": "Mù Cang Chải, Sa Pa.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-03",
+   "group_id": "vn-place",
+   "name": "Phố cổ Hà Nội",
+   "name_en": "Hanoi Old Quarter",
+   "prompt": "narrow shopfronts with yellow walls, tangled wires and a bicycle leaning against a wall",
+   "notes": "Mặt tiền ống đặc trưng.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-04",
+   "group_id": "vn-place",
+   "name": "Tháp Rùa Hồ Gươm",
+   "name_en": "Turtle Tower on Hoàn Kiếm Lake",
+   "prompt": "a small moss-covered tower on a tiny island in a calm lake",
+   "notes": "Biểu tượng Hà Nội.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-05",
+   "group_id": "vn-place",
+   "name": "Chùa Một Cột",
+   "name_en": "One Pillar Pagoda",
+   "prompt": "a tiny wooden pagoda standing on a single stone pillar above a lotus pond",
+   "notes": "Kiến trúc đặc sắc.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-06",
+   "group_id": "vn-place",
+   "name": "Phố đèn lồng Hội An",
+   "name_en": "Hội An lanterns",
+   "prompt": "yellow walls and tile roofs with rows of silk lanterns glowing along a quiet street",
+   "notes": "Đô thị cổ Hội An.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-07",
+   "group_id": "vn-place",
+   "name": "Sông Hương",
+   "name_en": "Perfume River",
+   "prompt": "a dragon boat on a wide calm river with willow branches",
+   "notes": "Huế.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-08",
+   "group_id": "vn-place",
+   "name": "Cầu Rồng Đà Nẵng",
+   "name_en": "Dragon Bridge",
+   "prompt": "a long steel bridge shaped like a golden dragon curving over a river",
+   "notes": "Rồng phun lửa vào cuối tuần.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-09",
+   "group_id": "vn-place",
+   "name": "Chợ nổi miền Tây",
+   "name_en": "Floating market",
+   "prompt": "wooden boats loaded with fruit crowded on a brown river, with hanging samples on a tall pole",
+   "notes": "Cần Thơ, Cái Răng.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-10",
+   "group_id": "vn-place",
+   "name": "Nhà rông Tây Nguyên",
+   "name_en": "Communal house of the Highlands",
+   "prompt": "a very tall steep-roofed house on stilts with woven walls",
+   "notes": "Kiến trúc của các dân tộc Tây Nguyên.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-11",
+   "group_id": "vn-place",
+   "name": "Đình làng",
+   "name_en": "Village communal house",
+   "prompt": "a curved-roof wooden communal house with an open courtyard and a banyan tree",
+   "notes": "Trung tâm văn hóa làng Bắc Bộ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-12",
+   "group_id": "vn-place",
+   "name": "Nhà thờ Đức Bà và bưu điện Sài Gòn",
+   "name_en": "Saigon cathedral and post office",
+   "prompt": "a red-brick twin-spire cathedral beside a yellow colonial post office",
+   "notes": "Kiến trúc Pháp thuộc.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-13",
+   "group_id": "vn-place",
+   "name": "Đồi thông Đà Lạt",
+   "name_en": "Đà Lạt pine hill",
+   "prompt": "rolling hills with tall pine trees and a small wooden cottage in fog",
+   "notes": "Thành phố ngàn hoa.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-14",
+   "group_id": "vn-place",
+   "name": "Đồi cát Mũi Né",
+   "name_en": "Mũi Né dunes",
+   "prompt": "smooth red-gold sand dunes with a few small figures and a hat",
+   "notes": "Phan Thiết.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-place-15",
+   "group_id": "vn-place",
+   "name": "Tháp Chăm",
+   "name_en": "Chăm tower",
+   "prompt": "a slender red-brick Chăm temple tower with stepped roofs",
+   "notes": "Mỹ Sơn, Po Nagar.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-01",
+   "group_id": "vn-art",
+   "name": "Múa rối nước",
+   "name_en": "Water puppetry",
+   "prompt": "a painted wooden puppet rising out of a pond beside a bamboo screen",
+   "notes": "Nghệ thuật dân gian đồng bằng Bắc Bộ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-02",
+   "group_id": "vn-art",
+   "name": "Tranh Đông Hồ",
+   "name_en": "Đông Hồ folk painting",
+   "prompt": "a simple woodblock print with flat colours, thick outlines and red-yellow paper",
+   "notes": "Dùng làm phong cách; không sao chép nguyên mẫu.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-03",
+   "group_id": "vn-art",
+   "name": "Quan họ",
+   "name_en": "Quan họ singing",
+   "prompt": "a pair of singers in traditional costume facing each other with hats and fans",
+   "notes": "Quan họ Bắc Ninh, UNESCO 2009.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-04",
+   "group_id": "vn-art",
+   "name": "Đàn bầu",
+   "name_en": "Monochord zither",
+   "prompt": "a single-string zither with a curved wooden rod and a gourd resonator",
+   "notes": "Nhạc cụ một dây.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-05",
+   "group_id": "vn-art",
+   "name": "Đàn T'rưng",
+   "name_en": "T'rưng xylophone",
+   "prompt": "a bamboo xylophone with tubes of different lengths hung on a frame",
+   "notes": "Nhạc cụ Tây Nguyên.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-06",
+   "group_id": "vn-art",
+   "name": "Cồng chiêng",
+   "name_en": "Gong ensemble",
+   "prompt": "a row of bronze gongs hung from a wooden beam with a mallet",
+   "notes": "Cồng chiêng Tây Nguyên, UNESCO 2005.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-07",
+   "group_id": "vn-art",
+   "name": "Sáo trúc",
+   "name_en": "Bamboo flute",
+   "prompt": "a slender bamboo flute held sideways",
+   "notes": "Nhạc cụ dân gian.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-08",
+   "group_id": "vn-art",
+   "name": "Đờn ca tài tử",
+   "name_en": "Southern amateur music",
+   "prompt": "a small ensemble with a moon-shaped lute and a zither on a woven mat",
+   "notes": "Nam Bộ, UNESCO 2013.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-09",
+   "group_id": "vn-art",
+   "name": "Trống đồng Đông Sơn",
+   "name_en": "Đông Sơn bronze drum",
+   "prompt": "a round bronze drum with a many-pointed sun in the centre and rings of birds and figures",
+   "notes": "Dùng như họa tiết trang trí.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-10",
+   "group_id": "vn-art",
+   "name": "Tò he",
+   "name_en": "Tò he rice-dough figures",
+   "prompt": "small colourful dough figurines on a bamboo stick",
+   "notes": "Đồ chơi dân gian.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-11",
+   "group_id": "vn-art",
+   "name": "Gốm Bát Tràng",
+   "name_en": "Bát Tràng ceramics",
+   "prompt": "a white vase with hand-painted blue lotus patterns",
+   "notes": "Làng gốm lâu đời.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-12",
+   "group_id": "vn-art",
+   "name": "Lụa Hà Đông",
+   "name_en": "Hà Đông silk",
+   "prompt": "a bolt of smooth silk with a soft sheen unrolled over a loom",
+   "notes": "Lụa truyền thống.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-art-13",
+   "group_id": "vn-art",
+   "name": "Xòe Thái",
+   "name_en": "Thái xòe dance",
+   "prompt": "a circle of dancers in embroidered blouses with wide skirts holding hands",
+   "notes": "UNESCO 2021.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-01",
+   "group_id": "vn-life",
+   "name": "Xe máy chở nặng",
+   "name_en": "Overloaded motorbike",
+   "prompt": "a small motorbike loaded high with bundles, baskets and a bag of flowers",
+   "notes": "Vẽ vui vẻ, không khuyến khích hành vi nguy hiểm.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-02",
+   "group_id": "vn-life",
+   "name": "Cà phê vỉa hè ghế nhựa thấp",
+   "name_en": "Sidewalk coffee on low stools",
+   "prompt": "a tiny table with two tiny plastic stools and a glass of coffee",
+   "notes": "Văn hóa ngồi quán.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-03",
+   "group_id": "vn-life",
+   "name": "Võng",
+   "name_en": "Hammock",
+   "prompt": "a woven hammock hung between two trees with a hand fan",
+   "notes": "Giấc trưa.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-04",
+   "group_id": "vn-life",
+   "name": "Quang gánh",
+   "name_en": "Shoulder pole",
+   "prompt": "a bamboo pole across the shoulder with a basket at each end",
+   "notes": "Gánh hàng rong.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-05",
+   "group_id": "vn-life",
+   "name": "Xe bánh mì",
+   "name_en": "Bánh mì cart",
+   "prompt": "a glass-fronted cart stacked with baguettes and filling trays",
+   "notes": "Quầy bánh mì buổi sáng.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-06",
+   "group_id": "vn-life",
+   "name": "Chợ sáng",
+   "name_en": "Morning market",
+   "prompt": "a stall with bright vegetables piled on low tables under a big umbrella",
+   "notes": "Hàng rau, thịt, cá.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-07",
+   "group_id": "vn-life",
+   "name": "Mâm cơm gia đình",
+   "name_en": "Family meal tray",
+   "prompt": "a round tray of shared dishes with bowls of rice and chopsticks",
+   "notes": "Bữa cơm đoàn viên.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-08",
+   "group_id": "vn-life",
+   "name": "Áo mưa cánh dơi",
+   "name_en": "Bat-wing raincoat",
+   "prompt": "a bright poncho with wide sleeves flaring on both sides",
+   "notes": "Áo mưa của người đi xe máy.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-09",
+   "group_id": "vn-life",
+   "name": "Xích lô",
+   "name_en": "Cyclo",
+   "prompt": "a pedal rickshaw with a front seat and a canopy",
+   "notes": "Phương tiện cổ.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-10",
+   "group_id": "vn-life",
+   "name": "Dây điện chằng chịt",
+   "name_en": "Tangle of wires",
+   "prompt": "a bundle of overhead wires with a small bird perched on them",
+   "notes": "Cảnh phố ở các đô thị.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-11",
+   "group_id": "vn-life",
+   "name": "Hẻm nhỏ Sài Gòn",
+   "name_en": "Saigon alley",
+   "prompt": "a narrow alley with plants on balconies, laundry and a small shrine",
+   "notes": "Nơi sinh sống.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-life-12",
+   "group_id": "vn-life",
+   "name": "Quạt nan",
+   "name_en": "Palm fan",
+   "prompt": "a round palm-leaf hand fan with a bamboo handle",
+   "notes": "Giải nhiệt mùa hè.",
+   "source": "vietnam-seed.md",
+   "scope": "pack"
+  },
+  {
+   "id": "vn-chat-01",
+   "group_id": "vn-chat",
+   "name": "Chắp tay cảm ơn",
+   "name_en": "Hands together to thank",
+   "prompt": "both palms pressed together at chest height with a small bow",
+   "notes": "Cử chỉ lịch sự: cảm ơn, chào.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-02",
+   "group_id": "vn-chat",
+   "name": "Dạ!",
+   "name_en": "Polite yes",
+   "prompt": "a quick small bow with a bright face and one hand raised",
+   "notes": "Dạ, vâng.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-03",
+   "group_id": "vn-chat",
+   "name": "Ăn cơm chưa?",
+   "name_en": "Have you eaten yet?",
+   "prompt": "holding out a bowl of rice and chopsticks with a welcoming smile",
+   "notes": "Cách hỏi thăm thân thương.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-04",
+   "group_id": "vn-chat",
+   "name": "Dzô!",
+   "name_en": "Cheers",
+   "prompt": "raising a glass high with a cheerful shout",
+   "notes": "Cạn ly.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-05",
+   "group_id": "vn-chat",
+   "name": "Mời ăn",
+   "name_en": "Please eat",
+   "prompt": "gesturing to a table of food with an open hand",
+   "notes": "Mời cả nhà.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-06",
+   "group_id": "vn-chat",
+   "name": "Trời ơi!",
+   "name_en": "Oh my!",
+   "prompt": "both hands on cheeks with wide eyes",
+   "notes": "Cảm thán.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-07",
+   "group_id": "vn-chat",
+   "name": "Chốt đơn",
+   "name_en": "Order confirmed",
+   "prompt": "jabbing a finger on a phone screen with a determined face",
+   "notes": "Chat mua sắm.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-08",
+   "group_id": "vn-chat",
+   "name": "Hết ý",
+   "name_en": "Perfect",
+   "prompt": "thumbs up with sparkles around the hand",
+   "notes": "Khen.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-09",
+   "group_id": "vn-chat",
+   "name": "Bình tĩnh, còn cơm",
+   "name_en": "Stay calm, there is still rice",
+   "prompt": "sitting calmly and holding a bowl of rice while chaos unfolds behind",
+   "notes": "Câu hài hước.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-10",
+   "group_id": "vn-chat",
+   "name": "Thương thương",
+   "name_en": "Affection",
+   "prompt": "making a small heart with two fingers and a soft smile",
+   "notes": "Trìu mến.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-11",
+   "group_id": "vn-chat",
+   "name": "Chúc mừng năm mới",
+   "name_en": "Happy New Year",
+   "prompt": "bowing with cupped hands and holding a red envelope",
+   "notes": "Chúc Tết.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-12",
+   "group_id": "vn-chat",
+   "name": "Đợi tí nha",
+   "name_en": "Wait a sec",
+   "prompt": "one finger raised and the other hand holding a phone to the ear",
+   "notes": "Chờ một chút.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-13",
+   "group_id": "vn-chat",
+   "name": "Cố lên",
+   "name_en": "You can do it",
+   "prompt": "a fist raised with a determined grin",
+   "notes": "Cổ vũ.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  },
+  {
+   "id": "vn-chat-14",
+   "group_id": "vn-chat",
+   "name": "Chào bằng nón",
+   "name_en": "Greeting with hat",
+   "prompt": "tipping a conical hat with one hand and waving",
+   "notes": "Chào hỏi.",
+   "source": "vietnam-seed.md",
+   "scope": "sticker"
+  }
+ ],
+ "palettes": [
+  {
+   "id": "p-vn-01",
+   "name": "Sen hồng",
+   "name_en": "Lotus pink",
+   "prompt": "a soft lotus-pink palette with leaf green, warm cream and a golden accent",
+   "primary": "#E8799B",
+   "secondary": "#7BA05B",
+   "accent": "#F2C14E",
+   "line": "#4A2E3A"
+  },
+  {
+   "id": "p-vn-02",
+   "name": "Mai vàng ngày Tết",
+   "name_en": "Tết mai gold",
+   "prompt": "a bright mai-yellow and lucky red palette with warm brown outlines",
+   "primary": "#F2B705",
+   "secondary": "#C8102E",
+   "accent": "#FFF3C4",
+   "line": "#4A2C17"
+  },
+  {
+   "id": "p-vn-03",
+   "name": "Đào Bắc Bộ",
+   "name_en": "Northern peach",
+   "prompt": "a peach-pink and sky-blue palette with white blossoms and dark branch outlines",
+   "primary": "#F4A6B8",
+   "secondary": "#BFE3F2",
+   "accent": "#E86A92",
+   "line": "#3E2A33"
+  },
+  {
+   "id": "p-vn-04",
+   "name": "Chàm Tây Bắc",
+   "name_en": "Highland indigo",
+   "prompt": "an indigo-blue palette with brocade red, white embroidery and a deep navy outline",
+   "primary": "#2D4A8A",
+   "secondary": "#C8403B",
+   "accent": "#F4F0E6",
+   "line": "#1B2547"
+  },
+  {
+   "id": "p-vn-05",
+   "name": "Hoàng hôn sông Cửu Long",
+   "name_en": "Mekong sunset",
+   "prompt": "a warm orange and dusk-pink palette with muddy river brown and deep teal shadows",
+   "primary": "#F28C38",
+   "secondary": "#E77A8B",
+   "accent": "#F8D26B",
+   "line": "#31423F"
+  },
+  {
+   "id": "p-vn-06",
+   "name": "Gốm men rạn",
+   "name_en": "Crackle-glaze ceramic",
+   "prompt": "a cream and cobalt-blue palette with a pale celadon accent and dark blue line",
+   "primary": "#F4EEDF",
+   "secondary": "#2F5DA8",
+   "accent": "#8CC7B3",
+   "line": "#1E2A44"
+  }
+ ],
+ "characters": [
+  {
+   "id": "vn-char-01",
+   "name": "Sen Con",
+   "description": "A tiny lotus-bud sprite with a round pink bud as a hat, a soft cream face, two small green leaf arms and short stubby legs.",
+   "identity_notes": "Pink lotus bud hat with three visible petals on top; small black dot eyes; rosy round cheeks; two green leaf hands; same proportions on every sticker.",
+   "rights_notes": "Nhân vật gốc của Restick, không dựa trên nhân vật có bản quyền."
+  },
+  {
+   "id": "vn-char-02",
+   "name": "Trâu Con",
+   "description": "A round chubby water buffalo calf with short swept-back horns, a grey body and a light belly, smiling softly.",
+   "identity_notes": "Short swept-back horns; a small red cloth tied around the neck; a white tuft on the forehead; round belly; same colours on every sticker.",
+   "rights_notes": "Nhân vật gốc của Restick."
+  },
+  {
+   "id": "vn-char-03",
+   "name": "Tô Phở",
+   "description": "A walking bowl of phở with a tiny face on the broth, a green onion tuft on top and chopsticks for arms.",
+   "identity_notes": "A white bowl with a thin blue rim; a green onion tuft on top; wooden chopsticks as arms; small steam curl above; face stays on the broth.",
+   "rights_notes": "Nhân vật gốc của Restick."
+  },
+  {
+   "id": "vn-char-04",
+   "name": "Ổ Bánh Mì",
+   "description": "A cheerful baguette character with a golden crust, a smiling face and visible pickled filling at one end.",
+   "identity_notes": "A golden brown crust with diagonal slashes; a cheerful smile; green cilantro and orange pickled carrot peeking out one end; same size and shape on every sticker.",
+   "rights_notes": "Nhân vật gốc của Restick."
+  },
+  {
+   "id": "vn-char-05",
+   "name": "Nón Lá",
+   "description": "A small child hidden under an oversized conical hat, with only a wide smile and rosy cheeks visible.",
+   "identity_notes": "A large woven conical hat that covers the eyes; a wide smile and rosy cheeks; a red silk chin strap; a plain cream tunic.",
+   "rights_notes": "Nhân vật gốc của Restick."
+  },
+  {
+   "id": "vn-char-06",
+   "name": "Rồng Con",
+   "description": "A baby Vietnamese dragon with a soft sage-green body, a small golden mane and gentle S-curved posture, no wings.",
+   "identity_notes": "Sage-green scales; golden mane tuft; two small curved horns; gentle S-curve body; round dark eyes; no wings and no claws.",
+   "rights_notes": "Nhân vật gốc của Restick, dựa trên hình tượng rồng Việt chung."
+  },
+  {
+   "id": "vn-char-07",
+   "name": "Mèo Mướp",
+   "description": "A tabby cat with brown-orange stripes, a white chest and a small red and white checkered scarf.",
+   "identity_notes": "Brown-orange tabby stripes; a white chest; a red and white checkered scarf; short tail; half-closed sleepy eyes.",
+   "rights_notes": "Nhân vật gốc của Restick."
+  },
+  {
+   "id": "vn-char-08",
+   "name": "Cá Chép Nhí",
+   "description": "A plump orange carp with big round eyes, long whiskers, translucent fins and a small tail.",
+   "identity_notes": "Plump orange body; two long thin whiskers; translucent fins; a small white spot on the forehead; big round eyes.",
+   "rights_notes": "Nhân vật gốc của Restick."
+  },
+  {
+   "id": "vn-char-09",
+   "name": "Cậu Cóc",
+   "description": "A round green toad with warty skin, wide mouth, a tiny straw hat and a calm confident expression.",
+   "identity_notes": "A green round body with warty bumps; a small straw hat; a wide calm mouth; gold ringed eyes; upright seated posture.",
+   "rights_notes": "Nhân vật gốc của Restick, lấy cảm hứng từ truyện dân gian."
+  },
+  {
+   "id": "vn-char-10",
+   "name": "Chú Phin",
+   "description": "A small steel phin coffee filter with tiny arms and legs, a lid hat and a drop of coffee on its head.",
+   "identity_notes": "Steel phin body with a lid as a hat; a single drop of dark coffee on top; thin arms and legs; two small dot eyes; a round body.",
+   "rights_notes": "Nhân vật gốc của Restick."
+  }
+ ],
+ "designs": [
+  {
+   "name": "Tết Nguyên đán cùng Rồng Con",
+   "character_id": "vn-char-06",
+   "group_ids": [
+    "vn-festival",
+    "vn-chat",
+    "vn-food"
+   ],
+   "fragment_ids": [
+    "vn-festival-01",
+    "vn-festival-04",
+    "vn-food-07",
+    "v-d11-001",
+    "v-d12-003"
+   ],
+   "palette_id": "p-vn-02",
+   "free_text": "Chúc Tết sticker pack for Vietnamese Lunar New Year.",
+   "rows": 3,
+   "columns": 3,
+   "cells": [
+    {
+     "action": "holding a red envelope with both hands",
+     "expression": "joyful",
+     "fragment_ids": [
+      "vn-chat-11"
+     ]
+    },
+    {
+     "action": "lion dance with a paper lion head",
+     "expression": "excited"
+    },
+    {
+     "action": "wrapping a square sticky-rice cake",
+     "expression": "focused"
+    },
+    {
+     "action": "hanging a red couplet by a doorway",
+     "expression": "proud"
+    },
+    {
+     "action": "standing among kumquat trees in a flower market",
+     "expression": "cheerful"
+    },
+    {
+     "action": "offering a five-fruit tray",
+     "expression": "respectful"
+    },
+    {
+     "action": "watching fireworks with a hand raised",
+     "expression": "amazed"
+    },
+    {
+     "action": "pouring tea for relatives",
+     "expression": "warm"
+    },
+    {
+     "action": "bowing with cupped hands",
+     "expression": "grateful",
+     "fragment_ids": [
+      "vn-chat-01"
+     ]
+    }
+   ],
+   "outline_width": 4,
+   "outline_color": "#FFFFFF"
+  },
+  {
+   "name": "Trung thu rước đèn Cá Chép",
+   "character_id": "vn-char-08",
+   "group_ids": [
+    "vn-festival",
+    "vn-food"
+   ],
+   "fragment_ids": [
+    "vn-festival-09",
+    "vn-festival-10",
+    "v-d11-001",
+    "v-d12-003"
+   ],
+   "palette_id": "p-vn-05",
+   "free_text": "Mid-Autumn Festival with carp lantern and mooncakes.",
+   "rows": 3,
+   "columns": 3,
+   "cells": [
+    {
+     "action": "holding a star lantern",
+     "expression": "delighted"
+    },
+    {
+     "action": "dragging a lantern on wheels",
+     "expression": "happy"
+    },
+    {
+     "action": "slicing a mooncake",
+     "expression": "anticipating"
+    },
+    {
+     "action": "looking at the full moon",
+     "expression": "dreamy"
+    },
+    {
+     "action": "lion dance with paper lion",
+     "expression": "excited"
+    },
+    {
+     "action": "wearing a paper mask",
+     "expression": "playful"
+    },
+    {
+     "action": "floating a lotus lantern on a river",
+     "expression": "peaceful"
+    },
+    {
+     "action": "sharing mooncake with friends",
+     "expression": "warm"
+    },
+    {
+     "action": "sleepy by a lantern",
+     "expression": "content"
+    }
+   ],
+   "outline_width": 4,
+   "outline_color": "#FFFFFF"
+  },
+  {
+   "name": "Ăn phở cùng Tô Phở",
+   "character_id": "vn-char-03",
+   "group_ids": [
+    "vn-food",
+    "vn-chat",
+    "vn-life"
+   ],
+   "fragment_ids": [
+    "vn-food-01",
+    "vn-food-18",
+    "v-d11-001"
+   ],
+   "palette_id": "p-vn-02",
+   "free_text": "Street food mood sticker pack about phở morning routine.",
+   "rows": 3,
+   "columns": 3,
+   "cells": [
+    {
+     "action": "steaming and waiting",
+     "expression": "hungry"
+    },
+    {
+     "action": "adding lime and chilli",
+     "expression": "focused"
+    },
+    {
+     "action": "slurping noodles",
+     "expression": "delighted"
+    },
+    {
+     "action": "blowing on a hot spoon",
+     "expression": "careful"
+    },
+    {
+     "action": "sharing a table",
+     "expression": "friendly",
+     "fragment_ids": [
+      "vn-chat-05"
+     ]
+    },
+    {
+     "action": "asking for extra herbs",
+     "expression": "polite",
+     "fragment_ids": [
+      "vn-chat-02"
+     ]
+    },
+    {
+     "action": "finishing the last drop of broth",
+     "expression": "satisfied"
+    },
+    {
+     "action": "a full bowl of leftovers",
+     "expression": "guilty"
+    },
+    {
+     "action": "saying cảm ơn",
+     "expression": "grateful",
+     "fragment_ids": [
+      "vn-chat-01"
+     ]
+    }
+   ],
+   "outline_width": 4,
+   "outline_color": "#FFFFFF"
+  },
+  {
+   "name": "Cà phê sáng cùng Chú Phin",
+   "character_id": "vn-char-10",
+   "group_ids": [
+    "vn-food",
+    "vn-life",
+    "vn-chat"
+   ],
+   "fragment_ids": [
+    "vn-food-05",
+    "vn-food-06",
+    "vn-life-02",
+    "v-d11-001"
+   ],
+   "palette_id": "p-001",
+   "free_text": "Morning coffee sticker pack for friends and colleagues.",
+   "rows": 2,
+   "columns": 4,
+   "cells": [
+    {
+     "action": "dripping slowly",
+     "expression": "patient"
+    },
+    {
+     "action": "sitting on a low stool",
+     "expression": "relaxed",
+     "fragment_ids": [
+      "vn-life-02"
+     ]
+    },
+    {
+     "action": "asking for iced coffee",
+     "expression": "hopeful",
+     "fragment_ids": [
+      "vn-chat-12"
+     ]
+    },
+    {
+     "action": "waking up with a stretch",
+     "expression": "sleepy"
+    },
+    {
+     "action": "holding a glass of iced coffee",
+     "expression": "energised"
+    },
+    {
+     "action": "running late",
+     "expression": "panicked"
+    },
+    {
+     "action": "thumbs up",
+     "expression": "approving",
+     "fragment_ids": [
+      "vn-chat-08"
+     ]
+    },
+    {
+     "action": "cheers with cups",
+     "expression": "friendly",
+     "fragment_ids": [
+      "vn-chat-04"
+     ]
+    }
+   ],
+   "outline_width": 4,
+   "outline_color": "#FFFFFF"
+  },
+  {
+   "name": "Chat công sở cùng Ổ Bánh Mì",
+   "character_id": "vn-char-04",
+   "group_ids": [
+    "vn-food",
+    "vn-chat"
+   ],
+   "fragment_ids": [
+    "vn-food-02",
+    "v-d11-001"
+   ],
+   "palette_id": "p-vn-02",
+   "free_text": "Office reactions sticker pack.",
+   "rows": 2,
+   "columns": 4,
+   "cells": [
+    {
+     "action": "holding a laptop",
+     "expression": "busy"
+    },
+    {
+     "action": "on a phone call",
+     "expression": "patient",
+     "fragment_ids": [
+      "vn-chat-12"
+     ]
+    },
+    {
+     "action": "confirming an order",
+     "expression": "decisive",
+     "fragment_ids": [
+      "vn-chat-07"
+     ]
+    },
+    {
+     "action": "saying yes politely",
+     "expression": "polite",
+     "fragment_ids": [
+      "vn-chat-02"
+     ]
+    },
+    {
+     "action": "thumbs up",
+     "expression": "pleased",
+     "fragment_ids": [
+      "vn-chat-08"
+     ]
+    },
+    {
+     "action": "hands on cheeks",
+     "expression": "shocked",
+     "fragment_ids": [
+      "vn-chat-06"
+     ]
+    },
+    {
+     "action": "staying calm with a bowl of rice",
+     "expression": "calm",
+     "fragment_ids": [
+      "vn-chat-09"
+     ]
+    },
+    {
+     "action": "encouraging a friend",
+     "expression": "supportive",
+     "fragment_ids": [
+      "vn-chat-13"
+     ]
+    }
+   ],
+   "outline_width": 3,
+   "outline_color": "#FFFFFF"
+  },
+  {
+   "name": "Đồng quê cùng Trâu Con",
+   "character_id": "vn-char-02",
+   "group_ids": [
+    "vn-animal",
+    "vn-nature",
+    "vn-life"
+   ],
+   "fragment_ids": [
+    "vn-nature-09",
+    "vn-nature-08",
+    "vn-animal-07",
+    "v-d11-001"
+   ],
+   "palette_id": "p-007",
+   "free_text": "Countryside summer day sticker pack.",
+   "rows": 3,
+   "columns": 3,
+   "cells": [
+    {
+     "action": "grazing by a paddy",
+     "expression": "peaceful"
+    },
+    {
+     "action": "walking a village path",
+     "expression": "content"
+    },
+    {
+     "action": "lying in a hammock",
+     "expression": "sleepy",
+     "fragment_ids": [
+      "vn-life-03"
+     ]
+    },
+    {
+     "action": "under the bamboo hedge",
+     "expression": "cool"
+    },
+    {
+     "action": "with a white egret on its back",
+     "expression": "friendly"
+    },
+    {
+     "action": "pulling a plough",
+     "expression": "working"
+    },
+    {
+     "action": "in the rain with a leaf hat",
+     "expression": "happy"
+    },
+    {
+     "action": "watching the sunset",
+     "expression": "dreamy"
+    },
+    {
+     "action": "sleeping under the banyan tree",
+     "expression": "relaxed"
+    }
+   ],
+   "outline_width": 4,
+   "outline_color": "#FFFFFF"
+  },
+  {
+   "name": "Hội An cùng Nón Lá",
+   "character_id": "vn-char-05",
+   "group_ids": [
+    "vn-place",
+    "vn-costume",
+    "vn-festival"
+   ],
+   "fragment_ids": [
+    "vn-place-06",
+    "vn-costume-02",
+    "vn-festival-12",
+    "v-d11-001"
+   ],
+   "palette_id": "p-vn-05",
+   "free_text": "Hội An lantern town sticker pack.",
+   "rows": 3,
+   "columns": 3,
+   "cells": [
+    {
+     "action": "holding a silk lantern",
+     "expression": "amazed"
+    },
+    {
+     "action": "riding a bicycle",
+     "expression": "free"
+    },
+    {
+     "action": "floating a lotus lantern",
+     "expression": "peaceful",
+     "fragment_ids": [
+      "vn-festival-12"
+     ]
+    },
+    {
+     "action": "tasting a bowl of cao lầu",
+     "expression": "delighted"
+    },
+    {
+     "action": "looking at yellow walls",
+     "expression": "curious"
+    },
+    {
+     "action": "tipping the hat",
+     "expression": "polite",
+     "fragment_ids": [
+      "vn-chat-14"
+     ]
+    },
+    {
+     "action": "a small boat on the river",
+     "expression": "calm"
+    },
+    {
+     "action": "shopping for souvenirs",
+     "expression": "excited"
+    },
+    {
+     "action": "saying goodbye",
+     "expression": "wistful"
+    }
+   ],
+   "outline_width": 4,
+   "outline_color": "#FFFFFF"
+  },
+  {
+   "name": "Mùa sen cùng Sen Con",
+   "character_id": "vn-char-01",
+   "group_ids": [
+    "vn-nature",
+    "vn-life"
+   ],
+   "fragment_ids": [
+    "vn-nature-01",
+    "vn-nature-09",
+    "v-d11-002",
+    "v-d12-001"
+   ],
+   "palette_id": "p-vn-01",
+   "free_text": "Lotus summer sticker pack.",
+   "rows": 3,
+   "columns": 3,
+   "cells": [
+    {
+     "action": "blooming slowly",
+     "expression": "hopeful"
+    },
+    {
+     "action": "floating on a pond",
+     "expression": "relaxed"
+    },
+    {
+     "action": "raindrop on a leaf",
+     "expression": "playful"
+    },
+    {
+     "action": "a dragonfly lands",
+     "expression": "surprised"
+    },
+    {
+     "action": "sitting on a leaf umbrella",
+     "expression": "cool"
+    },
+    {
+     "action": "offering a lotus",
+     "expression": "generous"
+    },
+    {
+     "action": "drinking lotus tea",
+     "expression": "calm"
+    },
+    {
+     "action": "asleep at dusk",
+     "expression": "sleepy"
+    },
+    {
+     "action": "waving",
+     "expression": "friendly"
+    }
+   ],
+   "outline_width": 4,
+   "outline_color": "#FFFFFF"
+  },
+  {
+   "name": "Chợ sáng cùng Mèo Mướp",
+   "character_id": "vn-char-07",
+   "group_ids": [
+    "vn-life",
+    "vn-food",
+    "vn-chat"
+   ],
+   "fragment_ids": [
+    "vn-life-06",
+    "vn-life-12",
+    "v-d11-001"
+   ],
+   "palette_id": "p-vn-05",
+   "free_text": "Morning market and neighbourhood life sticker pack.",
+   "rows": 2,
+   "columns": 4,
+   "cells": [
+    {
+     "action": "sniffing fish",
+     "expression": "curious"
+    },
+    {
+     "action": "bargaining with a vendor",
+     "expression": "sly"
+    },
+    {
+     "action": "carrying a bag of vegetables",
+     "expression": "busy"
+    },
+    {
+     "action": "riding on a motorbike basket",
+     "expression": "happy"
+    },
+    {
+     "action": "stealing a fish",
+     "expression": "guilty"
+    },
+    {
+     "action": "sleeping on a fruit stand",
+     "expression": "cozy"
+    },
+    {
+     "action": "saying cảm ơn",
+     "expression": "grateful",
+     "fragment_ids": [
+      "vn-chat-01"
+     ]
+    },
+    {
+     "action": "hiding from rain",
+     "expression": "annoyed"
+    }
+   ],
+   "outline_width": 3,
+   "outline_color": "#FFFFFF"
+  },
+  {
+   "name": "Mùa mưa Nam Bộ cùng Cậu Cóc",
+   "character_id": "vn-char-09",
+   "group_ids": [
+    "vn-animal",
+    "vn-life",
+    "vn-nature"
+   ],
+   "fragment_ids": [
+    "vn-animal-06",
+    "vn-life-08",
+    "v-d11-001"
+   ],
+   "palette_id": "p-vn-04",
+   "free_text": "Rainy season sticker pack with a toad bringing rain.",
+   "rows": 3,
+   "columns": 3,
+   "cells": [
+    {
+     "action": "calling the rain",
+     "expression": "hopeful"
+    },
+    {
+     "action": "wearing a bat-wing raincoat",
+     "expression": "happy",
+     "fragment_ids": [
+      "vn-life-08"
+     ]
+    },
+    {
+     "action": "jumping in a puddle",
+     "expression": "playful"
+    },
+    {
+     "action": "holding a leaf umbrella",
+     "expression": "calm"
+    },
+    {
+     "action": "splashing across a road",
+     "expression": "excited"
+    },
+    {
+     "action": "drinking hot tea",
+     "expression": "cozy"
+    },
+    {
+     "action": "watching the river rise",
+     "expression": "serious"
+    },
+    {
+     "action": "sitting on a lotus leaf",
+     "expression": "peaceful"
+    },
+    {
+     "action": "croaking happily",
+     "expression": "joyful"
+    }
+   ],
+   "outline_width": 4,
+   "outline_color": "#FFFFFF"
+  }
+ ]
+}

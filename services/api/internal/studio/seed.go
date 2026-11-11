@@ -17,8 +17,30 @@ const (
 	SeedVersion = 1
 )
 
-//go:embed seed/groups.json seed/fragments.json seed/palettes.json
+//go:embed seed/groups.json seed/fragments.json seed/palettes.json seed/vietnam.json
 var seedFS embed.FS
+
+// VietnamSeedName identifies the Vietnam pack: its own groups, fragments,
+// palettes, example characters and ready-made designs. It is versioned apart
+// from the core library so an existing database still receives it.
+const VietnamSeedName = "restick.seed.vn.v1"
+
+type vietnamSeed struct {
+	Schema     string          `json:"schema"`
+	Groups     []seedGroup     `json:"groups"`
+	Fragments  []seedFragment  `json:"fragments"`
+	Palettes   []seedPalette   `json:"palettes"`
+	Characters []seedCharacter `json:"characters"`
+	Designs    []Draft         `json:"designs"`
+}
+
+type seedCharacter struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	IdentityNotes string `json:"identity_notes"`
+	RightsNotes   string `json:"rights_notes"`
+}
 
 type seedGroups struct {
 	Schema string      `json:"schema"`
@@ -68,6 +90,13 @@ type seedPalette struct {
 // Seed installs the canonical library exactly once. Restarting with the same
 // seed file leaves every operator edit in place.
 func (s *Service) Seed(ctx context.Context) error {
+	if err := s.seedLibrary(ctx); err != nil {
+		return err
+	}
+	return s.seedVietnam(ctx)
+}
+
+func (s *Service) seedLibrary(ctx context.Context) error {
 	var applied int
 	err := s.db.QueryRowContext(ctx, `SELECT version FROM seed_versions WHERE name = ?`, SeedName).Scan(&applied)
 	switch {
@@ -212,4 +241,86 @@ func loadSeed() ([]seedGroup, []seedFragment, []seedPalette, string, error) {
 		sum.Write(data)
 	}
 	return groups.Groups, fragments.Fragments, palettes.Palettes, hex.EncodeToString(sum.Sum(nil)), nil
+}
+
+// seedVietnam installs the Vietnam pack once. Groups, fragments and characters
+// go in one transaction; designs are compiled through SaveDesign afterwards
+// because Compile reads the committed library. The version row is written last.
+// shortcut: a crash between the two steps can leave some designs duplicated on
+// the next start, acceptable for sample data; make it atomic if it ever matters.
+func (s *Service) seedVietnam(ctx context.Context) error {
+	var applied int
+	err := s.db.QueryRowContext(ctx, `SELECT version FROM seed_versions WHERE name = ?`, VietnamSeedName).Scan(&applied)
+	switch {
+	case err == nil:
+		return nil
+	case !errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("studio: read vietnam seed version: %w", err)
+	}
+
+	raw, err := seedFS.ReadFile("seed/vietnam.json")
+	if err != nil {
+		return err
+	}
+	var pack vietnamSeed
+	if err := json.Unmarshal(raw, &pack); err != nil {
+		return fmt.Errorf("studio: decode vietnam seed: %w", err)
+	}
+	if pack.Schema != VietnamSeedName {
+		return fmt.Errorf("studio: vietnam seed has schema %q, want %q", pack.Schema, VietnamSeedName)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, group := range pack.Groups {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO fragment_groups (id, name, description, sort_order)
+			VALUES (?, ?, ?, ?)`, group.ID, group.Name, group.Description, group.SortOrder); err != nil {
+			return fmt.Errorf("studio: seed vietnam group %s: %w", group.ID, err)
+		}
+	}
+	for _, fragment := range pack.Fragments {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO fragments
+			(id, group_id, name, name_en, prompt, notes, source, scope)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			fragment.ID, fragment.GroupID, fragment.Name, fragment.NameEn,
+			fragment.Prompt, fragment.Notes, fragment.Source, fragment.Scope); err != nil {
+			return fmt.Errorf("studio: seed vietnam fragment %s: %w", fragment.ID, err)
+		}
+	}
+	for _, palette := range pack.Palettes {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO fragments
+			(id, group_id, name, name_en, prompt, source, scope,
+			 primary_color, secondary_color, accent_color, line_color)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			palette.ID, paletteGroupID, palette.Name, palette.NameEn, palette.Prompt,
+			"vietnam-seed.md", string(ScopePack),
+			palette.Primary, palette.Secondary, palette.Accent, palette.Line); err != nil {
+			return fmt.Errorf("studio: seed vietnam palette %s: %w", palette.ID, err)
+		}
+	}
+	for _, character := range pack.Characters {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO characters
+			(id, name, description, identity_notes, rights_notes) VALUES (?, ?, ?, ?, ?)`,
+			character.ID, character.Name, character.Description, character.IdentityNotes, character.RightsNotes); err != nil {
+			return fmt.Errorf("studio: seed vietnam character %s: %w", character.ID, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	for _, draft := range pack.Designs {
+		if _, err := s.SaveDesign(ctx, draft); err != nil {
+			return fmt.Errorf("studio: seed vietnam design %q: %w", draft.Name, err)
+		}
+	}
+	sum := sha256.Sum256(raw)
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO seed_versions (name, version, checksum_sha256)
+		VALUES (?, ?, ?)`, VietnamSeedName, 1, hex.EncodeToString(sum[:])); err != nil {
+		return fmt.Errorf("studio: record vietnam seed version: %w", err)
+	}
+	return nil
 }

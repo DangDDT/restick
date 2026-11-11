@@ -17,6 +17,7 @@ class StickerPackChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FilterChip(
+      key: ValueKey('sticker.pack.chip.${pack.id}'),
       label: SizedBox(
         width: 96,
         child: AutoSizeText(

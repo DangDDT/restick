@@ -50,3 +50,13 @@ FORM: Operate/production traveler, list position 6, seed reference: `seed: be010
 - Redesign base is the feature branch, not `main` (see PRODUCT.md Operating Context).
 - Both themes ship (tokens), default follows `prefers-color-scheme`.
 - `/api-docs` embeds Go-served `/docs` in an iframe: chrome and framing are redesigned; the inner document is outside the Next frontend. Recorded as a known limit.
+
+## Locked 2026-11-11: playful surface on the Proof Table structure
+
+Commit 416832c softened the surface; this record is updated to match. **Kept from the contract above:** the station-order navigation grammar (Soạn → Tải sheet → Cắt → Pack → Key), ruled sections instead of card stacks, job numbers and stamps for state, crop-mark artwork frames, kiss-cut selection and peel reveal, theme parity, mobile prompt sheet, ⌘K.
+
+**Superseded:** "one accent / chroma <= 0.01 neutral ground" and "4px/8px radii, hairlines not shadows". Now: candy tints (pink, lilac, mint, sky, butter, peach) as decorative per-station colour, 10px/16px radii, soft panel shadows, sticker-style primary button, faint pink page wash, bear mascot and `/start` guide. Sticker artwork still sits on neutral `sunk`/checker grounds so its colours read true. Cut-line magenta remains the only action colour.
+
+**Added:** `/factory` AI provider launcher (`AiProviderLinks`): the app still never generates images; it shortens the hop to ChatGPT, Gemini, Ideogram, Leonardo, Midjourney, Firefly, Recraft, Flux, Kling and Runway (copy prompt, open tab). Provider list: `lib/ai-providers.ts`.
+
+Values: `DESIGN.md`. Brand: `docs/brand/BRAND.md`.

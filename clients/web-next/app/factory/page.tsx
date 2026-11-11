@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
+import { AiProviderLinks } from "@/components/ai-provider-links";
 import { Icon } from "@/components/icons";
 import {
   Button,
@@ -437,6 +438,12 @@ function Factory() {
     saveDesign.mutate(draftFromState(state));
   }
 
+  // Dropping the id makes the POST path create a new design, leaving the template intact.
+  function saveCopy() {
+    setNotice(null);
+    saveDesign.mutate({ ...draftFromState(state), id: undefined, name: `${state.name.trim() || t("newDesign")} (${t("copySuffix")})` });
+  }
+
   const availableGroups = (groups.data?.items ?? []).filter(
     (group) => !state.groupIds.includes(group.id),
   );
@@ -851,6 +858,11 @@ function Factory() {
                   {saveDesign.isPending ? t("saving") : state.id ? t("updateDesign") : t("saveDesign")}
                 </Button>
                 {state.id && (
+                  <Button variant="secondary" icon="copy" disabled={editorBusy} onClick={saveCopy}>
+                    {t("saveCopy")}
+                  </Button>
+                )}
+                {state.id && (
                   <Button
                     variant="danger"
                     icon="trash"
@@ -876,10 +888,11 @@ function Factory() {
                 readOnly
                 value={compiledPrompt}
                 placeholder={t("noPrompt")}
-                rows={20}
+                rows={12}
                 aria-label={t("compiledPrompt")}
                 className={cx(inputClass, "mono text-xs leading-5")}
               />
+              <AiProviderLinks prompt={compiledPrompt} />
             </Panel>
           </aside>
         </div>
@@ -910,6 +923,7 @@ function Factory() {
             aria-label={t("compiledPrompt")}
             className={cx(inputClass, "mono text-xs leading-5")}
           />
+          <AiProviderLinks prompt={compiledPrompt} />
         </Dialog>
       )}
 
