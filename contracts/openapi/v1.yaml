@@ -1,24 +1,1511 @@
 openapi: 3.1.0
 info:
-  title: Restick public HTTP
-  version: 0.0.1
-  description: >
-    Browser and Flutter clients use HTTP. Backend services speak gRPC with each other.
-    Restick does not generate images from keywords.
+  title: Restick single-operator sticker factory
+  version: 0.1.0
+  license:
+    name: MIT
+    identifier: MIT
+  description: |
+    One-owner HTTP API. Contract for the Flutter SDK and the exported web UI.
+
+    Authentication
+    - SDK read routes: `X-Api-Key` (read-only client key) or the owner session
+      cookie `__Host-restick_admin`.
+    - Admin routes under `/api/v1/admin`: owner session cookie only. A client key
+      never authorizes an admin route, even a valid one.
+    - Unsafe admin requests (anything but GET/HEAD) must send `Origin` equal to
+      the configured public base URL; a missing or foreign Origin is 403.
+    - Login limits failed attempts to 5 per 15 minutes per source address.
+
+    Transport limits
+    - Admin JSON bodies: 1 MiB, content type `application/json`, single document,
+      unknown fields rejected.
+    - Multipart uploads: 8 MiB file plus 64 KiB of form overhead.
+    - Errors always use `{"error":{"code","message"}}`; internal paths and stack
+      traces are never returned.
+
+    Caching
+    - JSON metadata is `no-store`.
+    - Committed files are `private, no-cache` with `ETag` and Range support.
+servers:
+  - url: /
+    description: This factory instance
+tags:
+  - name: Health
+  - name: Docs
+  - name: SDK
+  - name: Admin session
+  - name: Admin library
+  - name: Admin characters
+  - name: Admin designs
+  - name: Admin packs
+  - name: Admin jobs
+  - name: Admin keys
+security: []
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: Read-only client key. Never accepted by admin routes.
+    OwnerCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-restick_admin
+      description: Opaque owner session set by `POST /api/v1/admin/session`; HttpOnly, Secure, SameSite=Strict, Path=/, 24 h.
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: page_size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Query:
+      name: q
+      in: query
+      description: Case-insensitive-ish text filter (SQLite LIKE) over the listed fields.
+      schema: { type: string }
+    PackID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ResourceID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    ObjectKey:
+      name: key
+      in: path
+      required: true
+      description: Data-root relative committed object path (`packs/<uuid>/v<n>/<member>`). Allowlisted per committed version.
+      schema: { type: string }
+    Version:
+      name: version
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+
+  responses:
+    BadRequest:
+      description: Malformed JSON, body or query parameter.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Origin missing or not the configured public base URL.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Resource not found or not visible.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Conflict such as reserved slug, active job or non-empty group.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Gone:
+      description: Pack revoked.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    TooLarge:
+      description: Body or upload exceeds the documented limit.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unprocessable:
+      description: Well-formed request that violates validation rules.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RateLimited:
+      description: Too many failed logins from this source in the window.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Internal:
+      description: Unexpected server-side failure.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              examples: [unauthorized, not_found, pack_revoked, job_active, group_not_empty, invalid_content_type, payload_too_large, rate_limited]
+            message: { type: string }
+      additionalProperties: false
+
+    Health:
+      type: object
+      required: [status, service]
+      properties:
+        status: { type: string, const: ok }
+        service: { type: string, const: api_svc }
+
+    Timestamp:
+      type: string
+      description: UTC RFC3339 at second precision.
+      examples: ["2026-11-11T09:30:15Z"]
+
+    Colors:
+      type: object
+      required: [primary, secondary, accent, line]
+      properties:
+        primary: { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
+        secondary: { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
+        accent: { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
+        line: { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
+      additionalProperties: false
+
+    Group:
+      type: object
+      required: [id, name, description, sort_order, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        sort_order: { type: integer }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    GroupDraft:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        sort_order: { type: integer }
+      additionalProperties: false
+
+    GroupList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Group' }
+
+    Fragment:
+      type: object
+      required: [id, group_id, name, name_en, prompt, scope, archived, created_at, updated_at]
+      properties:
+        id: { type: string }
+        group_id: { type: string }
+        name: { type: string }
+        name_en: { type: string }
+        prompt: { type: string }
+        notes: { type: string }
+        source: { type: string }
+        scope: { type: string, enum: [identity, pack, sticker] }
+        colors: { $ref: '#/components/schemas/Colors' }
+        archived: { type: boolean }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    FragmentDraft:
+      type: object
+      required: [group_id, name, prompt, scope]
+      properties:
+        group_id: { type: string }
+        name: { type: string }
+        name_en: { type: string }
+        prompt: { type: string }
+        notes: { type: string }
+        source: { type: string }
+        scope: { type: string, enum: [identity, pack, sticker] }
+        colors: { $ref: '#/components/schemas/Colors' }
+      additionalProperties: false
+
+    FragmentPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Fragment' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    Character:
+      type: object
+      required: [id, name, description, identity_notes, rights_notes, archived, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        identity_notes: { type: string }
+        rights_notes: { type: string }
+        reference_asset_id: { type: string }
+        archived: { type: boolean }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    CharacterDraft:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        identity_notes: { type: string }
+        rights_notes: { type: string }
+        reference_asset_id: { type: string }
+      additionalProperties: false
+
+    CharacterList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Character' }
+
+    ReferenceAsset:
+      type: object
+      required: [id, filename, content_type, byte_size, width, height, checksum_sha256, created_at]
+      properties:
+        id: { type: string }
+        filename: { type: string }
+        content_type: { type: string, enum: [image/png, image/jpeg, image/webp] }
+        byte_size: { type: integer, minimum: 1 }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        checksum_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+
+    Cell:
+      type: object
+      properties:
+        action: { type: string }
+        expression: { type: string }
+        fragment_ids: { type: array, items: { type: string } }
+        free_text: { type: string }
+      additionalProperties: false
+
+    Draft:
+      type: object
+      required: [name, rows, columns, cells]
+      properties:
+        id: { type: string, description: Ignored on create and on compile/suggest. }
+        name: { type: string }
+        character_id: { type: string }
+        group_ids: { type: array, items: { type: string } }
+        fragment_ids: { type: array, items: { type: string } }
+        pinned_fragment_ids: { type: array, items: { type: string } }
+        palette_id: { type: string }
+        free_text: { type: string }
+        rows: { type: integer, minimum: 1, maximum: 8 }
+        columns: { type: integer, minimum: 1, maximum: 8 }
+        cells: { type: array, items: { $ref: '#/components/schemas/Cell' } }
+        outline_width:
+          type: integer
+          minimum: 0
+          maximum: 16
+          default: 4
+          description: Omitted means 4 (`studio.DefaultOutlineWidth`); an explicit 0 means no outline.
+        outline_color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$|^$'
+          description: Empty means #FFFFFF.
+      additionalProperties: false
+
+    Selection:
+      type: object
+      required: [group_id, group_name, fragment_id, name, prompt, scope]
+      properties:
+        group_id: { type: string }
+        group_name: { type: string }
+        fragment_id: { type: string }
+        name: { type: string }
+        prompt: { type: string }
+        scope: { type: string, enum: [identity, pack, sticker] }
+
+    SnapshotCharacter:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        identity_notes: { type: string }
+
+    SnapshotPalette:
+      type: object
+      properties:
+        fragment_id: { type: string }
+        name: { type: string }
+        prompt: { type: string }
+        primary: { type: string }
+        secondary: { type: string }
+        accent: { type: string }
+        line: { type: string }
+
+    SnapshotCell:
+      type: object
+      required: [row, column]
+      properties:
+        row: { type: integer }
+        column: { type: integer }
+        action: { type: string }
+        expression: { type: string }
+        free_text: { type: string }
+        fragments:
+          type: array
+          items: { $ref: '#/components/schemas/Selection' }
+
+    Snapshot:
+      type: object
+      required: [schema_version, selections, rows, columns, outline_width, outline_color, cells, compiled_at]
+      properties:
+        schema_version: { type: integer, const: 1 }
+        character: { $ref: '#/components/schemas/SnapshotCharacter' }
+        selections:
+          type: array
+          items: { $ref: '#/components/schemas/Selection' }
+        palette: { $ref: '#/components/schemas/SnapshotPalette' }
+        free_text: { type: string }
+        rows: { type: integer }
+        columns: { type: integer }
+        outline_width: { type: integer, minimum: 0, maximum: 16 }
+        outline_color: { type: string }
+        cells:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotCell' }
+        compiled_at: { $ref: '#/components/schemas/Timestamp' }
+
+    Design:
+      type: object
+      required: [id, name, rows, columns, outline_width, outline_color, draft, snapshot, compiled_prompt, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        character_id: { type: string }
+        rows: { type: integer }
+        columns: { type: integer }
+        outline_width: { type: integer }
+        outline_color: { type: string }
+        draft: { $ref: '#/components/schemas/Draft' }
+        snapshot: { $ref: '#/components/schemas/Snapshot' }
+        compiled_prompt: { type: string }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    DesignPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Design' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    CompiledDesign:
+      type: object
+      required: [compiled_prompt, snapshot]
+      properties:
+        compiled_prompt: { type: string }
+        snapshot: { $ref: '#/components/schemas/Snapshot' }
+
+    PackSummary:
+      type: object
+      required: [id, slug, name, author, tags, sticker_count, version, thumbnail_url, checksum_sha256]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        author: { type: string }
+        tags: { type: array, items: { type: string } }
+        sticker_count: { type: integer }
+        version: { type: integer }
+        thumbnail_url: { type: string }
+        checksum_sha256: { type: string }
+
+    PackSticker:
+      type: object
+      required: [file, emoji_hint, keywords, width, height, file_url, thumb_url]
+      properties:
+        file: { type: string }
+        emoji_hint: { type: string }
+        keywords: { type: array, items: { type: string } }
+        width: { type: integer }
+        height: { type: integer }
+        file_url: { type: string }
+        thumb_url: { type: string }
+
+    PackDetail:
+      allOf:
+        - $ref: '#/components/schemas/PackSummary'
+        - type: object
+          required: [stickers]
+          properties:
+            stickers:
+              type: array
+              items: { $ref: '#/components/schemas/PackSticker' }
+
+    PackPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PackSummary' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    BundleMeta:
+      type: object
+      required: [url, checksum_sha256, version]
+      properties:
+        url: { type: string }
+        checksum_sha256: { type: string }
+        version: { type: integer }
+
+    Tombstone:
+      type: object
+      required: [pack_id, revoked_at, reason_code, checksum_sha256]
+      properties:
+        pack_id: { type: string }
+        revoked_at: { $ref: '#/components/schemas/Timestamp' }
+        reason_code: { type: string }
+        checksum_sha256: { type: string }
+
+    TombstoneList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Tombstone' }
+
+    AdminPackSource:
+      type: object
+      required: [id, filename, checksum_sha256, width, height, byte_size]
+      properties:
+        id: { type: string }
+        filename: { type: string }
+        checksum_sha256: { type: string }
+        width: { type: integer }
+        height: { type: integer }
+        byte_size: { type: integer }
+
+    AdminPackSticker:
+      type: object
+      required: [sort_order, filename, checksum_sha256, width, height, emoji_hint, keywords, object_url, thumb_url]
+      properties:
+        sort_order: { type: integer }
+        filename: { type: string }
+        checksum_sha256: { type: string }
+        width: { type: integer }
+        height: { type: integer }
+        emoji_hint: { type: string }
+        keywords: { type: array, items: { type: string } }
+        object_url: { type: string }
+        thumb_url: { type: string }
+
+    AdminPack:
+      type: object
+      required: [id, slug, name, author, description, tags, status, current_version, sticker_count, checksum_sha256, thumbnail_url, source, created_at, updated_at]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        author: { type: string }
+        description: { type: string }
+        tags: { type: array, items: { type: string } }
+        design_id: { type: string }
+        status: { type: string, enum: [draft, ready, revoked] }
+        current_version: { type: integer }
+        sticker_count: { type: integer }
+        checksum_sha256: { type: string }
+        thumbnail_url: { type: string }
+        source:
+          oneOf:
+            - $ref: '#/components/schemas/AdminPackSource'
+            - type: 'null'
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+
+    AdminPackDetail:
+      allOf:
+        - $ref: '#/components/schemas/AdminPack'
+        - type: object
+          required: [stickers, bundle_url]
+          properties:
+            stickers:
+              type: array
+              items: { $ref: '#/components/schemas/AdminPackSticker' }
+            bundle_url: { type: string }
+
+    AdminPackPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminPack' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    PackCreate:
+      type: object
+      required: [slug, name]
+      properties:
+        slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }
+        name: { type: string }
+        author: { type: string }
+        description: { type: string }
+        tags: { type: array, items: { type: string } }
+        design_id: { type: string }
+      additionalProperties: false
+
+    PackUpdate:
+      type: object
+      required: [name, author, description, tags]
+      properties:
+        name: { type: string }
+        author: { type: string }
+        description: { type: string }
+        tags: { type: array, items: { type: string } }
+        design_id: { type: string }
+      additionalProperties: false
+
+    JobRequest:
+      type: object
+      required: [schema_version, job_id, pack_id, version, design, source, catalog, rows, columns, outline_width, outline_color]
+      properties:
+        schema_version: { type: integer, const: 1 }
+        job_id: { type: string }
+        pack_id: { type: string }
+        version: { type: integer }
+        design_id: { type: string }
+        design: { $ref: '#/components/schemas/Snapshot' }
+        source:
+          type: object
+          properties:
+            id: { type: string }
+            filename: { type: string }
+            checksum_sha256: { type: string }
+            width: { type: integer }
+            height: { type: integer }
+            byte_size: { type: integer }
+        catalog:
+          type: object
+          properties:
+            slug: { type: string }
+            name: { type: string }
+            author: { type: string }
+            description: { type: string }
+            tags: { type: array, items: { type: string } }
+        rows: { type: integer }
+        columns: { type: integer }
+        outline_width: { type: integer }
+        outline_color: { type: string }
+
+    Job:
+      type: object
+      required: [id, pack_id, version, status, request, result, created_at, started_at, finished_at]
+      properties:
+        id: { type: string }
+        pack_id: { type: string }
+        version: { type: integer }
+        status: { type: string, enum: [queued, running, succeeded, failed, interrupted] }
+        request: { $ref: '#/components/schemas/JobRequest' }
+        result:
+          description: Publication summary after success (`restick.job-publication.v1`), otherwise null. Processing failures stay job data and are never HTTP errors.
+          oneOf:
+            - type: object
+            - type: 'null'
+        error_code:
+          type: string
+          enum: [timeout, processor_failed, result_invalid, stage_failed, commit_failed, publish_failed, shutdown, startup_recovery, pack_revoked]
+        error_message: { type: string }
+        diagnostics: { type: string }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        started_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        finished_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+
+    LoginRequest:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string }
+      additionalProperties: false
+
+    SessionInfo:
+      type: object
+      required: [username]
+      properties:
+        username: { type: string, const: admin }
+
+    CreatedKey:
+      type: object
+      required: [id, name, prefix, raw]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        prefix: { type: string }
+        raw:
+          type: string
+          description: Returned exactly once by create/rotate.
+
+    Key:
+      type: object
+      required: [id, name, prefix, active, created_at, expires_at, disabled_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        prefix: { type: string }
+        active: { type: boolean }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        expires_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        disabled_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+
+    KeyList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Key' }
+
+    CreateKeyRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        expires_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+      additionalProperties: false
+
 paths:
   /healthz:
     get:
-      summary: Process liveness
+      tags: [Health]
+      summary: Liveness
       responses:
         "200":
           description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } }
+
+  /openapi.yaml:
+    get:
+      tags: [Docs]
+      summary: Canonical OpenAPI document (runtime copy)
+      responses:
+        "200":
+          description: YAML document
+          content: { application/yaml: { schema: { type: string } } }
+        "500":
+          $ref: '#/components/responses/Internal'
+
+  /docs:
+    get:
+      tags: [Docs]
+      summary: Swagger UI shell pointing at /openapi.yaml
+      responses:
+        "200":
+          description: HTML
+          content: { text/html: { schema: { type: string } } }
+
+  /api/v1/packs:
+    get:
+      tags: [SDK]
+      summary: List ready packs
+      description: Ready packs only, ordered by updated_at DESC then id. Draft and revoked packs are never listed.
+      security:
+        - ApiKeyAuth: []
+        - OwnerCookie: []
+      parameters:
+        - name: tag
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        "200":
+          description: One page
+          content: { application/json: { schema: { $ref: '#/components/schemas/PackPage' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "500": { $ref: '#/components/responses/Internal' }
+
+  /api/v1/packs/{id}:
+    get:
+      tags: [SDK]
+      summary: Ready pack summary with stickers
+      security:
+        - ApiKeyAuth: []
+        - OwnerCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+      responses:
+        "200":
+          description: Summary plus sticker list and ETag
+          content: { application/json: { schema: { $ref: '#/components/schemas/PackDetail' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "410": { $ref: '#/components/responses/Gone' }
+    head:
+      tags: [SDK]
+      summary: Visibility and checksum ETag without a body
+      security:
+        - ApiKeyAuth: []
+        - OwnerCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+      responses:
+        "200": { description: "Same visibility as GET, empty body" }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "410": { $ref: '#/components/responses/Gone' }
+
+  /api/v1/packs/{id}/bundle:
+    get:
+      tags: [SDK]
+      summary: Download URL of the current committed bundle
+      security:
+        - ApiKeyAuth: []
+        - OwnerCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+      responses:
+        "200":
+          description: Bundle metadata
+          content: { application/json: { schema: { $ref: '#/components/schemas/BundleMeta' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "410": { $ref: '#/components/responses/Gone' }
+
+  /api/v1/tombstones:
+    get:
+      tags: [SDK]
+      summary: Revocation delta
+      description: Inclusive `revoked_at >= since`, ordered by (revoked_at, id), no pagination. Missing since means epoch.
+      security:
+        - ApiKeyAuth: []
+        - OwnerCookie: []
+      parameters:
+        - name: since
+          in: query
+          schema: { $ref: '#/components/schemas/Timestamp' }
+      responses:
+        "200":
+          description: Tombstones
+          content: { application/json: { schema: { $ref: '#/components/schemas/TombstoneList' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/objects/{key}:
+    get:
+      tags: [SDK]
+      summary: Immutable committed object
+      description: "Only members allowlisted by the committed version of a ready pack. Auth and pack status are checked before Range or conditional handling. `Cache-Control: private, no-cache` with `ETag`."
+      security:
+        - ApiKeyAuth: []
+        - OwnerCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ObjectKey'
+      responses:
+        "200":
+          description: WebP, pack.json or thumbnail bytes
           content:
-            application/json:
-              schema:
-                type: object
-                required: [status, service]
-                properties:
-                  status:
-                    type: string
-                  service:
-                    type: string
+            image/webp: { schema: { type: string, format: binary } }
+            application/json: { schema: { type: object } }
+        "206": { description: Partial content when Range is valid }
+        "304": { description: Not modified for a matching If-None-Match }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "410": { $ref: '#/components/responses/Gone' }
+    head:
+      tags: [SDK]
+      summary: Object metadata
+      security:
+        - ApiKeyAuth: []
+        - OwnerCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ObjectKey'
+      responses:
+        "200": { description: Headers only }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "410": { $ref: '#/components/responses/Gone' }
+
+  /v1/bundles/{id}/v/{version}:
+    get:
+      tags: [SDK]
+      summary: Committed ZIP of any retained version
+      security:
+        - ApiKeyAuth: []
+        - OwnerCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+        - $ref: '#/components/parameters/Version'
+      responses:
+        "200":
+          description: ZIP (streamed, Range supported)
+          content: { application/zip: { schema: { type: string, format: binary } } }
+        "206": { description: Partial content when Range is valid }
+        "304": { description: Not modified for a matching If-None-Match }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "410": { $ref: '#/components/responses/Gone' }
+
+  /api/v1/admin/session:
+    post:
+      tags: [Admin session]
+      summary: Log in with the owner password
+      description: Requires Origin. Sets `__Host-restick_admin` (HttpOnly, Secure, SameSite=Strict, Path=/, 24 h). The raw token is never returned in the body.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LoginRequest' } } }
+      responses:
+        "204": { description: Session cookie set }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "409":
+          description: Owner not initialised
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+        "429": { $ref: '#/components/responses/RateLimited' }
+    get:
+      tags: [Admin session]
+      summary: Current session username
+      security:
+        - OwnerCookie: []
+      responses:
+        "200":
+          description: Session info
+          content: { application/json: { schema: { $ref: '#/components/schemas/SessionInfo' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [Admin session]
+      summary: Log out and revoke the session server-side
+      description: Requires Origin. Clears the cookie.
+      security:
+        - OwnerCookie: []
+      responses:
+        "204": { description: Session revoked }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/admin/fragment-groups:
+    get:
+      tags: [Admin library]
+      summary: List fragment groups
+      security: [{ OwnerCookie: [] }]
+      responses:
+        "200":
+          description: Groups ordered by sort_order then name
+          content: { application/json: { schema: { $ref: '#/components/schemas/GroupList' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Admin library]
+      summary: Create a group
+      security: [{ OwnerCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/GroupDraft' } } }
+      responses:
+        "201":
+          description: Created group
+          content: { application/json: { schema: { $ref: '#/components/schemas/Group' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/fragment-groups/{id}:
+    put:
+      tags: [Admin library]
+      summary: Update a group
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/GroupDraft' } } }
+      responses:
+        "200":
+          description: Updated group
+          content: { application/json: { schema: { $ref: '#/components/schemas/Group' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [Admin library]
+      summary: Delete an empty group
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/admin/fragments:
+    get:
+      tags: [Admin library]
+      summary: List fragments
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Query'
+        - name: group_id
+          in: query
+          schema: { type: string }
+        - name: scope
+          in: query
+          schema: { type: string, enum: [identity, pack, sticker] }
+        - name: include_archived
+          in: query
+          schema: { type: boolean, default: false }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        "200":
+          description: One page ordered by group sort_order, name, id
+          content: { application/json: { schema: { $ref: '#/components/schemas/FragmentPage' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+    post:
+      tags: [Admin library]
+      summary: Create a fragment
+      security: [{ OwnerCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/FragmentDraft' } } }
+      responses:
+        "201":
+          description: Created fragment
+          content: { application/json: { schema: { $ref: '#/components/schemas/Fragment' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/fragments/{id}:
+    get:
+      tags: [Admin library]
+      summary: Get one fragment
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "200":
+          description: Fragment
+          content: { application/json: { schema: { $ref: '#/components/schemas/Fragment' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin library]
+      summary: Update a fragment
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/FragmentDraft' } } }
+      responses:
+        "200":
+          description: Updated fragment
+          content: { application/json: { schema: { $ref: '#/components/schemas/Fragment' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [Admin library]
+      summary: Archive a fragment
+      description: Archive only; rows are kept so saved prompts never change.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "204": { description: Archived }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/characters:
+    get:
+      tags: [Admin characters]
+      summary: List active characters
+      security: [{ OwnerCookie: [] }]
+      responses:
+        "200":
+          description: Characters ordered by name
+          content: { application/json: { schema: { $ref: '#/components/schemas/CharacterList' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Admin characters]
+      summary: Create a character
+      security: [{ OwnerCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CharacterDraft' } } }
+      responses:
+        "201":
+          description: Created character
+          content: { application/json: { schema: { $ref: '#/components/schemas/Character' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/characters/{id}:
+    get:
+      tags: [Admin characters]
+      summary: Get one character
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "200":
+          description: Character
+          content: { application/json: { schema: { $ref: '#/components/schemas/Character' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin characters]
+      summary: Update a character
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CharacterDraft' } } }
+      responses:
+        "200":
+          description: Updated character
+          content: { application/json: { schema: { $ref: '#/components/schemas/Character' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [Admin characters]
+      summary: Archive a character
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "204": { description: Archived }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/reference-assets:
+    post:
+      tags: [Admin characters]
+      summary: Upload a private reference image
+      description: Multipart `file` part, PNG/JPEG/WebP, at most 8 MiB and 4096 px per edge, not animated. Bytes are never served by the public object routes.
+      security: [{ OwnerCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Stored asset metadata
+          content: { application/json: { schema: { $ref: '#/components/schemas/ReferenceAsset' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/reference-assets/{id}:
+    get:
+      tags: [Admin characters]
+      summary: Stream the private reference bytes
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "200":
+          description: Original image bytes, `Cache-Control no-store`
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/designs:
+    get:
+      tags: [Admin designs]
+      summary: List saved designs
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        "200":
+          description: One page ordered by updated_at DESC, id ASC
+          content: { application/json: { schema: { $ref: '#/components/schemas/DesignPage' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Admin designs]
+      summary: Save a new design
+      description: A body `id` is ignored; this route always creates.
+      security: [{ OwnerCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Draft' } } }
+      responses:
+        "201":
+          description: Saved design with its frozen snapshot
+          content: { application/json: { schema: { $ref: '#/components/schemas/Design' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/designs/compile:
+    post:
+      tags: [Admin designs]
+      summary: Compile a draft without saving
+      security: [{ OwnerCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Draft' } } }
+      responses:
+        "200":
+          description: Prompt text and snapshot
+          content: { application/json: { schema: { $ref: '#/components/schemas/CompiledDesign' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/designs/suggest:
+    post:
+      tags: [Admin designs]
+      summary: Suggest fragment selections without saving
+      security: [{ OwnerCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Draft' } } }
+      responses:
+        "200":
+          description: Suggested draft
+          content: { application/json: { schema: { $ref: '#/components/schemas/Draft' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/designs/{id}:
+    get:
+      tags: [Admin designs]
+      summary: Get a saved design
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "200":
+          description: Design
+          content: { application/json: { schema: { $ref: '#/components/schemas/Design' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin designs]
+      summary: Rewrite a design in place
+      description: The path id wins over any body id.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Draft' } } }
+      responses:
+        "200":
+          description: Updated design
+          content: { application/json: { schema: { $ref: '#/components/schemas/Design' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [Admin designs]
+      summary: Delete a design
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/packs:
+    get:
+      tags: [Admin packs]
+      summary: List packs in any state
+      description: Unlike the SDK list this includes draft and revoked packs. Ordered by updated_at DESC then id.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Query'
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, ready, revoked] }
+        - name: tag
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        "200":
+          description: One page
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminPackPage' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+    post:
+      tags: [Admin packs]
+      summary: Create a draft pack
+      security: [{ OwnerCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PackCreate' } } }
+      responses:
+        "201":
+          description: Created draft
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminPack' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/packs/{id}:
+    get:
+      tags: [Admin packs]
+      summary: Pack detail including the current version stickers
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+      responses:
+        "200":
+          description: Admin pack detail
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminPackDetail' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin packs]
+      summary: Update catalog metadata
+      description: Never changes committed version bytes or their manifest.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PackUpdate' } } }
+      responses:
+        "200":
+          description: Updated pack
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminPack' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "410": { $ref: '#/components/responses/Gone' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [Admin packs]
+      summary: Delete a draft pack
+      description: Only a draft with no active job and no committed version. Ready packs must be revoked instead.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/admin/packs/{id}/source:
+    post:
+      tags: [Admin packs]
+      summary: Upload the sheet for a pack
+      description: Multipart `file` part. Replaces the current source; the policy for PNG/JPEG/WebP, 8 MiB and 4096 px matches reference uploads.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Pack with the new source metadata
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminPack' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "410": { $ref: '#/components/responses/Gone' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/packs/{id}/process:
+    post:
+      tags: [Admin packs]
+      summary: Queue a processing job
+      description: Reserves the next version and returns the queued job. A finished-but-failed job is job data, not an HTTP failure.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+      responses:
+        "202":
+          description: Queued job
+          content: { application/json: { schema: { $ref: '#/components/schemas/Job' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "410": { $ref: '#/components/responses/Gone' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/packs/{id}/revoke:
+    post:
+      tags: [Admin packs]
+      summary: Revoke a pack
+      description: Requires a committed version. Idempotent; a second call keeps the single tombstone and timestamp.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+      responses:
+        "200":
+          description: Revoked pack
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminPack' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/admin/jobs/{id}:
+    get:
+      tags: [Admin jobs]
+      summary: Get a job
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "200":
+          description: Job object
+          content: { application/json: { schema: { $ref: '#/components/schemas/Job' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/api-keys:
+    get:
+      tags: [Admin keys]
+      summary: List client keys
+      description: Metadata only; hashes and raw values are never returned.
+      security: [{ OwnerCookie: [] }]
+      responses:
+        "200":
+          description: Keys newest first
+          content: { application/json: { schema: { $ref: '#/components/schemas/KeyList' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Admin keys]
+      summary: Create a read-only client key
+      description: The raw key is returned exactly once by this response.
+      security: [{ OwnerCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateKeyRequest' } } }
+      responses:
+        "201":
+          description: Key with its one-time raw value
+          content: { application/json: { schema: { $ref: '#/components/schemas/CreatedKey' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/api-keys/{id}/rotate:
+    post:
+      tags: [Admin keys]
+      summary: Rotate a key
+      description: Disables the old key and creates a replacement with the same name and expiry in one transaction.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "201":
+          description: Replacement key with its one-time raw value
+          content: { application/json: { schema: { $ref: '#/components/schemas/CreatedKey' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/api-keys/{id}:
+    delete:
+      tags: [Admin keys]
+      summary: Disable a key
+      description: Idempotent; the first disable time is preserved.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "204": { description: Disabled }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }

@@ -36,13 +36,19 @@ func NewPublicHandler(catalog *packs.Service, files *assets.Store, authSvc *auth
 		baseURL: strings.TrimRight(publicBaseURL, "/"),
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v1/packs", api.listPacks)
-	mux.HandleFunc("GET /api/v1/packs/{id}", api.getPack)
-	mux.HandleFunc("GET /api/v1/packs/{id}/bundle", api.bundleMeta)
-	mux.HandleFunc("GET /api/v1/tombstones", api.tombstones)
-	mux.HandleFunc("GET /v1/objects/{key...}", api.serveObject)
-	mux.HandleFunc("GET /v1/bundles/{id}/v/{version}", api.serveBundle)
+	api.mount(mux)
 	return mux
+}
+
+// mount registers the SDK read routes on a shared mux so NewHandler can serve
+// them beside the admin API and the static UI.
+func (a *publicAPI) mount(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/v1/packs", a.listPacks)
+	mux.HandleFunc("GET /api/v1/packs/{id}", a.getPack)
+	mux.HandleFunc("GET /api/v1/packs/{id}/bundle", a.bundleMeta)
+	mux.HandleFunc("GET /api/v1/tombstones", a.tombstones)
+	mux.HandleFunc("GET /v1/objects/{key...}", a.serveObject)
+	mux.HandleFunc("GET /v1/bundles/{id}/v/{version}", a.serveBundle)
 }
 
 // authorize accepts a client key header or the owner session cookie. Query

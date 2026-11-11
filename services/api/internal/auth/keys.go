@@ -150,6 +150,68 @@ func (s *Service) ValidateKey(ctx context.Context, raw string, now time.Time) er
 	return nil
 }
 
+// Key is the metadata of one client key. Neither the hash nor the raw value is
+// readable after creation.
+type Key struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Prefix     string     `json:"prefix"`
+	Active     bool       `json:"active"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ExpiresAt  *time.Time `json:"expires_at"`
+	DisabledAt *time.Time `json:"disabled_at"`
+}
+
+// ListKeys returns every key newest first; only metadata, never key_hash.
+func (s *Service) ListKeys(ctx context.Context) ([]Key, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, prefix, active, created_at, expires_at, disabled_at
+		FROM api_keys ORDER BY created_at DESC, id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("auth: list api keys: %w", err)
+	}
+	defer rows.Close()
+
+	items := []Key{}
+	for rows.Next() {
+		var (
+			key                   Key
+			active                int
+			createdAt             string
+			expiresAt, disabledAt sql.NullString
+		)
+		if err := rows.Scan(&key.ID, &key.Name, &key.Prefix, &active, &createdAt, &expiresAt, &disabledAt); err != nil {
+			return nil, fmt.Errorf("auth: scan api key: %w", err)
+		}
+		key.Active = active == 1
+		key.CreatedAt = parseSeconds(createdAt)
+		key.ExpiresAt = optionalSeconds(expiresAt)
+		key.DisabledAt = optionalSeconds(disabledAt)
+		items = append(items, key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("auth: read api keys: %w", err)
+	}
+	return items, nil
+}
+
+// parseSeconds reads the canonical UTC-second text timestamp.
+func parseSeconds(value string) time.Time {
+	parsed, err := time.Parse("2006-01-02T15:04:05Z", value)
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed
+}
+
+func optionalSeconds(value sql.NullString) *time.Time {
+	if !value.Valid || value.String == "" {
+		return nil
+	}
+	parsed := parseSeconds(value.String)
+	return &parsed
+}
+
 func newKey(name string, expiresAt *time.Time) (CreatedKey, error) {
 	secret, err := randomSecret()
 	if err != nil {
