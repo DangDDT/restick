@@ -99,7 +99,9 @@ List<int> _packJson(List<Map<String, String>> stickers) {
 const List<int> _stickerBytes = <int>[1, 2, 3, 4];
 const List<int> _thumbBytes = <int>[9, 8, 7];
 
-List<int> _validZip() {
+/// A valid bundle plus extra members. Only the unsafe extra should be able to
+/// make extraction fail, so each guard stays discriminating.
+List<int> _validZip([List<_ZipEntry> extra = const <_ZipEntry>[]]) {
   return _buildZip(<_ZipEntry>[
     _ZipEntry(
       "pack.json",
@@ -110,27 +112,48 @@ List<int> _validZip() {
     _ZipEntry("thumb.webp", _thumbBytes),
     _ZipEntry("000.webp", _stickerBytes),
     _ZipEntry("thumbs/thumb_000.webp", _thumbBytes),
+    ...extra,
   ]);
 }
 
 String _expectedChecksum() => sha256.convert(_stickerBytes).toString();
 
-Future<void> _expectRejected(List<int> zip) async {
+/// Extracts with a pre-created destination holding a sentinel file and proves
+/// that every invalid ZIP is rejected before the destination is deleted or
+/// written, and that no file is ever created outside it.
+Future<void> _expectRejected(
+  List<int> Function(Directory root) buildZip,
+) async {
   final Directory root = await Directory.systemTemp.createTemp("restick_zip_");
   addTearDown(() => root.delete(recursive: true));
-  final Directory dest = Directory(p.join(root.path, "dest"));
+  final Directory dest = Directory(p.join(root.path, "dest"))
+    ..createSync(recursive: true);
+  final File sentinel = File(p.join(dest.path, "sentinel.bin"))
+    ..writeAsStringSync("keep-me");
 
   await expectLater(
     PackDownloader().unzipAndVerify(
-      zipBytes: zip,
+      zipBytes: buildZip(root),
       dest: dest,
       expectedChecksum: _expectedChecksum(),
     ),
     throwsA(isA<FormatException>()),
   );
+
+  expect(sentinel.existsSync(), isTrue);
+  expect(sentinel.readAsStringSync(), "keep-me");
   expect(
-    root.listSync(recursive: true).whereType<File>().map((File f) => f.path),
-    isEmpty,
+    Directory(dest.path)
+        .listSync(recursive: true)
+        .whereType<File>()
+        .map((File file) => p.relative(file.path, from: dest.path)),
+    <String>["sentinel.bin"],
+  );
+  expect(
+    Directory(root.path)
+        .listSync()
+        .map((FileSystemEntity entity) => p.basename(entity.path)),
+    <String>["dest"],
     reason: "no file may be written outside the destination",
   );
 }
@@ -140,15 +163,7 @@ void main() {
 
   test("rejects traversal member", () async {
     await _expectRejected(
-      _buildZip(<_ZipEntry>[
-        _ZipEntry(
-          "pack.json",
-          _packJson(<Map<String, String>>[
-            <String, String>{"file": "000.webp", "thumb": "thumbs/thumb_000.webp"},
-          ]),
-        ),
-        _ZipEntry("000.webp", _stickerBytes),
-        _ZipEntry("thumbs/thumb_000.webp", _thumbBytes),
+      (Directory root) => _validZip(<_ZipEntry>[
         _ZipEntry("../evil.webp", _stickerBytes),
       ]),
     );
@@ -156,15 +171,15 @@ void main() {
 
   test("rejects absolute member", () async {
     await _expectRejected(
-      _buildZip(<_ZipEntry>[
-        _ZipEntry("/tmp/evil.webp", _stickerBytes),
+      (Directory root) => _validZip(<_ZipEntry>[
+        _ZipEntry(p.join(root.path, "evil.webp"), _stickerBytes),
       ]),
     );
   });
 
   test("rejects nested escape member", () async {
     await _expectRejected(
-      _buildZip(<_ZipEntry>[
+      (Directory root) => _validZip(<_ZipEntry>[
         _ZipEntry("thumbs/../../evil.webp", _stickerBytes),
       ]),
     );
@@ -172,7 +187,7 @@ void main() {
 
   test("rejects windows separator member", () async {
     await _expectRejected(
-      _buildZip(<_ZipEntry>[
+      (Directory root) => _validZip(<_ZipEntry>[
         _ZipEntry("thumbs\\evil.webp", _stickerBytes),
       ]),
     );
@@ -180,44 +195,35 @@ void main() {
 
   test("rejects duplicate member", () async {
     await _expectRejected(
-      _buildZip(<_ZipEntry>[
-        _ZipEntry(
-          "pack.json",
-          _packJson(<Map<String, String>>[
-            <String, String>{"file": "000.webp", "thumb": "thumbs/thumb_000.webp"},
-          ]),
-        ),
-        _ZipEntry("000.webp", _stickerBytes),
-        _ZipEntry("000.webp", <int>[5, 6, 7, 8]),
-        _ZipEntry("thumbs/thumb_000.webp", _thumbBytes),
+      (Directory root) => _validZip(<_ZipEntry>[
+        _ZipEntry("extra.webp", <int>[5, 6, 7]),
+        _ZipEntry("extra.webp", <int>[8, 9, 10]),
       ]),
     );
   });
 
   test("rejects symlink member", () async {
     await _expectRejected(
-      _buildZip(<_ZipEntry>[
-        _ZipEntry(
-          "pack.json",
-          _packJson(<Map<String, String>>[
-            <String, String>{"file": "000.webp", "thumb": "thumbs/thumb_000.webp"},
-          ]),
-        ),
-        _ZipEntry("000.webp", utf8.encode("/etc/passwd"), unixMode: 0xA1FF),
-        _ZipEntry("thumbs/thumb_000.webp", _thumbBytes),
+      (Directory root) => _validZip(<_ZipEntry>[
+        _ZipEntry("link.webp", utf8.encode("/etc/passwd"), unixMode: 0xA1FF),
       ]),
     );
   });
 
   test("rejects manifest reference escape", () async {
+    // Combined invariant: an unsafe manifest reference must be refused before
+    // the destination is mutated; membership would also reject it, but the
+    // path guard fires first. No exception message is pinned.
     await _expectRejected(
-      _buildZip(<_ZipEntry>[
+      (Directory root) => _buildZip(<_ZipEntry>[
         _ZipEntry(
           "pack.json",
           _packJson(<Map<String, String>>[
             <String, String>{"file": "../evil.webp", "thumb": "thumbs/thumb_000.webp"},
           ]),
         ),
+        _ZipEntry("thumb.webp", _thumbBytes),
+        _ZipEntry("000.webp", _stickerBytes),
         _ZipEntry("thumbs/thumb_000.webp", _thumbBytes),
       ]),
     );

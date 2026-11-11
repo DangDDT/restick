@@ -204,6 +204,13 @@ func (f *publicFixture) revoke(id string, revokedAt string) {
 	}
 }
 
+func (f *publicFixture) pinUpdatedAt(id, updatedAt string) {
+	f.t.Helper()
+	if _, err := f.db.Exec(`UPDATE packs SET updated_at = ? WHERE id = ?`, updatedAt, id); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
 func (f *publicFixture) request(method, target string, headers map[string]string) *httptest.ResponseRecorder {
 	f.t.Helper()
 	req := httptest.NewRequest(method, target, nil)
@@ -230,14 +237,18 @@ func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 
 func TestPublicCatalogVisibilityAndPagination(t *testing.T) {
 	f := newPublicFixture(t)
-	f.publish("alpha", 2, "animals", "cute")
+	alpha := f.publish("alpha", 2, "animals", "cute")
 	second := f.publish("beta", 1, "animals")
-	f.publish("gamma", 1, "space")
+	gamma := f.publish("gamma", 1, "space")
 	draft, err := f.catalog.Create(context.Background(), packs.PackDraft{Slug: "draft-pack", Name: "Draft", Author: "Tester"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.revoke(second.pack.ID, "2026-11-10T10:00:00Z")
+	// Pin fixed UTC-second timestamps so ordering never depends on wall clock
+	// or random UUIDs: gamma is newer, so it sorts first.
+	f.pinUpdatedAt(alpha.pack.ID, "2026-11-10T09:00:00Z")
+	f.pinUpdatedAt(gamma.pack.ID, "2026-11-10T09:00:01Z")
 
 	unauthorized := f.request(http.MethodGet, "/api/v1/packs", nil)
 	if unauthorized.Code != http.StatusUnauthorized {
@@ -270,13 +281,16 @@ func TestPublicCatalogVisibilityAndPagination(t *testing.T) {
 			t.Fatalf("hidden pack %s visible", id)
 		}
 	}
-	if len(ids) != 2 || ids[0] > ids[1] {
-		t.Fatalf("items must be ordered by updated_at then id: %v", ids)
+	if len(ids) != 2 || ids[0] != gamma.pack.ID || ids[1] != alpha.pack.ID {
+		t.Fatalf("items must be ordered updated_at DESC, id ASC: %v", ids)
 	}
 
 	paged := decodeBody(t, f.request(http.MethodGet, "/api/v1/packs?page=2&page_size=1", f.keyHeaders()))
 	if paged["total"].(float64) != 2 || len(paged["items"].([]any)) != 1 {
 		t.Fatalf("paged = %v", paged)
+	}
+	if secondPageID := paged["items"].([]any)[0].(map[string]any)["id"]; secondPageID != alpha.pack.ID {
+		t.Fatalf("page 2 first id = %v, want %s", secondPageID, alpha.pack.ID)
 	}
 	filtered := decodeBody(t, f.request(http.MethodGet, "/api/v1/packs?tag=space", f.keyHeaders()))
 	if filtered["total"].(float64) != 1 {
