@@ -7,10 +7,10 @@
 :root {
   color-scheme: light;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --paper: oklch(0.968 0.004 90);
-  --panel: oklch(0.992 0.002 90);
-  --sunk: oklch(0.94 0.005 90);
-  --line: oklch(0.875 0.005 90);
+  --paper: oklch(0.975 0.012 340);
+  --panel: oklch(0.998 0.003 340);
+  --sunk: oklch(0.953 0.012 330);
+  --line: oklch(0.9 0.012 330);
   --line-strong: oklch(0.76 0.006 90);
   --ink: oklch(0.21 0.01 270);
   --ink-2: oklch(0.42 0.01 270);
@@ -26,7 +26,29 @@
   --warn-soft: oklch(0.96 0.05 85);
   --danger: oklch(0.5 0.2 27);
   --danger-soft: oklch(0.955 0.03 27);
+  --pink: oklch(0.72 0.2 355);
+  --pink-soft: oklch(0.955 0.04 355);
+  --pink-ink: oklch(0.45 0.17 355);
+  --lilac: oklch(0.72 0.15 300);
+  --lilac-soft: oklch(0.955 0.04 300);
+  --lilac-ink: oklch(0.45 0.17 300);
+  --mint: oklch(0.72 0.15 165);
+  --mint-soft: oklch(0.955 0.04 165);
+  --mint-ink: oklch(0.45 0.17 165);
+  --sky: oklch(0.72 0.15 235);
+  --sky-soft: oklch(0.955 0.04 235);
+  --sky-ink: oklch(0.45 0.17 235);
+  --butter: oklch(0.72 0.15 88);
+  --butter-soft: oklch(0.955 0.04 88);
+  --butter-ink: oklch(0.45 0.1 88);
+  --peach: oklch(0.72 0.15 45);
+  --peach-soft: oklch(0.955 0.04 45);
+  --peach-ink: oklch(0.45 0.17 45);
   --scrim: oklch(0.2 0.01 270 / 0.5);
+  --blob-a: oklch(0.93 0.06 355 / 0.55);
+  --blob-b: oklch(0.93 0.06 235 / 0.5);
+  --blob-c: oklch(0.95 0.07 88 / 0.5);
+  --shadow-soft: 0 1px 2px oklch(0.4 0.05 330 / 0.06), 0 6px 18px -8px oklch(0.4 0.08 330 / 0.18);
   --shadow-pop: 0 1px 2px oklch(0.2 0.01 270 / 0.08), 0 12px 32px -8px oklch(0.2 0.01 270 / 0.28);
 }
 
@@ -53,6 +75,28 @@
     --danger: oklch(0.75 0.17 27);
     --danger-soft: oklch(0.3 0.07 27);
     --scrim: oklch(0.1 0.005 270 / 0.65);
+    --pink: oklch(0.74 0.14 355);
+    --pink-soft: oklch(0.32 0.06 355);
+    --pink-ink: oklch(0.86 0.1 355);
+    --lilac: oklch(0.74 0.14 300);
+    --lilac-soft: oklch(0.32 0.06 300);
+    --lilac-ink: oklch(0.86 0.1 300);
+    --mint: oklch(0.74 0.14 165);
+    --mint-soft: oklch(0.32 0.06 165);
+    --mint-ink: oklch(0.86 0.1 165);
+    --sky: oklch(0.74 0.14 235);
+    --sky-soft: oklch(0.32 0.06 235);
+    --sky-ink: oklch(0.86 0.1 235);
+    --butter: oklch(0.74 0.14 88);
+    --butter-soft: oklch(0.32 0.06 88);
+    --butter-ink: oklch(0.86 0.1 88);
+    --peach: oklch(0.74 0.14 45);
+    --peach-soft: oklch(0.32 0.06 45);
+    --peach-ink: oklch(0.86 0.1 45);
+    --blob-a: oklch(0.35 0.1 355 / 0.35);
+    --blob-b: oklch(0.35 0.08 235 / 0.3);
+    --blob-c: oklch(0.35 0.07 88 / 0.2);
+    --shadow-soft: 0 6px 18px -8px oklch(0 0 0 / 0.5);
     --shadow-pop: 0 1px 2px oklch(0 0 0 / 0.4), 0 16px 40px -8px oklch(0 0 0 / 0.6);
   }
 }
@@ -79,6 +123,28 @@
   --danger: oklch(0.75 0.17 27);
   --danger-soft: oklch(0.3 0.07 27);
   --scrim: oklch(0.1 0.005 270 / 0.65);
+  --pink: oklch(0.74 0.14 355);
+  --pink-soft: oklch(0.32 0.06 355);
+  --pink-ink: oklch(0.86 0.1 355);
+  --lilac: oklch(0.74 0.14 300);
+  --lilac-soft: oklch(0.32 0.06 300);
+  --lilac-ink: oklch(0.86 0.1 300);
+  --mint: oklch(0.74 0.14 165);
+  --mint-soft: oklch(0.32 0.06 165);
+  --mint-ink: oklch(0.86 0.1 165);
+  --sky: oklch(0.74 0.14 235);
+  --sky-soft: oklch(0.32 0.06 235);
+  --sky-ink: oklch(0.86 0.1 235);
+  --butter: oklch(0.74 0.14 88);
+  --butter-soft: oklch(0.32 0.06 88);
+  --butter-ink: oklch(0.86 0.1 88);
+  --peach: oklch(0.74 0.14 45);
+  --peach-soft: oklch(0.32 0.06 45);
+  --peach-ink: oklch(0.86 0.1 45);
+  --blob-a: oklch(0.35 0.1 355 / 0.35);
+  --blob-b: oklch(0.35 0.08 235 / 0.3);
+  --blob-c: oklch(0.35 0.07 88 / 0.2);
+  --shadow-soft: 0 6px 18px -8px oklch(0 0 0 / 0.5);
   --shadow-pop: 0 1px 2px oklch(0 0 0 / 0.4), 0 16px 40px -8px oklch(0 0 0 / 0.6);
 }
 
@@ -102,11 +168,29 @@
   --color-warn-soft: var(--warn-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-pink: var(--pink);
+  --color-pink-soft: var(--pink-soft);
+  --color-pink-ink: var(--pink-ink);
+  --color-lilac: var(--lilac);
+  --color-lilac-soft: var(--lilac-soft);
+  --color-lilac-ink: var(--lilac-ink);
+  --color-mint: var(--mint);
+  --color-mint-soft: var(--mint-soft);
+  --color-mint-ink: var(--mint-ink);
+  --color-sky: var(--sky);
+  --color-sky-soft: var(--sky-soft);
+  --color-sky-ink: var(--sky-ink);
+  --color-butter: var(--butter);
+  --color-butter-soft: var(--butter-soft);
+  --color-butter-ink: var(--butter-ink);
+  --color-peach: var(--peach);
+  --color-peach-soft: var(--peach-soft);
+  --color-peach-ink: var(--peach-ink);
   --font-sans: var(--font-ui), "Segoe UI", system-ui, sans-serif;
   --font-display: var(--font-head), var(--font-ui), system-ui, sans-serif;
   --font-mono: var(--font-code), ui-monospace, "SF Mono", Menlo, monospace;
-  --radius-ctl: 4px;
-  --radius-panel: 8px;
+  --radius-ctl: 10px;
+  --radius-panel: 16px;
 }
 
 html {
@@ -115,7 +199,12 @@ html {
 }
 
 body {
-  background: var(--paper);
+  background:
+    radial-gradient(40rem 28rem at 105% -8%, var(--blob-a), transparent 70%),
+    radial-gradient(36rem 26rem at -8% 108%, var(--blob-b), transparent 70%),
+    radial-gradient(26rem 20rem at 60% 115%, var(--blob-c), transparent 70%),
+    var(--paper);
+  background-attachment: fixed;
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 0.875rem;
@@ -262,3 +351,11 @@ input[type="file"]::file-selector-button:hover { background: var(--sunk); border
 @media (max-width: 767px) {
   input[type="file"]::file-selector-button { min-height: 2.75rem; }
 }
+
+/* Cute: soft lifted panels and a little bounce on press/hover. */
+.soft-shadow { box-shadow: var(--shadow-soft); }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-3px) rotate(2deg); } }
+.bob { animation: bob 3.2s ease-in-out infinite; }
+@keyframes wiggle { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-8deg); } 60% { transform: rotate(6deg); } }
+.hover-wiggle:hover .wiggle-target, .hover-wiggle:focus-visible .wiggle-target { animation: wiggle 420ms ease-in-out; }
+@media (pointer: fine) { .lift { transition: transform 160ms var(--ease-out-expo), box-shadow 160ms; } .lift:hover { transform: translateY(-2px); } }

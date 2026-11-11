@@ -7,37 +7,38 @@ import { useAuth } from "@/lib/auth";
 import { useI18n, type MessageKey } from "@/lib/i18n";
 import { errorText } from "@/lib/api";
 import { Dialog, ErrorBanner, IconButton, Kbd, cx } from "@/components/ui";
-import { Icon, type IconName } from "@/components/icons";
+import { Icon, IconTile, Mascot, TONE, type IconName, type Tone } from "@/components/icons";
 import { CommandPalette, type Command } from "@/components/command-palette";
 import { useTheme } from "@/components/theme";
+import { StepStrip } from "@/components/guide";
 
 interface NavItem {
   href: string;
   label: MessageKey;
   icon: IconName;
+  tone: Tone;
 }
 
 // Order follows the production line: compose → release.
+const START: NavItem = { href: "/start", tone: "butter", label: "navStart", icon: "sparkle" };
 const PRODUCE: NavItem[] = [
-  { href: "/factory", label: "navFactory", icon: "factory" },
-  { href: "/library", label: "navLibrary", icon: "library" },
-  { href: "/characters", label: "navCharacters", icon: "character" },
+  { href: "/factory", tone: "pink", label: "navFactory", icon: "factory" },
+  { href: "/library", tone: "lilac", label: "navLibrary", icon: "library" },
+  { href: "/characters", tone: "peach", label: "navCharacters", icon: "character" },
 ];
 const RELEASE: NavItem[] = [
-  { href: "/packs", label: "navPacks", icon: "pack" },
-  { href: "/keys", label: "navKeys", icon: "key" },
-  { href: "/api-docs", label: "navDocs", icon: "docs" },
+  { href: "/packs", tone: "mint", label: "navPacks", icon: "pack" },
+  { href: "/keys", tone: "butter", label: "navKeys", icon: "key" },
+  { href: "/api-docs", tone: "sky", label: "navDocs", icon: "docs" },
 ];
-const ALL = [...PRODUCE, ...RELEASE];
+const ALL = [START, ...PRODUCE, ...RELEASE];
 const TABS = [...PRODUCE, RELEASE[0]];
 
 export function Wordmark() {
   const { t } = useI18n();
   return (
-    <Link href="/factory" className="flex items-center gap-2.5">
-      <span className="flex size-8 items-center justify-center rounded-[6px] bg-ink text-paper" aria-hidden="true">
-        <Icon name="scissors" size={16} />
-      </span>
+    <Link href="/start" className="flex items-center gap-2.5">
+      <Mascot size={34} className="bob" />
       <span className="font-display text-[0.9375rem] font-semibold tracking-tight text-ink">{t("appName")}</span>
     </Link>
   );
@@ -115,6 +116,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Wordmark />
         </div>
         <nav aria-label={t("navStudio")} className="flex-1 overflow-y-auto px-3 pb-4">
+          <Link
+            href="/start"
+            aria-current={isActive("/start") ? "page" : undefined}
+            className={cx(
+              "hover-wiggle mb-4 flex min-h-11 items-center gap-2.5 rounded-ctl px-2.5 text-sm font-semibold transition-colors",
+              isActive("/start") ? TONE.butter : "bg-butter-soft/60 text-butter-ink hover:bg-butter-soft",
+            )}
+          >
+            <IconTile name="sparkle" tone="butter" size={28} className="bg-panel/70" />
+            {t("navStart")}
+          </Link>
           {[
             { title: t("navProduce"), items: PRODUCE },
             { title: t("navRelease"), items: RELEASE },
@@ -137,11 +149,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         href={item.href}
                         aria-current={active ? "page" : undefined}
                         className={cx(
-                          "ml-3 flex min-h-9 items-center gap-2.5 rounded-ctl px-2.5 text-sm font-medium transition-colors",
-                          active ? "bg-cut-soft text-cut-ink" : "text-ink-2 hover:bg-sunk hover:text-ink",
+                          "ml-3 flex min-h-10 items-center gap-2.5 rounded-ctl px-2 text-sm font-medium transition-colors",
+                          "hover-wiggle",
+                          active ? `${TONE[item.tone]} font-semibold` : "text-ink-2 hover:bg-sunk hover:text-ink",
                         )}
                       >
-                        <Icon name={item.icon} size={16} />
+                        <IconTile name={item.icon} tone={item.tone} size={28} className={active ? "bg-panel/70" : ""} />
                         {t(item.label)}
                       </Link>
                     </li>
@@ -175,7 +188,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-panel/95 px-4 py-2 backdrop-blur md:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-panel/90 px-4 py-2 backdrop-blur md:hidden">
         <Wordmark />
         <div className="flex">
           <IconButton icon="search" label={t("cmdOpen")} onClick={() => setPaletteOpen(true)} />
@@ -184,7 +197,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main id="main" className="min-w-0 flex-1 px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8 xl:px-10">
-        <div className="mx-auto w-full max-w-[1400px]">{children}</div>
+        <div className="mx-auto w-full max-w-[1400px]">
+          <StepStrip />
+          {children}
+        </div>
       </main>
 
       {/* Mobile bottom tabs */}
@@ -197,9 +213,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Link
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={cx("flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium", active ? "text-cut-ink" : "text-ink-2")}
+                  className={cx("flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium", active ? "text-ink" : "text-ink-2")}
                 >
-                  <span className={cx("flex h-6 w-10 items-center justify-center rounded-full", active && "bg-cut-soft")}>
+                  <span className={cx("flex h-7 w-11 items-center justify-center rounded-full", active ? TONE[item.tone] : "text-ink-3")}>
                     <Icon name={item.icon} size={18} />
                   </span>
                   {t(item.label)}
@@ -228,14 +244,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {moreOpen && (
         <Dialog title={t("navMore")} onClose={() => setMoreOpen(false)} size="sm">
           <ul className="-my-1">
-            {[...RELEASE.slice(1)].map((item) => (
+            {[START, ...RELEASE.slice(1)].map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href}
                   onClick={() => setMoreOpen(false)}
                   className="flex min-h-12 items-center gap-3 border-b border-line text-sm font-medium text-ink"
                 >
-                  <Icon name={item.icon} size={18} />
+                  <IconTile name={item.icon} tone={item.tone} size={30} />
                   {t(item.label)}
                 </Link>
               </li>

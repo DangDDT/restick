@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<defs><radialGradient id="a" cx="85%" cy="0%" r="70%"><stop offset="0" stop-color="#F9C7E2"/><stop offset="1" stop-color="#FDF3F9" stop-opacity="0"/></radialGradient><radialGradient id="b" cx="0%" cy="100%" r="60%"><stop offset="0" stop-color="#CFE2FB"/><stop offset="1" stop-color="#FDF3F9" stop-opacity="0"/></radialGradient></defs>
+<rect width="1200" height="630" fill="#FDF3F9"/><rect width="1200" height="630" fill="url(#a)"/><rect width="1200" height="630" fill="url(#b)"/>
+<g transform="translate(720 110) scale(6.2)">
+  <circle cx="15" cy="16" r="9.5" fill="#A98BF0"/><circle cx="49" cy="16" r="9.5" fill="#A98BF0"/>
+  <circle cx="15.5" cy="16.5" r="5" fill="#D2C0FA"/><circle cx="48.5" cy="16.5" r="5" fill="#D2C0FA"/>
+  <ellipse cx="32" cy="36" rx="25.5" ry="22.5" fill="#A98BF0"/>
+  <ellipse cx="32" cy="43.5" rx="11" ry="8.5" fill="#fff"/>
+  <circle cx="22" cy="33" r="3.4" fill="#2B2433"/><circle cx="42" cy="33" r="3.4" fill="#2B2433"/>
+  <circle cx="23.2" cy="31.8" r="1.1" fill="#fff"/><circle cx="43.2" cy="31.8" r="1.1" fill="#fff"/>
+  <ellipse cx="14" cy="41" rx="4.6" ry="3.2" fill="#F58BC0" opacity=".8"/><ellipse cx="50" cy="41" rx="4.6" ry="3.2" fill="#F58BC0" opacity=".8"/>
+  <ellipse cx="32" cy="40.6" rx="3" ry="2.2" fill="#2B2433"/>
+  <path d="M27.8 45.2c1.9 2 6.5 2 8.4 0" fill="none" stroke="#2B2433" stroke-width="1.9" stroke-linecap="round"/>
+</g>
+<text x="90" y="300" font-family="Bricolage Grotesque, Be Vietnam Pro, system-ui, sans-serif" font-weight="700" font-size="112" letter-spacing="-3" fill="#2B2433">Restick</text>
+<text x="94" y="362" font-family="Be Vietnam Pro, system-ui, sans-serif" font-weight="600" font-size="30" letter-spacing="8" fill="#7C5CD6">STUDIO</text>
+<text x="94" y="440" font-family="Be Vietnam Pro, system-ui, sans-serif" font-size="34" fill="#4D4358">Làm sticker dễ như chơi.</text>
+</svg>

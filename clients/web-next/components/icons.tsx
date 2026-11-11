@@ -35,6 +35,9 @@ const PATHS = {
   filter: "M3.5 5h13l-5 6v5l-3-1.5V11z",
   grid: "M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 11h5v5h-5z",
   list: "M7 5h9M7 10h9M7 15h9M4 5h.01M4 10h.01M4 15h.01",
+  heart: "M10 16.5S3.5 12.6 3.5 8a3.3 3.3 0 0 1 6.5-.8A3.3 3.3 0 0 1 16.5 8c0 4.6-6.5 8.5-6.5 8.5z",
+  star: "M10 3l2.1 4.3 4.7.7-3.4 3.3.8 4.7L10 13.7 5.8 16l.8-4.7L3.2 8l4.7-.7z",
+  bear: "M5.2 4.2a2 2 0 1 0 0 3.2M14.8 4.2a2 2 0 1 1 0 3.2M10 17a6 5.2 0 1 0 0-10.4A6 5.2 0 0 0 10 17zM7.6 11h.01M12.4 11h.01M9 13.2c.6.5 1.4.5 2 0",
 } as const;
 
 export type IconName = keyof typeof PATHS;
@@ -62,3 +65,61 @@ export function Icon({
     </svg>
   );
 }
+
+export type Tone = "pink" | "lilac" | "mint" | "sky" | "butter" | "peach";
+
+/** Candy tints, one per station. Text-on-soft pairs are >= 4.5:1 in both themes. */
+export const TONE: Record<Tone, string> = {
+  pink: "bg-pink-soft text-pink-ink",
+  lilac: "bg-lilac-soft text-lilac-ink",
+  mint: "bg-mint-soft text-mint-ink",
+  sky: "bg-sky-soft text-sky-ink",
+  butter: "bg-butter-soft text-butter-ink",
+  peach: "bg-peach-soft text-peach-ink",
+};
+
+/** Rounded colour tile around an icon. */
+export function IconTile({ name, tone, size = 32, className }: { name: IconName; tone: Tone; size?: number; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{ width: size, height: size }}
+      className={`wiggle-target inline-flex shrink-0 items-center justify-center rounded-[10px] ${TONE[tone]} ${className ?? ""}`}
+    >
+      <Icon name={name} size={Math.round(size * 0.56)} strokeWidth={1.75} />
+    </span>
+  );
+}
+
+/** Restick's bear mascot. Fixed brand colours (docs/brand/BRAND.md); identical to public/mascot.svg. */
+export function Mascot({ size = 48, className }: { size?: number; className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden="true" focusable="false" className={className}>
+      <circle cx="15" cy="16" r="9.5" fill="#A98BF0" />
+      <circle cx="49" cy="16" r="9.5" fill="#A98BF0" />
+      <circle cx="15.5" cy="16.5" r="5" fill="#D2C0FA" />
+      <circle cx="48.5" cy="16.5" r="5" fill="#D2C0FA" />
+      <ellipse cx="32" cy="36" rx="25.5" ry="22.5" fill="#A98BF0" />
+      <ellipse cx="32" cy="43.5" rx="11" ry="8.5" fill="#fff" />
+      <circle cx="22" cy="33" r="3.4" fill="#2B2433" />
+      <circle cx="42" cy="33" r="3.4" fill="#2B2433" />
+      <circle cx="23.2" cy="31.8" r="1.1" fill="#fff" />
+      <circle cx="43.2" cy="31.8" r="1.1" fill="#fff" />
+      <ellipse cx="14" cy="41" rx="4.6" ry="3.2" fill="#F58BC0" opacity="0.8" />
+      <ellipse cx="50" cy="41" rx="4.6" ry="3.2" fill="#F58BC0" opacity="0.8" />
+      <ellipse cx="32" cy="40.6" rx="3" ry="2.2" fill="#2B2433" />
+      <path d="M27.8 45.2c1.9 2 6.5 2 8.4 0" fill="none" stroke="#2B2433" strokeWidth="1.9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Route -> icon and tint, shared by the page header. */
+export const STATIONS: Array<{ href: string; icon: IconName; tone: Tone }> = [
+  { href: "/start", icon: "sparkle", tone: "butter" },
+  { href: "/factory", icon: "factory", tone: "pink" },
+  { href: "/library", icon: "library", tone: "lilac" },
+  { href: "/characters", icon: "character", tone: "peach" },
+  { href: "/packs", icon: "pack", tone: "mint" },
+  { href: "/keys", icon: "key", tone: "butter" },
+  { href: "/api-docs", icon: "docs", tone: "sky" },
+];

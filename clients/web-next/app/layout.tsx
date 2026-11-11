@@ -22,16 +22,28 @@ const code = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Restick Studio",
-  description: "Bàn ghép mảnh, thiết kế prompt và quản lý pack sticker Restick",
+  title: { default: "Restick Studio", template: "%s · Restick Studio" },
+  description: "Làm sticker dễ như chơi: soạn prompt, tạo pack và cấp API key cho app.",
+  applicationName: "Restick Studio",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  // metadataBase is unknown at build time (the public origin is runtime config),
+  // so the social image is a root-relative path that crawlers resolve per host.
+  openGraph: { title: "Restick Studio", description: "Làm sticker dễ như chơi.", siteName: "Restick", images: ["/og-image.png"] },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f4f4f2" },
-    { media: "(prefers-color-scheme: dark)", color: "#1b1b1d" },
+    { media: "(prefers-color-scheme: light)", color: "#FDF3F9" },
+    { media: "(prefers-color-scheme: dark)", color: "#2a2433" },
   ],
 };
 

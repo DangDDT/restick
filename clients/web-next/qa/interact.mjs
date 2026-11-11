@@ -7,7 +7,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const BASE = process.argv[2] ?? "http://localhost:4500";
 const OUT = join(here, "../../../docs/redesign/screens/states"); mkdirSync(OUT, { recursive: true });
 const axeSrc = readFileSync(join(here, "node_modules/axe-core/axe.min.js"), "utf8");
-const ROUTES = ["/factory", "/library", "/characters", "/packs", "/packs/new", "/packs/detail?id=pk-draft-1", "/keys", "/api-docs"];
+const ROUTES = ["/start", "/factory", "/library", "/characters", "/packs", "/packs/new", "/packs/detail?id=pk-draft-1", "/keys", "/api-docs"];
 const results = [];
 const log = (name, ok, note = "") => { results.push({ name, ok, note }); console.log(`${ok ? "PASS" : "FAIL"} ${name} ${note}`); };
 const step = async (name, fn) => { try { const note = await fn(); log(name, true, note ?? ""); } catch (e) { log(name, false, String(e.message).split("\n")[0].slice(0, 160)); } };
@@ -21,7 +21,7 @@ async function ctx(w, h, scheme = "light") {
   return { c, p, errs };
 }
 async function login(p) {
-  await p.goto(`${BASE}/login`); await p.fill("input[type=password]", "test"); await p.click("button[type=submit]"); await p.waitForURL("**/factory"); await p.waitForSelector("#main"); await p.waitForLoadState("networkidle");
+  await p.goto(`${BASE}/login`); await p.fill("input[type=password]", "test"); await p.click("button[type=submit]"); await p.waitForURL("**/start"); await p.waitForSelector("#main"); await p.waitForLoadState("networkidle");
 }
 await scenario("default");
 

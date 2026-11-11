@@ -61,6 +61,8 @@ components:
 
 Source of truth for values: `clients/web-next/app/globals.css` (OKLCH tokens; hex above are sRGB approximations). Components: `components/ui.tsx`, icons `components/icons.tsx`, shell `components/app-shell.tsx`.
 
+> **Update:** the studio is now playful (candy tints `pink/lilac/mint/sky/butter/peach`, 10px/16px radii, bear mascot). The "one accent / neutral" text below is partly superseded; brand rules are in `docs/brand/BRAND.md`.
+
 ## Overview
 Operate-mode production tool for one owner on desktop and phone. World: a print-shop job traveler on a proofing table. Neutral ground (chroma <= 0.01) keeps sticker colour true; structure comes from hairline rules and station order, never card stacks. Light and dark themes share tokens; default follows the OS, user override persists.
 

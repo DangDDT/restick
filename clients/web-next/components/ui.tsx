@@ -5,9 +5,10 @@
 // ok, warn, danger) defined in app/globals.css.
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { useI18n, type MessageKey } from "@/lib/i18n";
-import { Icon, type IconName } from "@/components/icons";
+import { Icon, IconTile, Mascot, STATIONS, TONE, type IconName } from "@/components/icons";
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -43,7 +44,7 @@ export function Stamp({ tone = "neutral", children, pulse }: { tone?: Tone; chil
   return (
     <span
       className={cx(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-[3px] border px-1.5 py-0.5 text-[11px] font-semibold uppercase leading-4 tracking-[0.06em]",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-4",
         TONE_CLASS[tone],
       )}
     >
@@ -154,8 +155,11 @@ export function EmptyState({
 }) {
   return (
     <div className="crop flex flex-col items-center gap-3 rounded-panel px-6 py-14 text-center">
-      <span className="flex size-10 items-center justify-center rounded-full border border-line-strong bg-panel text-ink-3">
-        <Icon name={icon} size={20} />
+      <span className="relative">
+        <Mascot size={64} className="bob" />
+        <span className="absolute -bottom-1 -right-2 flex size-7 items-center justify-center rounded-full border-2 border-panel bg-butter-soft text-butter-ink">
+          <Icon name={icon} size={14} />
+        </span>
       </span>
       <div>
         <p className="font-display text-base font-semibold text-ink">{title}</p>
@@ -179,9 +183,13 @@ export function PageHeader({
   actions?: React.ReactNode;
   back?: { href: string; label: string };
 }) {
+  const pathname = usePathname();
+  const station = STATIONS.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   return (
     <header className="mb-6 flex flex-col gap-3 border-b border-line pb-5 md:flex-row md:items-end md:justify-between">
-      <div className="min-w-0">
+      <div className="flex min-w-0 items-start gap-3.5">
+        {station && <IconTile name={station.icon} tone={station.tone} size={46} className="mt-0.5 rounded-[14px] max-md:hidden" />}
+        <div className="min-w-0">
         {back && (
           <Link href={back.href} className="mb-2 inline-flex items-center gap-1 text-sm text-ink-2 hover:text-ink">
             <Icon name="chevronRight" size={14} className="rotate-180" />
@@ -190,6 +198,7 @@ export function PageHeader({
         )}
         <h1 className="font-display text-[1.625rem] font-semibold leading-8 text-ink">{title}</h1>
         {subtitle && <p className="mt-1 max-w-[68ch] text-sm text-ink-2">{subtitle}</p>}
+        </div>
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </header>
@@ -211,7 +220,7 @@ export function Panel({
   padded?: boolean;
 }) {
   return (
-    <section className={cx("rounded-panel border border-line bg-panel", className)}>
+    <section className={cx("soft-shadow rounded-panel border border-line bg-panel", className)}>
       {(title || actions) && (
         <div className="flex min-h-12 items-center justify-between gap-3 border-b border-line px-4 py-2.5">
           {title && <h2 className="font-display text-[0.9375rem] font-semibold text-ink">{title}</h2>}
@@ -224,12 +233,20 @@ export function Panel({
 }
 
 /** Unboxed ruled section: heading above a hairline, for page-level grouping. */
+const SECTION_TONES = ["pink", "lilac", "mint", "sky", "butter", "peach"] as const;
+const SECTION_ICONS = ["star", "heart", "sparkle"] as const;
+
 export function Section({ title, hint, actions, children, className }: { title: string; hint?: string; actions?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
     <section className={cx("py-5", className)}>
       <div className="mb-3 flex items-end justify-between gap-3 border-b border-line pb-2">
         <div className="min-w-0">
-          <h2 className="font-display text-base font-semibold text-ink">{title}</h2>
+          <h2 className="flex items-center gap-2 font-display text-base font-semibold text-ink">
+            <span aria-hidden="true" className={cx("inline-flex size-6 items-center justify-center rounded-full", TONE[SECTION_TONES[title.length % SECTION_TONES.length]])}>
+              <Icon name={SECTION_ICONS[title.length % SECTION_ICONS.length]} size={13} />
+            </span>
+            {title}
+          </h2>
           {hint && <p className="mt-0.5 text-xs text-ink-2">{hint}</p>}
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
@@ -274,7 +291,7 @@ export function Kbd({ children }: { children: React.ReactNode }) {
 type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-cut text-on-cut hover:bg-cut-hover active:translate-y-px",
+  primary: "bg-cut text-on-cut shadow-[0_3px_0_var(--cut-hover)] hover:-translate-y-px hover:bg-cut-hover active:translate-y-[2px] active:shadow-[0_1px_0_var(--cut-hover)]",
   secondary: "border border-line-strong bg-panel text-ink hover:border-ink-3 hover:bg-sunk active:translate-y-px",
   danger: "border border-danger/50 bg-panel text-danger hover:bg-danger-soft active:translate-y-px",
   ghost: "text-ink-2 hover:bg-sunk hover:text-ink",

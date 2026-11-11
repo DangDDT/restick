@@ -1,7 +1,7 @@
 "use client";
 
 import { Wordmark } from "@/components/app-shell";
-import { Icon } from "@/components/icons";
+import { Mascot } from "@/components/icons";
 import { Button } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 
@@ -16,9 +16,7 @@ export default function NotFound() {
       </header>
       <main className="mx-auto flex w-full max-w-xl flex-1 items-center px-4 py-10">
         <div className="crop w-full rounded-panel px-6 py-12 text-center">
-          <span className="mx-auto flex size-10 items-center justify-center rounded-full border border-line-strong bg-panel text-ink-3">
-            <Icon name="alert" size={20} />
-          </span>
+          <Mascot size={72} className="bob mx-auto" />
           <h1 className="mt-4 font-display text-[1.375rem] font-semibold leading-7 text-ink">{t("pageNotFound")}</h1>
           <p className="mx-auto mt-2 max-w-[44ch] text-sm text-ink-2">{t("pageNotFoundHint")}</p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
