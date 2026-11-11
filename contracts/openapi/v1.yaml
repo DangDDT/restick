@@ -10,7 +10,9 @@ info:
 
     Authentication
     - SDK read routes: `X-Api-Key` (read-only client key) or the owner session
-      cookie `__Host-restick_admin`.
+      cookie `__Host-restick_admin`. A client key only sees the packs granted to it
+      (`PUT /api/v1/admin/api-keys/{id}/packs`); any other pack answers 404. The
+      owner session sees every pack.
     - Admin routes under `/api/v1/admin`: owner session cookie only. A client key
       never authorizes an admin route, even a valid one.
     - Unsafe admin requests (anything but GET/HEAD) must send `Origin` equal to
@@ -471,7 +473,9 @@ components:
       properties:
         pack_id: { type: string }
         revoked_at: { $ref: '#/components/schemas/Timestamp' }
-        reason_code: { type: string }
+        reason_code:
+          type: string
+          description: "`revoked`, or `access_removed` when a client key lost its grant to the pack (only in that key's list; checksum is empty)."
         checksum_sha256: { type: string }
 
     TombstoneList:
@@ -482,16 +486,63 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Tombstone' }
 
-    AdminPackSource:
+    AdminPackSheet:
       type: object
-      required: [id, filename, checksum_sha256, width, height, byte_size]
+      required: [id, provider, filename, width, height, byte_size, checksum_sha256, image_url]
       properties:
         id: { type: string }
+        provider: { type: string }
         filename: { type: string }
-        checksum_sha256: { type: string }
         width: { type: integer }
         height: { type: integer }
         byte_size: { type: integer }
+        checksum_sha256: { type: string }
+        image_url: { type: string }
+
+    AdminPackDesign:
+      type: object
+      required: [id, name, rows, columns, outline_width, outline_color, compiled_prompt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        rows: { type: integer }
+        columns: { type: integer }
+        outline_width: { type: integer }
+        outline_color: { type: string }
+        character_id: { type: string }
+        compiled_prompt: { type: string }
+
+    DesignSheet:
+      type: object
+      required: [id, design_id, provider, note, prompt_snapshot, filename, media_type, byte_size, width, height, checksum_sha256, created_at]
+      properties:
+        id: { type: string }
+        design_id: { type: string }
+        provider: { type: string, description: "1-32 chars of a-z, 0-9, `_`, `-`." }
+        note: { type: string }
+        prompt_snapshot: { type: string }
+        filename: { type: string }
+        media_type: { type: string }
+        byte_size: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+        checksum_sha256: { type: string }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+
+    DesignSheetList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/DesignSheet' }
+
+    KeyPacks:
+      type: object
+      required: [pack_ids]
+      properties:
+        pack_ids: { type: array, items: { type: string } }
+      additionalProperties: false
 
     AdminPackSticker:
       type: object
@@ -509,7 +560,7 @@ components:
 
     AdminPack:
       type: object
-      required: [id, slug, name, author, description, tags, status, current_version, sticker_count, checksum_sha256, thumbnail_url, source, created_at, updated_at]
+      required: [id, slug, name, author, description, tags, status, current_version, sticker_count, checksum_sha256, thumbnail_url, sheet_id, sheet, created_at, updated_at]
       properties:
         id: { type: string }
         slug: { type: string }
@@ -523,9 +574,10 @@ components:
         sticker_count: { type: integer }
         checksum_sha256: { type: string }
         thumbnail_url: { type: string }
-        source:
+        sheet_id: { type: string, description: "Selected design sheet; empty when none." }
+        sheet:
           oneOf:
-            - $ref: '#/components/schemas/AdminPackSource'
+            - $ref: '#/components/schemas/AdminPackSheet'
             - type: 'null'
         created_at: { $ref: '#/components/schemas/Timestamp' }
         updated_at: { $ref: '#/components/schemas/Timestamp' }
@@ -540,6 +592,10 @@ components:
               type: array
               items: { $ref: '#/components/schemas/AdminPackSticker' }
             bundle_url: { type: string }
+            design:
+              description: The pack's design; omitted when the pack has none.
+              allOf:
+                - $ref: '#/components/schemas/AdminPackDesign'
             latest_job:
               description: Latest processing attempt by reserved version, including active state or terminal failure diagnostics. Omitted before the first attempt.
               allOf:
@@ -566,6 +622,7 @@ components:
         description: { type: string }
         tags: { type: array, items: { type: string } }
         design_id: { type: string }
+        sheet_id: { type: string, description: "A sheet of `design_id`; processing uses this sheet." }
       additionalProperties: false
 
     PackUpdate:
@@ -577,6 +634,7 @@ components:
         description: { type: string }
         tags: { type: array, items: { type: string } }
         design_id: { type: string }
+        sheet_id: { type: string, description: "A sheet of `design_id`; processing uses this sheet." }
       additionalProperties: false
 
     JobRequest:
@@ -666,12 +724,13 @@ components:
 
     Key:
       type: object
-      required: [id, name, prefix, active, created_at, expires_at, disabled_at]
+      required: [id, name, prefix, active, created_at, expires_at, disabled_at, pack_count]
       properties:
         id: { type: string }
         name: { type: string }
         prefix: { type: string }
         active: { type: boolean }
+        pack_count: { type: integer, description: Number of packs granted to the key. }
         created_at: { $ref: '#/components/schemas/Timestamp' }
         expires_at:
           oneOf:
@@ -738,7 +797,7 @@ paths:
     get:
       tags: [SDK]
       summary: List ready packs
-      description: Ready packs only, ordered by updated_at DESC then id. Draft and revoked packs are never listed.
+      description: Ready packs only, ordered by updated_at DESC then id. Draft and revoked packs are never listed. A client key lists only the packs granted to it, so a key without grants gets an empty page.
       security:
         - ApiKeyAuth: []
         - OwnerCookie: []
@@ -759,6 +818,7 @@ paths:
     get:
       tags: [SDK]
       summary: Ready pack summary with stickers
+      description: A pack the calling client key was not granted answers 404 `not_found`, exactly like a missing one.
       security:
         - ApiKeyAuth: []
         - OwnerCookie: []
@@ -806,7 +866,7 @@ paths:
     get:
       tags: [SDK]
       summary: Revocation delta
-      description: Inclusive `revoked_at >= since`, ordered by (revoked_at, id), no pagination. Missing since means epoch.
+      description: Inclusive `revoked_at >= since`, ordered by (revoked_at, id), no pagination. Missing since means epoch. A client key sees tombstones only for its granted packs, plus one `access_removed` entry per grant it lost since `since`; the owner session sees every tombstone.
       security:
         - ApiKeyAuth: []
         - OwnerCookie: []
@@ -1269,6 +1329,7 @@ paths:
     delete:
       tags: [Admin designs]
       summary: Delete a design
+      description: A design that still has sheets answers 409 `design_has_sheets`; delete its sheets first.
       security: [{ OwnerCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1277,6 +1338,93 @@ paths:
         "401": { $ref: '#/components/responses/Unauthorized' }
         "403": { $ref: '#/components/responses/Forbidden' }
         "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/admin/designs/{id}/sheets:
+    get:
+      tags: [Admin designs]
+      summary: List the sheets of a design
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "200":
+          description: Sheets of the design
+          content: { application/json: { schema: { $ref: '#/components/schemas/DesignSheetList' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Admin designs]
+      summary: Upload a generated sheet for a design
+      description: Multipart `file` part (PNG/JPEG/WebP, same policy as reference uploads) plus `provider` and optional `note` fields. Uploading bytes the design already holds returns the existing sheet with 200. A design holds a limited number of sheets; beyond that the route answers 409 `sheet_limit`.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, provider]
+              properties:
+                file: { type: string, format: binary }
+                provider: { type: string }
+                note: { type: string }
+      responses:
+        "200":
+          description: The identical sheet already existed
+          content: { application/json: { schema: { $ref: '#/components/schemas/DesignSheet' } } }
+        "201":
+          description: Stored sheet
+          content: { application/json: { schema: { $ref: '#/components/schemas/DesignSheet' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/designs/{id}/sheets/{sheetId}/image:
+    get:
+      tags: [Admin designs]
+      summary: Sheet image bytes
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+        - name: sheetId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: "The stored image with Range support; `Cache-Control: no-store`"
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/designs/{id}/sheets/{sheetId}:
+    delete:
+      tags: [Admin designs]
+      summary: Delete a sheet
+      description: A sheet selected by a pack answers 409 `sheet_in_use`.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+        - name: sheetId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
 
   /api/v1/admin/packs:
     get:
@@ -1303,6 +1451,7 @@ paths:
     post:
       tags: [Admin packs]
       summary: Create a draft pack
+      description: "`sheet_id`, when given, must be a sheet of `design_id` (422 otherwise). Processing requires a selected sheet (422 `source_missing`)."
       security: [{ OwnerCookie: [] }]
       requestBody:
         required: true
@@ -1334,7 +1483,7 @@ paths:
     put:
       tags: [Admin packs]
       summary: Update catalog metadata
-      description: Never changes committed version bytes or their manifest.
+      description: Never changes committed version bytes or their manifest. `sheet_id` must be a sheet of `design_id` (422 otherwise).
       security: [{ OwnerCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/PackID'
@@ -1365,36 +1514,6 @@ paths:
         "403": { $ref: '#/components/responses/Forbidden' }
         "404": { $ref: '#/components/responses/NotFound' }
         "409": { $ref: '#/components/responses/Conflict' }
-
-  /api/v1/admin/packs/{id}/source:
-    post:
-      tags: [Admin packs]
-      summary: Upload the sheet for a pack
-      description: Multipart `file` part. Replaces the current source; the policy for PNG/JPEG/WebP, 8 MiB and 4096 px matches reference uploads.
-      security: [{ OwnerCookie: [] }]
-      parameters:
-        - $ref: '#/components/parameters/PackID'
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file]
-              properties:
-                file: { type: string, format: binary }
-      responses:
-        "200":
-          description: Pack with the new source metadata
-          content: { application/json: { schema: { $ref: '#/components/schemas/AdminPack' } } }
-        "400": { $ref: '#/components/responses/BadRequest' }
-        "401": { $ref: '#/components/responses/Unauthorized' }
-        "403": { $ref: '#/components/responses/Forbidden' }
-        "404": { $ref: '#/components/responses/NotFound' }
-        "409": { $ref: '#/components/responses/Conflict' }
-        "410": { $ref: '#/components/responses/Gone' }
-        "413": { $ref: '#/components/responses/TooLarge' }
-        "422": { $ref: '#/components/responses/Unprocessable' }
 
   /api/v1/admin/packs/{id}/process:
     post:
@@ -1491,6 +1610,40 @@ paths:
         "401": { $ref: '#/components/responses/Unauthorized' }
         "403": { $ref: '#/components/responses/Forbidden' }
         "404": { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/api-keys/{id}/packs:
+    get:
+      tags: [Admin keys]
+      summary: Packs granted to a key
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        "200":
+          description: Granted pack ids
+          content: { application/json: { schema: { $ref: '#/components/schemas/KeyPacks' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin keys]
+      summary: Replace the packs granted to a key
+      description: The key sees exactly these packs. Dropping a pack records an `access_removed` tombstone for that key.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/KeyPacks' } } }
+      responses:
+        "200":
+          description: The resulting grant set
+          content: { application/json: { schema: { $ref: '#/components/schemas/KeyPacks' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
 
   /api/v1/admin/api-keys/{id}:
     delete:
