@@ -1,10 +1,51 @@
 name: restick
 
-include:
-  - path: infra/postgres/docker-compose.yml
-  - path: infra/minio/docker-compose.yml
-  - path: services/api/docker-compose.yml
-  - path: services/ftp/docker-compose.yml
-  - path: services/img_tool/docker-compose.yml
-  - path: services/gateway/docker-compose.yml
-  - path: clients/web-next/docker-compose.yml
+# One application container: Go API + static studio + SQLite + Python child.
+# Postgres, MinIO, gRPC services, the FTP service and a Node web runtime are
+# gone (spec §11/§12). TLS terminates in an external reverse proxy.
+services:
+  restick:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${RESTICK_IMAGE:-restick:local}
+    restart: unless-stopped
+    init: true
+    ports:
+      # Loopback only: the TLS proxy on the host owns the public port.
+      - "127.0.0.1:8080:8080"
+    environment:
+      RESTICK_DATA_DIR: /data
+      RESTICK_HTTP_ADDR: ":8080"
+      RESTICK_PUBLIC_BASE_URL: ${RESTICK_PUBLIC_BASE_URL:?set RESTICK_PUBLIC_BASE_URL to the HTTPS public origin}
+      RESTICK_ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      RESTICK_TRUSTED_PROXY_CIDRS: ${RESTICK_TRUSTED_PROXY_CIDRS:-}
+      RESTICK_PROCESS_TIMEOUT: ${RESTICK_PROCESS_TIMEOUT:-300s}
+    volumes:
+      # The host directory must already belong to UID/GID 10001 (see README).
+      - ${RESTICK_DATA_HOST:-./data}:/data
+    secrets:
+      - admin_password
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "restick", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+secrets:
+  admin_password:
+    file: ${RESTICK_ADMIN_PASSWORD_SECRET:-./secrets/admin_password}

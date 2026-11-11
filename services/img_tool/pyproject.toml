@@ -5,8 +5,6 @@ description = "Restick image pipeline. Does not generate images from keywords."
 requires-python = ">=3.12"
 dependencies = [
     "typer>=0.12",
-    "grpcio>=1.68",
-    "protobuf>=5",
     "pillow>=10",
     "numpy>=2",
     "opencv-python-headless>=4.10",

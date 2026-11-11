@@ -15,6 +15,8 @@ func clearFactoryEnv(t *testing.T) {
 		"RESTICK_ADMIN_PASSWORD_FILE",
 		"RESTICK_PROCESS_TIMEOUT",
 		"RESTICK_TRUSTED_PROXY_CIDRS",
+		"RESTICK_WEB_DIR",
+		"RESTICK_OPENAPI_PATH",
 	} {
 		t.Setenv(key, "")
 	}
@@ -67,6 +69,9 @@ func TestConfigFactoryDefaultsAndOverrides(t *testing.T) {
 	}
 	if cfg.AdminPasswordFile != "" || len(cfg.TrustedProxyCIDRs) != 0 {
 		t.Errorf("unset optional fields = %q/%v", cfg.AdminPasswordFile, cfg.TrustedProxyCIDRs)
+	}
+	if cfg.WebDir != "/app/web" || cfg.OpenAPIPath != "/app/openapi/v1.yaml" {
+		t.Errorf("runtime paths = %q/%q", cfg.WebDir, cfg.OpenAPIPath)
 	}
 
 	clearFactoryEnv(t)

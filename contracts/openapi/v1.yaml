@@ -142,8 +142,8 @@ components:
       type: object
       required: [status, service]
       properties:
-        status: { type: string, const: ok }
-        service: { type: string, const: api_svc }
+        status: { type: string, enum: [ok, unavailable] }
+        service: { type: string, const: restick }
 
     Timestamp:
       type: string
@@ -704,7 +704,10 @@ paths:
       summary: Liveness
       responses:
         "200":
-          description: OK
+          description: Ready (database reachable and data root writable)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } }
+        "503":
+          description: Not ready; no private diagnostics are returned
           content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } }
 
   /openapi.yaml:

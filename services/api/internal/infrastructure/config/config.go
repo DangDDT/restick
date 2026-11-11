@@ -20,14 +20,18 @@ type FactoryConfig struct {
 	AdminPasswordFile string
 	ProcessTimeout    time.Duration
 	TrustedProxyCIDRs []netip.Prefix
+	WebDir            string
+	OpenAPIPath       string
 }
 
 func LoadFactory() (FactoryConfig, error) {
 	cfg := FactoryConfig{
-		DataDir:           envOr("RESTICK_DATA_DIR", "/data"),
+		DataDir:           LoadDataDir(),
 		HTTPAddr:          envOr("RESTICK_HTTP_ADDR", ":8080"),
 		AdminPasswordFile: strings.TrimSpace(os.Getenv("RESTICK_ADMIN_PASSWORD_FILE")),
 		ProcessTimeout:    300 * time.Second,
+		WebDir:            envOr("RESTICK_WEB_DIR", "/app/web"),
+		OpenAPIPath:       envOr("RESTICK_OPENAPI_PATH", "/app/openapi/v1.yaml"),
 	}
 
 	base, err := normalizePublicBaseURL(strings.TrimSpace(os.Getenv("RESTICK_PUBLIC_BASE_URL")))
@@ -92,40 +96,10 @@ func parseCIDRs(raw string) ([]netip.Prefix, error) {
 	return prefixes, nil
 }
 
-type Config struct {
-	ServiceName         string
-	HTTPAddr            string
-	GRPCAddr            string
-	APISvcGRPCAddr      string
-	FTPSvcGRPCAddr      string
-	ImgToolGRPCAddr     string
-	PostgresDSN         string
-	JWTSecret           string
-	InternalToken       string
-	WebOrigins          []string
-	PublicFTPOrigin     string
-	BootstrapAdminEmail string
-	BootstrapAdminPass  string
-	BootstrapAPIKey     string
-}
-
-func Load() Config {
-	return Config{
-		ServiceName:         envOr("SERVICE_NAME", "api_svc"),
-		HTTPAddr:            envOr("HTTP_ADDR", ":8080"),
-		GRPCAddr:            envOr("GRPC_ADDR", ":50051"),
-		APISvcGRPCAddr:      strings.TrimSpace(os.Getenv("API_SVC_GRPC_ADDR")),
-		FTPSvcGRPCAddr:      strings.TrimSpace(os.Getenv("FTP_SVC_GRPC_ADDR")),
-		ImgToolGRPCAddr:     strings.TrimSpace(os.Getenv("IMG_TOOL_GRPC_ADDR")),
-		PostgresDSN:         envOr("POSTGRES_DSN", "postgres://restick:restick@postgres:5432/restick?sslmode=disable"),
-		JWTSecret:           envOr("JWT_SECRET", "change-me-jwt"),
-		InternalToken:       envOr("INTERNAL_TOKEN", ""),
-		WebOrigins:          splitCSV(envOr("WEB_ORIGIN", "http://localhost")),
-		PublicFTPOrigin:     envOr("PUBLIC_FTP_ORIGIN", "http://localhost"),
-		BootstrapAdminEmail: envOr("BOOTSTRAP_ADMIN_EMAIL", "admin@restick.local"),
-		BootstrapAdminPass:  envOr("BOOTSTRAP_ADMIN_PASSWORD", "changeme"),
-		BootstrapAPIKey:     envOr("BOOTSTRAP_API_KEY", "dev-api-key"),
-	}
+// LoadDataDir returns the data root for offline maintenance commands, which
+// need no public origin or HTTP configuration.
+func LoadDataDir() string {
+	return envOr("RESTICK_DATA_DIR", "/data")
 }
 
 func envOr(key string, fallback string) string {
@@ -134,16 +108,4 @@ func envOr(key string, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-func splitCSV(raw string) []string {
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			out = append(out, part)
-		}
-	}
-	return out
 }

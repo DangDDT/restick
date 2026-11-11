@@ -1,6 +1,6 @@
 # Restick Sticker Factory — spec nghiệp vụ và kiến trúc một người quản lý
 
-Ngày: 2026-11-10. Trạng thái: **bản thiết kế đề xuất để duyệt cùng kế hoạch triển khai; chưa cho phép sửa ứng dụng**.
+Ngày: 2026-11-10. Trạng thái: **đã được người dùng duyệt để triển khai trong worktree cách ly; chưa cho phép merge, push, deploy hoặc xóa dữ liệu cũ**.
 
 ## 1. Ý định và quyết định
 

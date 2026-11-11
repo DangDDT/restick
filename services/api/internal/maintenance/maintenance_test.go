@@ -256,14 +256,14 @@ func TestBackupManifestCoversSnapshot(t *testing.T) {
 	for _, entry := range manifest.Files {
 		listed[entry.Path] = entry
 	}
-	for _, want := range []string{dbFileName, f.sourceRel, f.objectPath, f.thumbPath, f.bundlePath, f.thumbnailPath} {
+	for _, want := range []string{storage.DBFileName, f.sourceRel, f.objectPath, f.thumbPath, f.bundlePath, f.thumbnailPath} {
 		if _, ok := listed[want]; !ok {
 			t.Errorf("manifest does not list %s", want)
 		}
 	}
 	for rel, entry := range listed {
 		if strings.HasPrefix(rel, "work/") || !strings.HasPrefix(rel, "sources/") &&
-			!strings.HasPrefix(rel, "packs/") && !strings.HasPrefix(rel, "bundles/") && rel != dbFileName {
+			!strings.HasPrefix(rel, "packs/") && !strings.HasPrefix(rel, "bundles/") && rel != storage.DBFileName {
 			t.Errorf("manifest lists %s, which is outside the backup allowlist", rel)
 		}
 		digest, size := digestOf(t, filepath.Join(out, filepath.FromSlash(rel)))
@@ -337,7 +337,7 @@ func TestRestoreRefusesExistingData(t *testing.T) {
 			target := t.TempDir()
 			var existing string
 			if name == "database" {
-				existing = filepath.Join(target, dbFileName)
+				existing = filepath.Join(target, storage.DBFileName)
 				writeFile(t, existing, []byte("existing database"))
 			} else {
 				existing = filepath.Join(target, "sources")
@@ -430,7 +430,7 @@ func TestRestoreRejectsTamperedOrEscapingFiles(t *testing.T) {
 		{
 			name: "corrupted database bytes",
 			tamper: func(t *testing.T, backupDir string) {
-				dbPath := filepath.Join(backupDir, dbFileName)
+				dbPath := filepath.Join(backupDir, storage.DBFileName)
 				body, err := os.ReadFile(dbPath)
 				if err != nil {
 					t.Fatalf("read database: %v", err)
@@ -438,7 +438,7 @@ func TestRestoreRejectsTamperedOrEscapingFiles(t *testing.T) {
 				writeFile(t, dbPath, body[:100])
 				digest, size := digestOf(t, dbPath)
 				editManifest(t, backupDir, func(m *backupManifest) {
-					setEntry(m, dbFileName, digest, size)
+					setEntry(m, storage.DBFileName, digest, size)
 				})
 			},
 		},
@@ -506,7 +506,7 @@ func TestRestoredFilesMatchDatabase(t *testing.T) {
 		t.Fatalf("Restore: %v", err)
 	}
 	// The published data dir is a checkpointed database, not a WAL pair.
-	if _, err := os.Lstat(filepath.Join(target, dbFileName+"-wal")); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Lstat(filepath.Join(target, storage.DBFileName+"-wal")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("restored data dir kept a WAL file: %v", err)
 	}
 
@@ -764,7 +764,7 @@ func assertOnlyLock(t *testing.T, dir string) {
 		t.Fatalf("read data dir: %v", err)
 	}
 	for _, entry := range entries {
-		if entry.Name() != lockFileName {
+		if entry.Name() != storage.LockFileName {
 			t.Fatalf("failed restore left %s in the data dir", entry.Name())
 		}
 	}

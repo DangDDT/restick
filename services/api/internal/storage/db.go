@@ -10,7 +10,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const dbFileName = "restick.sqlite"
+// DBFileName is the factory SQLite file inside the data dir.
+const DBFileName = "restick.sqlite"
 
 // Open opens the durable factory database in dataDir, applies the connection
 // pragmas and pending migrations. There is no in-memory fallback: an unwritable
@@ -21,9 +22,9 @@ func Open(ctx context.Context, dataDir string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", dsn(filepath.Join(dir, dbFileName)))
+	db, err := sql.Open("sqlite", dsn(filepath.Join(dir, DBFileName)))
 	if err != nil {
-		return nil, fmt.Errorf("storage: open %s: %w", filepath.Join(dir, dbFileName), err)
+		return nil, fmt.Errorf("storage: open %s: %w", filepath.Join(dir, DBFileName), err)
 	}
 	// One connection serializes short write transactions; never hold one while
 	// running the Python child or streaming a ZIP.
@@ -33,7 +34,7 @@ func Open(ctx context.Context, dataDir string) (*sql.DB, error) {
 
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("storage: connect %s: %w", filepath.Join(dir, dbFileName), err)
+		return nil, fmt.Errorf("storage: connect %s: %w", filepath.Join(dir, DBFileName), err)
 	}
 
 	migrations, err := loadMigrations()

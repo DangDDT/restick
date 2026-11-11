@@ -37,9 +37,9 @@ jobs:
         run: |
           git fetch origin main --depth=1
           BACKEND_DIFF=$(git diff origin/main...HEAD -- \
-            services/ infra/ \
+            services/ clients/web-next/ contracts/ \
+            Dockerfile \
             docker-compose.yml \
-            docker-compose.override.yml \
             .env.example \
             | wc -l)
           if [ "$BACKEND_DIFF" -gt "0" ]; then
@@ -47,7 +47,7 @@ jobs:
             echo "::error::Backend code has diverged from main on a support/* branch."
             echo "::error::Backend changes MUST be committed to main first, then cherry-picked or rebased here."
             echo ""
-            git diff origin/main...HEAD -- services/ infra/ docker-compose.yml docker-compose.override.yml .env.example
+            git diff origin/main...HEAD -- services/ clients/web-next/ contracts/ Dockerfile docker-compose.yml .env.example
             exit 1
           fi
           echo "Backend is clean — no divergence from main."

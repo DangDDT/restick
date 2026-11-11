@@ -1,5 +1,7 @@
 # Restick Single-Operator Sticker Factory Implementation Plan
 
+> **Trạng thái:** đã được người dùng duyệt (cùng spec, phương pháp và worktree cách ly) để triển khai; chưa cho phép merge, push, deploy hoặc xóa dữ liệu cũ.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Chuyển Restick thành studio một quản trị viên, ghép prompt cho AI ngoài, xử lý sheet thành pack và phục vụ client trên một VPS/Docker với SQLite + filesystem.

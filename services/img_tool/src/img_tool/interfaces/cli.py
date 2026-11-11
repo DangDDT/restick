@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from uuid import uuid4
 
 import typer
 
 from img_tool.application.process_sheet import execute_process
-from img_tool.application.submit_pack import execute_submit
-from img_tool.infrastructure.config.config import Config
-from img_tool.infrastructure.grpc_clients import JobClient, ObjectClient
-from img_tool.interfaces.serve import serve as run_serve
-from img_tool.interfaces.worker import run_worker
 
 app: typer.Typer = typer.Typer(
     help="Restick image pipeline. Does not generate images from keywords.",
@@ -22,11 +16,6 @@ app: typer.Typer = typer.Typer(
 @app.command("version")
 def version_command() -> None:
     typer.echo("0.0.1")
-
-
-@app.command("serve")
-def serve_command() -> None:
-    run_serve()
 
 
 @app.command("process")
@@ -65,23 +54,6 @@ def process_command(
         lossless=lossless,
     )
     typer.echo(f"wrote {pack_out} stickers={len(pack.stickers)}")
-
-
-@app.command("submit")
-def submit_command(out_dir: Path = typer.Argument(..., exists=True, file_okay=False)) -> None:
-    cfg = Config()
-    if cfg.ftp_svc_grpc_addr == "" or cfg.api_svc_grpc_addr == "":
-        raise typer.BadParameter("FTP_SVC_GRPC_ADDR and API_SVC_GRPC_ADDR are required")
-    objects = ObjectClient(cfg.ftp_svc_grpc_addr, cfg.internal_token)
-    jobs = JobClient(cfg.api_svc_grpc_addr, cfg.internal_token)
-    execute_submit(out_dir, objects, jobs)
-    typer.echo("submitted pending_review")
-
-
-@app.command("worker")
-def worker_command() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    run_worker(Config())
 
 
 def main() -> None:

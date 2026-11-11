@@ -37,11 +37,6 @@ const (
 
 	// manifestFileName lists the backed-up files inside the backup folder.
 	manifestFileName = "manifest.json"
-
-	// dbFileName and lockFileName mirror internal/storage. Backup snapshots the
-	// database by name, and restore must tolerate the app lock it creates.
-	dbFileName   = "restick.sqlite"
-	lockFileName = ".restick.lock"
 )
 
 // resourceDirs are the only data-dir subtrees a backup contains. work/ holds
@@ -123,7 +118,7 @@ func Backup(ctx context.Context, dataDir, outputDir string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	dbPath := filepath.Join(dir, dbFileName)
+	dbPath := filepath.Join(dir, storage.DBFileName)
 	if _, err := os.Lstat(dbPath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("%w: %s", ErrNoDatabase, dbPath)
@@ -145,7 +140,7 @@ func Backup(ctx context.Context, dataDir, outputDir string) error {
 	defer os.RemoveAll(staging)
 
 	manifest := backupManifest{Schema: BackupSchema, CreatedAt: utcNow()}
-	if err := snapshotEntry(ctx, dir, staging, dbFileName, &manifest.Files); err != nil {
+	if err := snapshotEntry(ctx, dir, staging, storage.DBFileName, &manifest.Files); err != nil {
 		return err
 	}
 	for _, name := range resourceDirs {

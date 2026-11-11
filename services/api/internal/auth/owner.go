@@ -71,6 +71,20 @@ func (s *Service) BootstrapOwner(ctx context.Context, password []byte) error {
 	return nil
 }
 
+// HasOwner reports whether the singleton owner row exists. Startup uses it to
+// require the bootstrap secret only for a database that has no owner yet.
+func (s *Service) HasOwner(ctx context.Context) (bool, error) {
+	var one int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM owner WHERE id = 1`).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("auth: read owner: %w", err)
+	}
+	return true, nil
+}
+
 // SetPassword replaces the owner password and revokes every admin session in
 // one transaction.
 func (s *Service) SetPassword(ctx context.Context, password []byte) error {

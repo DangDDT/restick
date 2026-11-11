@@ -67,7 +67,7 @@ func TestReopenPreservesRecords(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, dbFileName)); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, DBFileName)); err != nil {
 		t.Fatalf("database file missing after close: %v", err)
 	}
 
@@ -229,7 +229,7 @@ func TestAppLockRejectsUnusableLockFile(t *testing.T) {
 		t.Skip("root ignores lock file permissions")
 	}
 	dir := t.TempDir()
-	lockPath := filepath.Join(dir, lockFileName)
+	lockPath := filepath.Join(dir, LockFileName)
 	if err := os.WriteFile(lockPath, nil, 0o400); err != nil {
 		t.Fatalf("prepare read-only lock file: %v", err)
 	}

@@ -126,8 +126,8 @@ func readManifest(root string) (map[string]manifestFile, error) {
 		file.Path = rel
 		files[rel] = file
 	}
-	if _, ok := files[dbFileName]; !ok {
-		return nil, fmt.Errorf("%w: manifest lists no %s", ErrBackupInvalid, dbFileName)
+	if _, ok := files[storage.DBFileName]; !ok {
+		return nil, fmt.Errorf("%w: manifest lists no %s", ErrBackupInvalid, storage.DBFileName)
 	}
 	return files, nil
 }
@@ -142,7 +142,7 @@ func safeBackupPath(p string) (string, error) {
 		return "", fmt.Errorf("%w: unsafe path %q", ErrBackupInvalid, p)
 	}
 	top, _, _ := strings.Cut(clean, "/")
-	if top != dbFileName && top != "sources" && top != "packs" && top != "bundles" {
+	if top != storage.DBFileName && top != "sources" && top != "packs" && top != "bundles" {
 		return "", fmt.Errorf("%w: %q is outside the backup allowlist", ErrBackupInvalid, p)
 	}
 	return clean, nil
@@ -208,8 +208,8 @@ func applyDatabase(ctx context.Context, stagingDir string, files map[string]mani
 		return restoreErr
 	}
 	for _, suffix := range []string{"-wal", "-shm"} {
-		if err := os.Remove(filepath.Join(stagingDir, dbFileName+suffix)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("maintenance: remove %s: %w", dbFileName+suffix, err)
+		if err := os.Remove(filepath.Join(stagingDir, storage.DBFileName+suffix)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("maintenance: remove %s: %w", storage.DBFileName+suffix, err)
 		}
 	}
 	return nil
@@ -495,7 +495,7 @@ func ensureEmptyTarget(dir string) error {
 		return fmt.Errorf("maintenance: inspect data dir: %w", err)
 	}
 	for _, entry := range entries {
-		if entry.Name() != lockFileName {
+		if entry.Name() != storage.LockFileName {
 			return fmt.Errorf("%w: %s contains %s", ErrDataDirNotEmpty, dir, entry.Name())
 		}
 	}
@@ -506,7 +506,7 @@ func ensureEmptyTarget(dir string) error {
 // overwriting anything. The database goes last: its presence marks a complete
 // restore, and the lock file stays where it is.
 func publish(stagingDir, dataDir string) error {
-	for _, name := range []string{"sources", "packs", "bundles", dbFileName} {
+	for _, name := range []string{"sources", "packs", "bundles", storage.DBFileName} {
 		src := filepath.Join(stagingDir, name)
 		if _, err := os.Lstat(src); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {

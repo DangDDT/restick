@@ -1,24 +1,26 @@
-name: CI — Backend & Infra
+name: CI — Restick Application
 
 on:
   push:
     branches: [main]
     paths:
       - 'services/**'
-      - 'infra/**'
       - 'clients/web-next/**'
+      - 'contracts/**'
+      - 'Dockerfile'
       - 'docker-compose.yml'
-      - 'docker-compose.override.yml'
+      - '.dockerignore'
       - '.env.example'
       - '.github/workflows/ci-backend.yml'
   pull_request:
     branches: [main]
     paths:
       - 'services/**'
-      - 'infra/**'
       - 'clients/web-next/**'
+      - 'contracts/**'
+      - 'Dockerfile'
       - 'docker-compose.yml'
-      - 'docker-compose.override.yml'
+      - '.dockerignore'
       - '.env.example'
       - '.github/workflows/ci-backend.yml'
 
@@ -27,45 +29,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # -------------------------------------------------------------
-  # 1. Docker Compose & Ingress Architecture Validation
-  # -------------------------------------------------------------
   compose-validation:
     name: Compose Config Validation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate Docker Compose Configuration
+      - name: Validate the single-service compose file
         run: |
-          docker compose config --quiet
-          echo "Docker compose configuration is valid!"
+          secret="$RUNNER_TEMP/admin_password"
+          mkdir -p "$(dirname "$secret")"
+          printf 'ci-only-password\n' > "$secret"
+          RESTICK_PUBLIC_BASE_URL=https://ci.example \
+          RESTICK_ADMIN_PASSWORD_SECRET="$secret" \
+            docker compose config --quiet
 
-  # -------------------------------------------------------------
-  # 2. Go Backend Services (api, ftp)
-  # -------------------------------------------------------------
-  go-services:
-    name: Go Services (${{ matrix.service }})
+  go-api:
+    name: Go API
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: [services/api, services/ftp]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24.x'
-          cache-dependency-path: ${{ matrix.service }}/go.sum
+          go-version: '1.26.x'
+          cache-dependency-path: services/api/go.sum
       - name: Vet & Test
-        working-directory: ${{ matrix.service }}
+        working-directory: services/api
         run: |
           go vet ./...
-          go test -v -race ./...
+          go test -race ./...
 
-  # -------------------------------------------------------------
-  # 3. Python Image Processing Worker (img_tool)
-  # -------------------------------------------------------------
-  python-worker:
-    name: Python Worker (img_tool)
+  python-core:
+    name: Python Core & Local CLI
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,14 +75,16 @@ jobs:
           pip install -e services/img_tool
       - name: Ruff Lint
         run: ruff check services/img_tool
-      - name: Verify CLI Entrypoint
-        run: img_tool --help
+      - name: Unit Tests
+        working-directory: services/img_tool
+        run: python -m unittest discover -s tests -v
+      - name: Verify Local CLI & Machine Job
+        run: |
+          img_tool --help
+          python -m img_tool.interfaces.machine_job --help
 
-  # -------------------------------------------------------------
-  # 4. Next.js Web Admin Console (clients/web-next)
-  # -------------------------------------------------------------
-  web-next:
-    name: Next.js Web Admin
+  web-static:
+    name: Static Studio Export
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -106,3 +102,11 @@ jobs:
       - name: Build Static Export
         working-directory: clients/web-next
         run: npm run build
+
+  image:
+    name: Build Root Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Application Image
+        run: docker build --tag restick:ci .

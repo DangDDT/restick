@@ -30,6 +30,9 @@ type Dependencies struct {
 	TrustedProxyCIDRs []netip.Prefix
 	WebDir            string
 	OpenAPIPath       string
+	// Ready proves the live service state (database reachable and data root
+	// writable). Its error is never returned to the client.
+	Ready func(context.Context) error
 }
 
 // NewHandler serves the SDK read API, the owner admin API, the exported UI,
@@ -60,7 +63,7 @@ func newHandler(deps Dependencies, now func() time.Time) http.Handler {
 	mux := http.NewServeMux()
 	public.mount(mux)
 	owner.mount(mux)
-	mux.HandleFunc("GET /healthz", health)
+	mux.HandleFunc("GET /healthz", healthHandler(deps.Ready))
 	mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
 		data, err := os.ReadFile(deps.OpenAPIPath)
 		serveOpenAPI(w, data, err)
@@ -74,8 +77,20 @@ func newHandler(deps Dependencies, now func() time.Time) http.Handler {
 	return mux
 }
 
-func health(w http.ResponseWriter, _ *http.Request) {
-	publicJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "api_svc"})
+func healthHandler(ready func(context.Context) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if ready != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			if err := ready(ctx); err != nil {
+				// Readiness failures stay server-side: no paths, SQL or child
+				// diagnostics may reach an unauthenticated probe.
+				publicJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable", "service": "restick"})
+				return
+			}
+		}
+		publicJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "restick"})
+	}
 }
 
 func notFound(w http.ResponseWriter, _ *http.Request) {
@@ -102,18 +117,31 @@ func staticHandler(webDir string) http.HandlerFunc {
 		file := filepath.Join(webDir, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/"):
-			file = filepath.Join(file, "index.html")
+			file = firstFile(filepath.Join(file, "index.html"), strings.TrimSuffix(file, string(os.PathSeparator))+".html")
 		case isDir(file):
-			file = filepath.Join(file, "index.html")
+			// Next's static export writes both `route.html` and a `route/`
+			// directory holding only RSC payloads, so a direct reload must fall
+			// back to the sibling document.
+			file = firstFile(filepath.Join(file, "index.html"), file+".html")
 		case !exists(file):
-			if !exists(file + ".html") {
-				http.NotFound(w, r)
-				return
-			}
-			file += ".html"
+			file = firstFile(file + ".html")
+		}
+		if file == "" {
+			http.NotFound(w, r)
+			return
 		}
 		http.ServeFile(w, r, file)
 	}
+}
+
+// firstFile returns the first existing regular file, or "" when none exists.
+func firstFile(candidates ...string) string {
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func exists(file string) bool {

@@ -11,8 +11,8 @@ import (
 	"syscall"
 )
 
-// lockFileName is the exclusive app/maintenance lock inside the data dir.
-const lockFileName = ".restick.lock"
+// LockFileName is the exclusive app/maintenance lock inside the data dir.
+const LockFileName = ".restick.lock"
 
 // ErrAppLocked reports that another restick process holds the data dir lock.
 var ErrAppLocked = errors.New("storage: data dir is locked by another restick process")
@@ -25,7 +25,7 @@ func AcquireAppLock(dataDir string) (release func() error, err error) {
 	if err != nil {
 		return nil, err
 	}
-	lockPath := filepath.Join(dir, lockFileName)
+	lockPath := filepath.Join(dir, LockFileName)
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("storage: open app lock %s: %w", lockPath, err)
