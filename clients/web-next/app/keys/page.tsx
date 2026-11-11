@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
+import { KeyPackAccess } from "@/components/key-pack-access";
 import {
   Button,
   ConfirmDialog,
@@ -37,7 +38,8 @@ function Keys() {
   const [nameError, setNameError] = useState<string | null>(null);
   const [expiryError, setExpiryError] = useState<string | null>(null);
   // The raw secret lives only in this component's state: never in the URL or storage.
-  const [raw, setRaw] = useState<string | null>(null);
+  const [created, setCreated] = useState<CreatedKey | null>(null);
+  const [accessKey, setAccessKey] = useState<Key | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +79,7 @@ function Keys() {
         method: "POST",
         json: { name: name.trim(), expires_at: expiresAt },
       });
-      setRaw(created.raw);
+      setCreated(created);
       setMessage(t("keyCreatedDone"));
       setName("");
       setExpiry("");
@@ -98,7 +100,7 @@ function Keys() {
         // Close the confirmation before the secret dialog opens so the two never stack.
         const created = await api<CreatedKey>(`/api/v1/admin/api-keys/${pending.key.id}/rotate`, { method: "POST" });
         setPending(null);
-        setRaw(created.raw);
+        setCreated(created);
         setMessage(t("keyRotatedDone"));
       } else {
         await api<void>(`/api/v1/admin/api-keys/${pending.key.id}`, { method: "DELETE" });
@@ -115,7 +117,7 @@ function Keys() {
   }
 
   function closeSecret() {
-    setRaw(null);
+    setCreated(null);
   }
 
   const list = keys.data?.items ?? [];
@@ -191,6 +193,7 @@ function Keys() {
                   <th scope="col" className="px-3 py-2.5 font-medium">{t("keyCreated")}</th>
                   <th scope="col" className="px-3 py-2.5 font-medium">{t("keyExpires")}</th>
                   <th scope="col" className="px-3 py-2.5 font-medium">{t("disabledAtLabel")}</th>
+                  <th scope="col" className="px-3 py-2.5 font-medium">{t("packAccess")}</th>
                   <th scope="col" className="px-3 py-2.5 font-medium">
                     <span className="sr-only">{t("actions")}</span>
                   </th>
@@ -207,6 +210,16 @@ function Keys() {
                     <td className="num px-3 py-3 text-xs text-ink-3">{formatDate(key.created_at)}</td>
                     <td className="num px-3 py-3 text-xs text-ink-3">{formatDate(key.expires_at)}</td>
                     <td className="num px-3 py-3 text-xs text-ink-3">{formatDate(key.disabled_at)}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        <span data-qa="key-pack-count" className="num text-xs text-ink-3">
+                          {key.pack_count}
+                        </span>
+                        <Button variant="secondary" size="sm" icon="key" onClick={() => setAccessKey(key)}>
+                          {t("packAccess")}
+                        </Button>
+                      </div>
+                    </td>
                     <td className="px-3 py-3">
                       <KeyActions keyItem={key} onAction={setPending} />
                     </td>
@@ -232,8 +245,15 @@ function Keys() {
                   <dd>{formatDate(key.expires_at)}</dd>
                   <dt>{t("disabledAtLabel")}</dt>
                   <dd>{formatDate(key.disabled_at)}</dd>
+                  <dt>{t("packAccess")}</dt>
+                  <dd data-qa="key-pack-count">{key.pack_count}</dd>
                 </dl>
-                <KeyActions keyItem={key} onAction={setPending} />
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" size="sm" icon="key" onClick={() => setAccessKey(key)}>
+                    {t("packAccess")}
+                  </Button>
+                  <KeyActions keyItem={key} onAction={setPending} />
+                </div>
               </li>
             ))}
           </ul>
@@ -246,7 +266,7 @@ function Keys() {
         </EmptyState>
       )}
 
-      {raw && (
+      {created && (
         <Dialog
           title={t("keyRawTitle")}
           onClose={closeSecret}
@@ -262,13 +282,31 @@ function Keys() {
               ref={rawSelect}
               readOnly
               rows={2}
-              value={raw}
+              value={created.raw}
               onFocus={(event) => event.currentTarget.select()}
               className={cx(inputClass, "mono resize-none break-all text-[13px] leading-5")}
               aria-label={t("keyRawTitle")}
             />
-            <CopyButton text={raw} selectRef={rawSelect} variant="primary" />
+            <CopyButton text={created.raw} selectRef={rawSelect} variant="primary" />
+            <div className="border-t border-line pt-4">
+              <h3 className="mb-2 text-sm font-semibold text-ink">{t("packAccessTitle")}</h3>
+              <KeyPackAccess keyId={created.id} />
+            </div>
           </div>
+        </Dialog>
+      )}
+
+      {accessKey && (
+        <Dialog
+          title={`${accessKey.name} · ${t("packAccessTitle")}`}
+          onClose={() => setAccessKey(null)}
+          footer={
+            <Button variant="secondary" onClick={() => setAccessKey(null)}>
+              {t("close")}
+            </Button>
+          }
+        >
+          <KeyPackAccess keyId={accessKey.id} />
         </Dialog>
       )}
 
