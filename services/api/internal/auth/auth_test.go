@@ -428,3 +428,134 @@ func TestForwardedIPRequiresTrustedPeer(t *testing.T) {
 		t.Fatal("ParseTrustedCIDRs accepted an invalid CIDR")
 	}
 }
+
+func mustPack(t *testing.T, db *sql.DB, id string) {
+	t.Helper()
+	if _, err := db.Exec(`INSERT INTO packs (id, slug, name, author) VALUES (?, ?, ?, 'a')`, id, id, id); err != nil {
+		t.Fatalf("insert pack %s: %v", id, err)
+	}
+}
+
+func removalIDs(t *testing.T, svc *Service, keyID string) []string {
+	t.Helper()
+	items, err := svc.KeyRemovals(context.Background(), keyID, time.Time{})
+	if err != nil {
+		t.Fatalf("KeyRemovals: %v", err)
+	}
+	ids := []string{}
+	for _, r := range items {
+		ids = append(ids, r.PackID)
+	}
+	return ids
+}
+
+func eq(a, b []string) bool { return strings.Join(a, ",") == strings.Join(b, ",") }
+
+func TestSetKeyPacksGrantsAndRemoves(t *testing.T) {
+	ctx := context.Background()
+	svc, db := openTemp(t)
+	for _, id := range []string{"A", "B", "C"} {
+		mustPack(t, db, id)
+	}
+	key, _ := svc.CreateKey(ctx, "k", nil)
+	if err := svc.SetKeyPacks(ctx, key.ID, []string{"A", "B", "B"}); err != nil {
+		t.Fatalf("SetKeyPacks: %v", err)
+	}
+	if err := svc.SetKeyPacks(ctx, key.ID, []string{"B", "C"}); err != nil {
+		t.Fatalf("SetKeyPacks: %v", err)
+	}
+	got, err := svc.KeyPacks(ctx, key.ID)
+	if err != nil || !eq(got, []string{"B", "C"}) {
+		t.Fatalf("KeyPacks = %v, %v", got, err)
+	}
+	if got := removalIDs(t, svc, key.ID); !eq(got, []string{"A"}) {
+		t.Fatalf("removals = %v", got)
+	}
+	if ok, _ := svc.KeyHasPack(ctx, key.ID, "A"); ok {
+		t.Fatal("KeyHasPack A = true")
+	}
+	if ok, _ := svc.KeyHasPack(ctx, key.ID, "B"); !ok {
+		t.Fatal("KeyHasPack B = false")
+	}
+	if _, err := svc.KeyPacks(ctx, "missing"); !errors.Is(err, ErrKeyNotFound) {
+		t.Fatalf("KeyPacks missing = %v", err)
+	}
+	future := time.Now().Add(time.Hour)
+	if items, _ := svc.KeyRemovals(ctx, key.ID, future); len(items) != 0 {
+		t.Fatalf("removals since future = %v", items)
+	}
+}
+
+func TestRegrantClearsRemoval(t *testing.T) {
+	ctx := context.Background()
+	svc, db := openTemp(t)
+	mustPack(t, db, "A")
+	key, _ := svc.CreateKey(ctx, "k", nil)
+	svc.SetKeyPacks(ctx, key.ID, []string{"A"})
+	svc.SetKeyPacks(ctx, key.ID, nil)
+	if got := removalIDs(t, svc, key.ID); !eq(got, []string{"A"}) {
+		t.Fatalf("removals = %v", got)
+	}
+	svc.SetKeyPacks(ctx, key.ID, []string{"A"})
+	if got := removalIDs(t, svc, key.ID); len(got) != 0 {
+		t.Fatalf("removals after regrant = %v", got)
+	}
+}
+
+func TestSetKeyPacksUnknownPack(t *testing.T) {
+	ctx := context.Background()
+	svc, db := openTemp(t)
+	mustPack(t, db, "A")
+	key, _ := svc.CreateKey(ctx, "k", nil)
+	svc.SetKeyPacks(ctx, key.ID, []string{"A"})
+	if err := svc.SetKeyPacks(ctx, key.ID, []string{"nope"}); !errors.Is(err, ErrUnknownPack) {
+		t.Fatalf("err = %v", err)
+	}
+	if got, _ := svc.KeyPacks(ctx, key.ID); !eq(got, []string{"A"}) {
+		t.Fatalf("KeyPacks = %v", got)
+	}
+	if got := removalIDs(t, svc, key.ID); len(got) != 0 {
+		t.Fatalf("removals = %v", got)
+	}
+}
+
+func TestRotateKeyCarriesGrants(t *testing.T) {
+	ctx := context.Background()
+	svc, db := openTemp(t)
+	mustPack(t, db, "A")
+	mustPack(t, db, "B")
+	old, _ := svc.CreateKey(ctx, "k", nil)
+	svc.SetKeyPacks(ctx, old.ID, []string{"A", "B"})
+	svc.SetKeyPacks(ctx, old.ID, []string{"A"})
+	repl, err := svc.RotateKey(ctx, old.ID)
+	if err != nil {
+		t.Fatalf("RotateKey: %v", err)
+	}
+	if got, _ := svc.KeyPacks(ctx, repl.ID); !eq(got, []string{"A"}) {
+		t.Fatalf("replacement packs = %v", got)
+	}
+	if got := removalIDs(t, svc, repl.ID); !eq(got, []string{"B"}) {
+		t.Fatalf("replacement removals = %v", got)
+	}
+}
+
+func TestAuthenticateKeyReturnsID(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := openTemp(t)
+	now := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
+	expires := now.Add(time.Hour)
+	key, _ := svc.CreateKey(ctx, "k", &expires)
+	if id, err := svc.AuthenticateKey(ctx, key.Raw, now); err != nil || id != key.ID {
+		t.Fatalf("AuthenticateKey = %q, %v", id, err)
+	}
+	if _, err := svc.AuthenticateKey(ctx, key.Raw, expires); !errors.Is(err, ErrKeyNotFound) {
+		t.Fatalf("expired: %v", err)
+	}
+	if _, err := svc.AuthenticateKey(ctx, "rsk_bogus", now); !errors.Is(err, ErrKeyNotFound) {
+		t.Fatalf("unknown: %v", err)
+	}
+	svc.DisableKey(ctx, key.ID)
+	if _, err := svc.AuthenticateKey(ctx, key.Raw, now); !errors.Is(err, ErrKeyNotFound) {
+		t.Fatalf("disabled: %v", err)
+	}
+}

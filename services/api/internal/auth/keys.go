@@ -95,6 +95,14 @@ func (s *Service) RotateKey(ctx context.Context, id string) (CreatedKey, error) 
 		replacement.ID, replacement.Name, replacement.Prefix, secretHash(replacement.Raw), now, nullableSeconds(expiry)); err != nil {
 		return CreatedKey{}, fmt.Errorf("auth: rotate api key: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO api_key_packs (key_id, pack_id) SELECT ?, pack_id FROM api_key_packs WHERE key_id = ?`, replacement.ID, id); err != nil {
+		return CreatedKey{}, fmt.Errorf("auth: rotate api key: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO api_key_pack_removals (key_id, pack_id, removed_at) SELECT ?, pack_id, removed_at FROM api_key_pack_removals WHERE key_id = ?`, replacement.ID, id); err != nil {
+		return CreatedKey{}, fmt.Errorf("auth: rotate api key: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return CreatedKey{}, fmt.Errorf("auth: rotate api key: %w", err)
 	}
@@ -122,32 +130,39 @@ func (s *Service) DisableKey(ctx context.Context, id string) error {
 // ValidateKey reports whether raw is an active, unexpired client key at now.
 // Keys grant read access only and are deliberately separate from sessions.
 func (s *Service) ValidateKey(ctx context.Context, raw string, now time.Time) error {
+	_, err := s.AuthenticateKey(ctx, raw, now)
+	return err
+}
+
+// AuthenticateKey is ValidateKey that also returns the key id.
+func (s *Service) AuthenticateKey(ctx context.Context, raw string, now time.Time) (string, error) {
 	var (
+		id        string
 		active    int
 		expiresAt sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT active, expires_at FROM api_keys WHERE key_hash = ?`, secretHash(raw)).Scan(&active, &expiresAt)
+		`SELECT id, active, expires_at FROM api_keys WHERE key_hash = ?`, secretHash(raw)).Scan(&id, &active, &expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return ErrKeyNotFound
+		return "", ErrKeyNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("auth: validate api key: %w", err)
+		return "", fmt.Errorf("auth: validate api key: %w", err)
 	}
 	if active == 0 {
-		return ErrKeyNotFound
+		return "", ErrKeyNotFound
 	}
 	if !expiresAt.Valid {
-		return nil
+		return id, nil
 	}
 	expires, err := time.Parse(time.RFC3339, expiresAt.String)
 	if err != nil {
-		return fmt.Errorf("auth: api key has malformed expires_at %q: %w", expiresAt.String, err)
+		return "", fmt.Errorf("auth: api key has malformed expires_at %q: %w", expiresAt.String, err)
 	}
 	if !now.Before(expires) {
-		return ErrKeyNotFound
+		return "", ErrKeyNotFound
 	}
-	return nil
+	return id, nil
 }
 
 // Key is the metadata of one client key. Neither the hash nor the raw value is
