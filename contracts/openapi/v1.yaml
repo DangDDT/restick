@@ -614,27 +614,27 @@ components:
 
     PackCreate:
       type: object
-      required: [slug, name]
+      required: [slug, name, author, design_id, sheet_id]
       properties:
         slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }
         name: { type: string }
         author: { type: string }
         description: { type: string }
         tags: { type: array, items: { type: string } }
-        design_id: { type: string }
-        sheet_id: { type: string, description: "A sheet of `design_id`; processing uses this sheet." }
+        design_id: { type: string, description: The pack's design. }
+        sheet_id: { type: string, description: "A sheet of `design_id`; processing uses this sheet. Required on create." }
       additionalProperties: false
 
     PackUpdate:
       type: object
-      required: [name, author, description, tags]
+      required: [name, author, description, tags, design_id, sheet_id]
       properties:
         name: { type: string }
         author: { type: string }
         description: { type: string }
         tags: { type: array, items: { type: string } }
-        design_id: { type: string }
-        sheet_id: { type: string, description: "A sheet of `design_id`; processing uses this sheet." }
+        design_id: { type: string, description: The pack's design; resend the current one to keep it. }
+        sheet_id: { type: string, description: "A sheet of `design_id`; processing uses this sheet. Resend the current one to keep it." }
       additionalProperties: false
 
     JobRequest:
@@ -1451,7 +1451,7 @@ paths:
     post:
       tags: [Admin packs]
       summary: Create a draft pack
-      description: "`sheet_id`, when given, must be a sheet of `design_id` (422 otherwise). Processing requires a selected sheet (422 `source_missing`)."
+      description: "`design_id` and `sheet_id` are required; `sheet_id` must be a sheet of `design_id` (422 otherwise). Processing requires a selected sheet (422 `source_missing`)."
       security: [{ OwnerCookie: [] }]
       requestBody:
         required: true
@@ -1483,7 +1483,7 @@ paths:
     put:
       tags: [Admin packs]
       summary: Update catalog metadata
-      description: Never changes committed version bytes or their manifest. `sheet_id` must be a sheet of `design_id` (422 otherwise).
+      description: Never changes committed version bytes or their manifest. `design_id` and `sheet_id` are required; `sheet_id` must be a sheet of `design_id` (422 otherwise). Changing the sheet while a job is queued or running answers 409 `job_active`.
       security: [{ OwnerCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/PackID'
@@ -1498,6 +1498,7 @@ paths:
         "401": { $ref: '#/components/responses/Unauthorized' }
         "403": { $ref: '#/components/responses/Forbidden' }
         "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
         "410": { $ref: '#/components/responses/Gone' }
         "413": { $ref: '#/components/responses/TooLarge' }
         "422": { $ref: '#/components/responses/Unprocessable' }
