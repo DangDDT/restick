@@ -43,17 +43,23 @@ contracts/openapi/v1.yaml  single HTTP source of truth
    Desktop file-sharing settings. A data directory owned by root makes startup
    fail before traffic is accepted.
 
-2. **Create the one-time owner password secret** (a file, never an environment
-   value):
+2. **Create the one-time owner password secret inside a directory** (a file,
+   never an environment value). The whole directory is mounted read-only at
+   `/run/secrets`, so the file may be deleted after bootstrap without breaking
+   `docker compose up`:
 
    ```bash
-   install -d -m 700 ./secrets
+   # Linux: the container runs as UID/GID 10001 and never chowns.
+   install -d -m 700 -o 10001 -g 10001 ./secrets
    printf '%s\n' 'replace-with-a-strong-password' > ./secrets/admin_password
-   chmod 600 ./secrets/admin_password
+   chown 10001:10001 ./secrets/admin_password && chmod 600 ./secrets/admin_password
    ```
 
-   The first start of a fresh data directory requires this file. Once the owner
-   exists, the secret is ignored: restarting never changes the password hash.
+   On Docker Desktop, create `./secrets` (mode 700) and `./secrets/admin_password`
+   (mode 600); the Desktop file-sharing layer presents them to container UID
+   10001. The first start of a fresh data directory requires the file. Once the
+   owner exists the file is never read: you may delete it, and restarting never
+   changes the password hash.
 
 3. **Configure the environment** (`cp .env.example .env`) and set at least
    `RESTICK_PUBLIC_BASE_URL` to the public HTTPS origin. Pin an immutable image
@@ -154,18 +160,20 @@ Notes:
 
 ## Local development
 
-Runtime needs Go 1.26 and Python 3.12. The web export is optional for API work.
+Runtime needs Go 1.26 and Python 3.12. `cmd/restick` tests serve the actual
+exported UI, so build the export before the full Go test command; targeted
+storage-only tests do not need it.
 
 ```bash
+# Static studio export (required by ./cmd/restick tests)
+cd clients/web-next && npm ci && npm run build   # writes out/
+
 # Go tests (module-local)
 cd services/api && go test ./...
 
 # Python core, local CLI and machine job
 cd services/img_tool && pip install -e . && python -m unittest discover -s tests -v
 img_tool --help
-
-# Static studio export
-cd clients/web-next && npm ci && npm run build   # writes out/
 ```
 
 Run the server locally with a real data dir and secret:

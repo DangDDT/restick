@@ -24,8 +24,9 @@ services:
     volumes:
       # The host directory must already belong to UID/GID 10001 (see README).
       - ${RESTICK_DATA_HOST:-./data}:/data
-    secrets:
-      - admin_password
+      # Directory mount, read-only: the file inside may be absent once the
+      # owner exists, and Compose must still create the container.
+      - ${RESTICK_BOOTSTRAP_DIR:-./secrets}:/run/secrets:ro
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -45,7 +46,3 @@ services:
       timeout: 3s
       retries: 5
       start_period: 20s
-
-secrets:
-  admin_password:
-    file: ${RESTICK_ADMIN_PASSWORD_SECRET:-./secrets/admin_password}
