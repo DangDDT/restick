@@ -2,20 +2,18 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useAuth } from "@/lib/auth";
+import { t } from "@/lib/i18n";
 
 export default function Home() {
-  const { isReady, token } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isReady) return;
-    router.replace(token ? "/packs" : "/login");
-  }, [isReady, token, router]);
+    router.replace("/factory");
+  }, [router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center text-sm text-zinc-500">
-      Loading…
+      {t("loading")}
     </div>
   );
 }

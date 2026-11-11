@@ -1,280 +1,222 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useApi } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
-import type { APIKey, APIKeyListResponse, CreatedAPIKey } from "@/lib/types";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
-import { useI18n } from "@/lib/i18n";
 import {
   Button,
+  CopyButton,
   EmptyState,
   ErrorBanner,
   Field,
-  inputClass,
   PageHeader,
   Spinner,
+  StatusPill,
+  SuccessBanner,
+  inputClass,
 } from "@/components/ui";
+import { api, errorText } from "@/lib/api";
+import { formatDate } from "@/lib/format";
+import { t } from "@/lib/i18n";
+import type { CreatedKey, Key, KeyList } from "@/lib/types";
 
-function OneTimeKeyDialog({ rawKey, onClose }: { rawKey: string; onClose: () => void }) {
-  const { t } = useI18n();
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-bold text-zinc-900">{t("keyCreatedTitle")}</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          {t("keyCreatedBody")}
-        </p>
-        <div className="mt-4 rounded-lg bg-zinc-900 p-4">
-          <code className="break-all text-sm text-emerald-300">{rawKey}</code>
-        </div>
-        <div className="mt-6 flex justify-end">
-          <Button onClick={onClose}>{t("done")}</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CreateDialog({
-  onConfirm,
-  onClose,
-}: {
-  onConfirm: (name: string, days: number | null) => void;
-  onClose: () => void;
-}) {
-  const { t } = useI18n();
-  const [name, setName] = useState(t("keyNameDefault"));
-  const [days, setDays] = useState("");
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-bold text-zinc-900">{t("createKeyTitle")}</h2>
-        <div className="mt-4 space-y-4">
-          <Field label={t("keyName")}>
-            <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label={t("expiresDays")} hint={t("expiresHint")}>
-            <input
-              value={days}
-              onChange={(e) => setDays(e.target.value)}
-              className={inputClass}
-              placeholder="30, 90"
-            />
-          </Field>
-        </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>
-            {t("cancel")}
-          </Button>
-          <Button
-            onClick={() => {
-              const parsed = days.trim() ? Number(days.trim()) : null;
-              onConfirm(name.trim() || "API Key", parsed && parsed > 0 ? parsed : null);
-            }}
-          >
-            {t("create")}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function KeyTable({
-  keys,
-  admin,
-  onRotate,
-  onDelete,
-}: {
-  keys: APIKey[];
-  admin: boolean;
-  onRotate: (id: string) => void;
-  onDelete: (key: { id: string; admin: boolean }) => void;
-}) {
-  const { t } = useI18n();
-  if (keys.length === 0) {
-    return <EmptyState title={t("noKeys")} hint={t("noKeysHint")} />;
-  }
-  return (
-    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wider text-zinc-500">
-          <tr>
-            <th className="px-4 py-3 font-semibold">{t("keyName")}</th>
-            <th className="px-4 py-3 font-semibold">{t("prefix")}</th>
-            {admin && <th className="px-4 py-3 font-semibold">{t("owner")}</th>}
-            <th className="px-4 py-3 font-semibold">{t("status")}</th>
-            <th className="px-4 py-3 font-semibold">{t("created")}</th>
-            <th className="px-4 py-3 font-semibold">{t("actions")}</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-100">
-          {keys.map((k) => (
-            <tr key={k.id} className="hover:bg-zinc-50">
-              <td className="px-4 py-3 font-medium text-zinc-900">{k.name}</td>
-              <td className="px-4 py-3 font-mono text-xs text-zinc-600">{k.key_prefix}</td>
-              {admin && <td className="px-4 py-3 text-zinc-600">{k.user_email ?? "—"}</td>}
-              <td className="px-4 py-3">
-                <span
-                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    k.is_active
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-zinc-100 text-zinc-500"
-                  }`}
-                >
-                  {k.is_active ? t("active") : t("inactive")}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-xs text-zinc-500">
-                {new Date(k.created_at).toLocaleDateString()}
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex gap-2">
-                  {!admin && (
-                    <button
-                      onClick={() => onRotate(k.id)}
-                      className="text-xs font-medium text-indigo-600 hover:underline"
-                    >
-                      {t("rotate")}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => {
-                      if (window.confirm(t("deleteKeyConfirm"))) {
-                        onDelete({ id: k.id, admin });
-                      }
-                    }}
-                    className="text-xs font-medium text-red-600 hover:underline"
-                  >
-                    {t("delete")}
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ApiKeys() {
-  const { request } = useApi();
-  const { t } = useI18n();
-  const { isAdmin } = useAuth();
+function Keys() {
   const qc = useQueryClient();
-  const [showCreate, setShowCreate] = useState(false);
-  const [rawKey, setRawKey] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [raw, setRaw] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data, isLoading, isError, error: qError } = useQuery({
-    queryKey: ["api-keys"],
-    queryFn: async () => {
-      const mine = await request<APIKeyListResponse>("/api/v1/me/api-keys");
-      let all: APIKey[] = [];
-      if (isAdmin) {
-        const res = await request<APIKeyListResponse>("/api/v1/admin/api-keys");
-        all = res.items;
+  const keys = useQuery({
+    queryKey: ["admin-keys"],
+    queryFn: () => api<KeyList>("/api/v1/admin/api-keys"),
+  });
+
+  function refresh() {
+    qc.invalidateQueries({ queryKey: ["admin-keys"] });
+  }
+
+  async function createKey(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
+    if (!name.trim()) return setError(t("keyNameRequired"));
+
+    let expiresAt: string | null = null;
+    if (expiry) {
+      const when = new Date(expiry);
+      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+        return setError(t("keyExpiryPast"));
       }
-      return { mine: mine.items, all };
-    },
-  });
+      expiresAt = `${when.toISOString().slice(0, 19)}Z`;
+    }
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["api-keys"] });
-
-  const createKey = useMutation({
-    mutationFn: (body: { name: string; expires_in_days?: number }) =>
-      request<CreatedAPIKey>("/api/v1/me/api-keys", {
+    setBusy(true);
+    try {
+      const created = await api<CreatedKey>("/api/v1/admin/api-keys", {
         method: "POST",
-        body: JSON.stringify(body),
-      }),
-    onSuccess: (created) => {
-      invalidate();
-      setShowCreate(false);
-      if (created.raw_key) setRawKey(created.raw_key);
-    },
-    onError: (err) => setError(err instanceof Error ? err.message : t("keyCreateFailed")),
-  });
+        json: { name: name.trim(), expires_at: expiresAt },
+      });
+      setRaw(created.raw);
+      setMessage(t("keyCreatedDone"));
+      setName("");
+      setExpiry("");
+      refresh();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
-  const rotateKey = useMutation({
-    mutationFn: (id: string) =>
-      request<CreatedAPIKey>(`/api/v1/me/api-keys/${id}/rotate`, { method: "POST" }),
-    onSuccess: (rotated) => {
-      invalidate();
-      if (rotated.raw_key) setRawKey(rotated.raw_key);
-    },
-    onError: (err) => setError(err instanceof Error ? err.message : t("keyRotateFailed")),
-  });
+  async function rotate(key: Key) {
+    if (!window.confirm(t("rotateConfirm"))) return;
+    setError(null);
+    setMessage(null);
+    try {
+      const created = await api<CreatedKey>(`/api/v1/admin/api-keys/${key.id}/rotate`, {
+        method: "POST",
+      });
+      setRaw(created.raw);
+      setMessage(t("keyRotatedDone"));
+      refresh();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }
 
-  const deleteKey = useMutation({
-    mutationFn: (key: { id: string; admin: boolean }) =>
-      request<void>(
-        key.admin ? `/api/v1/admin/api-keys/${key.id}` : `/api/v1/me/api-keys/${key.id}`,
-        { method: "DELETE" },
-      ),
-    onSuccess: invalidate,
-    onError: (err) => setError(err instanceof Error ? err.message : t("keyDeleteFailed")),
-  });
+  async function disable(key: Key) {
+    if (!window.confirm(t("disableConfirm"))) return;
+    setError(null);
+    setMessage(null);
+    try {
+      await api<void>(`/api/v1/admin/api-keys/${key.id}`, { method: "DELETE" });
+      setMessage(t("keyDisabledDone"));
+      refresh();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }
 
   return (
     <>
-      <PageHeader
-        title={t("keysTitle")}
-        subtitle={t("keysSubtitle")}
-        actions={
-          <Button onClick={() => setShowCreate(true)}>{t("createKey")}</Button>
-        }
-      />
+      <PageHeader title={t("keysTitle")} subtitle={t("keysSubtitle")} />
 
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-      {isError && (
+      {message && (
         <div className="mb-4">
-          <ErrorBanner message={qError instanceof Error ? qError.message : t("loadKeysFailed")} />
+          <SuccessBanner message={message} />
+        </div>
+      )}
+      {error && (
+        <div className="mb-4">
+          <ErrorBanner message={error} />
         </div>
       )}
 
-      {isLoading ? (
+      {raw && (
+        <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-emerald-900">{t("keyRawTitle")}</p>
+              <p className="text-xs text-emerald-800">{t("keyRawHint")}</p>
+            </div>
+            <div className="flex gap-2">
+              <CopyButton text={raw} />
+              <Button variant="secondary" onClick={() => setRaw(null)}>
+                {t("cancel")}
+              </Button>
+            </div>
+          </div>
+          <code className="mt-3 block select-all break-all rounded-lg bg-zinc-900 p-3 text-sm text-emerald-300">
+            {raw}
+          </code>
+        </div>
+      )}
+
+      <form
+        onSubmit={createKey}
+        className="mb-6 grid gap-3 rounded-xl border border-zinc-200 bg-white p-4 sm:grid-cols-[1fr_1fr_auto]"
+      >
+        <Field label={t("keyName")}>
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            className={inputClass}
+          />
+        </Field>
+        <Field label={t("keyExpiry")} hint={t("keyExpiryHint")}>
+          <input
+            type="datetime-local"
+            value={expiry}
+            onChange={(event) => setExpiry(event.target.value)}
+            className={inputClass}
+          />
+        </Field>
+        <div className="flex items-end">
+          <Button type="submit" disabled={busy}>
+            {busy ? t("saving") : t("newKey")}
+          </Button>
+        </div>
+      </form>
+
+      {keys.isLoading ? (
         <Spinner />
-      ) : (
-        <div className="space-y-8">
-          <section>
-            <h2 className="mb-3 text-sm font-semibold text-zinc-700">{t("personalKeys")}</h2>
-            <KeyTable
-              keys={data?.mine ?? []}
-              admin={false}
-              onRotate={(id) => rotateKey.mutate(id)}
-              onDelete={(key) => deleteKey.mutate(key)}
-            />
-          </section>
-          {isAdmin && (
-            <section>
-              <h2 className="mb-3 text-sm font-semibold text-zinc-700">{t("systemKeys")}</h2>
-              <KeyTable
-                keys={data?.all ?? []}
-                admin
-                onRotate={() => {}}
-                onDelete={(key) => deleteKey.mutate(key)}
-              />
-            </section>
-          )}
+      ) : keys.isError ? (
+        <ErrorBanner message={errorText(keys.error)} />
+      ) : keys.data && keys.data.items.length > 0 ? (
+        <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
+          <table className="w-full min-w-[46rem] text-left text-sm">
+            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wider text-zinc-500">
+              <tr>
+                <th className="px-4 py-3 font-semibold">{t("keyName")}</th>
+                <th className="px-4 py-3 font-semibold">{t("keyPrefix")}</th>
+                <th className="px-4 py-3 font-semibold">{t("keyStatus")}</th>
+                <th className="px-4 py-3 font-semibold">{t("keyCreated")}</th>
+                <th className="px-4 py-3 font-semibold">{t("keyExpires")}</th>
+                <th className="px-4 py-3 font-semibold">{t("disabledAtLabel")}</th>
+                <th className="px-4 py-3 font-semibold">{t("actions")}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {keys.data.items.map((key) => (
+                <tr key={key.id} className="align-top">
+                  <td className="px-4 py-3 font-medium text-zinc-900">{key.name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-600">{key.prefix}</td>
+                  <td className="px-4 py-3">
+                    <StatusPill status={key.active ? "active" : "inactive"} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-zinc-500">{formatDate(key.created_at)}</td>
+                  <td className="px-4 py-3 text-xs text-zinc-500">{formatDate(key.expires_at)}</td>
+                  <td className="px-4 py-3 text-xs text-zinc-500">{formatDate(key.disabled_at)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => void rotate(key)}
+                        className="text-xs font-medium text-indigo-600 hover:underline"
+                      >
+                        {t("rotate")}
+                      </button>
+                      {key.active && (
+                        <button
+                          onClick={() => void disable(key)}
+                          className="text-xs font-medium text-red-600 hover:underline"
+                        >
+                          {t("disableKey")}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      ) : (
+        <EmptyState title={t("noKeys")} />
       )}
-
-      {showCreate && (
-        <CreateDialog
-          onClose={() => setShowCreate(false)}
-          onConfirm={(name, days) =>
-            createKey.mutate(
-              days ? { name, expires_in_days: days } : { name },
-            )
-          }
-        />
-      )}
-      {rawKey && <OneTimeKeyDialog rawKey={rawKey} onClose={() => setRawKey(null)} />}
     </>
   );
 }
@@ -283,7 +225,7 @@ export default function Page() {
   return (
     <RequireAuth>
       <AppShell>
-        <ApiKeys />
+        <Keys />
       </AppShell>
     </RequireAuth>
   );

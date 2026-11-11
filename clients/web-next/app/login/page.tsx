@@ -1,30 +1,28 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useI18n } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
 import { Button, ErrorBanner, Field, inputClass } from "@/components/ui";
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const { t } = useI18n();
   const router = useRouter();
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await login(email.trim(), password);
-      router.replace("/packs");
+      await login(password);
+      router.replace("/factory");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -40,44 +38,29 @@ export default function LoginPage() {
           <span className="text-sm font-bold tracking-widest text-zinc-900">{t("appName")}</span>
         </div>
         <h1 className="text-lg font-bold text-zinc-900">{t("signIn")}</h1>
-        <p className="mb-6 mt-1 text-sm text-zinc-500">{t("loginSubtitle")}</p>
+        <p className="mb-6 mt-1 text-sm text-zinc-500">{t("signInSubtitle")}</p>
 
-        {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+        {error && (
+          <div className="mb-4">
+            <ErrorBanner message={error} />
+          </div>
+        )}
 
         <form onSubmit={onSubmit} className="space-y-4">
-          <Field label={t("email")}>
-            <input
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={inputClass}
-              placeholder="you@example.com"
-            />
-          </Field>
           <Field label={t("password")}>
             <input
               type="password"
               required
               autoComplete="current-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               className={inputClass}
-              placeholder="••••••••"
             />
           </Field>
           <Button type="submit" disabled={busy} className="w-full">
             {busy ? t("signingIn") : t("signIn")}
           </Button>
         </form>
-
-        <p className="mt-6 text-center text-sm text-zinc-500">
-          {t("noAccount")}{" "}
-          <Link href="/register" className="font-medium text-indigo-600 hover:underline">
-            {t("register")}
-          </Link>
-        </p>
       </div>
     </div>
   );

@@ -2,21 +2,38 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useApi } from "@/lib/api";
-import type { PackListResponse } from "@/lib/types";
+import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
-import { EmptyState, ErrorBanner, PageHeader, Spinner, StatusPill } from "@/components/ui";
-import { useI18n } from "@/lib/i18n";
+import {
+  Button,
+  EmptyState,
+  ErrorBanner,
+  Field,
+  PageHeader,
+  Pager,
+  Spinner,
+  StatusPill,
+  inputClass,
+} from "@/components/ui";
+import { api, errorText } from "@/lib/api";
+import { formatDate } from "@/lib/format";
+import { t } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n";
+import type { AdminPack, AdminPackPage } from "@/lib/types";
 
-function PackCard({ pack }: { pack: PackListResponse["items"][number] }) {
-  const { t } = useI18n();
+const PAGE_SIZE = 20;
+const STATUSES = ["", "draft", "ready", "revoked"] as const;
+const STATUS_LABEL: Record<"draft" | "ready" | "revoked", MessageKey> = {
+  draft: "statusDraft",
+  ready: "statusReady",
+  revoked: "statusRevoked",
+};
+
+function PackRow({ pack }: { pack: AdminPack }) {
   return (
-    <Link
-      href={`/packs/${pack.id}`}
-      className="group overflow-hidden rounded-xl border border-zinc-200 bg-white transition-shadow hover:shadow-md"
-    >
-      <div className="aspect-square w-full bg-zinc-100">
+    <li className="flex flex-wrap items-center gap-4 px-4 py-3">
+      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
         {pack.thumbnail_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -26,76 +43,134 @@ function PackCard({ pack }: { pack: PackListResponse["items"][number] }) {
             loading="lazy"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-4xl text-zinc-300">▦</div>
+          <div className="flex h-full items-center justify-center text-xl text-zinc-300">▦</div>
         )}
       </div>
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="truncate text-sm font-semibold text-zinc-900 group-hover:text-indigo-600">
-            {pack.name}
-          </h3>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate text-sm font-semibold text-zinc-900">{pack.name}</p>
           <StatusPill status={pack.status} />
         </div>
-        <p className="mt-1 truncate text-xs text-zinc-500">
-          {pack.author} · {pack.sticker_count} {t("packStickers")} · v{pack.version}
+        <p className="mt-0.5 truncate text-xs text-zinc-500">
+          {pack.slug} · {pack.author} · {t("versionLabel")} {pack.current_version} ·{" "}
+          {pack.sticker_count} {t("stickerCount")} · {t("updatedAt")} {formatDate(pack.updated_at)}
         </p>
-        {pack.tags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {pack.tags.slice(0, 4).map((t) => (
+        {(pack.tags ?? []).length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {(pack.tags ?? []).map((tag) => (
               <span
-                key={t}
+                key={tag}
                 className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600"
               >
-                {t}
+                {tag}
               </span>
             ))}
           </div>
         )}
       </div>
-    </Link>
+      <Link
+        href={`/packs/detail?id=${encodeURIComponent(pack.id)}`}
+        className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+      >
+        {t("open")}
+      </Link>
+    </li>
   );
 }
 
-function MyPacks() {
-  const { request } = useApi();
-  const { t } = useI18n();
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["my-packs"],
-    queryFn: () => request<PackListResponse>("/api/v1/me/packs"),
+function Packs() {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
+  const [tag, setTag] = useState("");
+  const [applied, setApplied] = useState({ query: "", status: "", tag: "", page: 1 });
+
+  const params = new URLSearchParams();
+  if (applied.query) params.set("q", applied.query);
+  if (applied.status) params.set("status", applied.status);
+  if (applied.tag) params.set("tag", applied.tag);
+  params.set("page", String(applied.page));
+  params.set("page_size", String(PAGE_SIZE));
+
+  const packs = useQuery({
+    queryKey: ["admin-packs", applied],
+    queryFn: () => api<AdminPackPage>(`/api/v1/admin/packs?${params.toString()}`),
   });
 
   return (
     <>
       <PageHeader
-        title={t("myPacksTitle")}
-        subtitle={t("myPacksSubtitle")}
+        title={t("packsTitle")}
+        subtitle={t("packsSubtitle")}
         actions={
           <Link
             href="/packs/new"
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
           >
-            {t("navUploadPack")}
+            {t("newPack")}
           </Link>
         }
       />
-      {isError && (
-        <div className="mb-4">
-          <ErrorBanner message={error instanceof Error ? error.message : t("loadPacksFailed")} />
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          setApplied({ query: query.trim(), status, tag: tag.trim(), page: 1 });
+        }}
+        className="mb-5 grid gap-3 rounded-xl border border-zinc-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        <Field label={t("search")}>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("searchPlaceholder")}
+            className={inputClass}
+          />
+        </Field>
+        <Field label={t("filterStatus")}>
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+            className={inputClass}
+          >
+            {STATUSES.map((value) => (
+              <option key={value || "all"} value={value}>
+                {value ? t(STATUS_LABEL[value]) : t("allStatuses")}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t("filterTag")}>
+          <input
+            value={tag}
+            onChange={(event) => setTag(event.target.value)}
+            className={inputClass}
+          />
+        </Field>
+        <div className="flex items-end">
+          <Button type="submit">{t("search")}</Button>
         </div>
-      )}
-      {isLoading ? (
+      </form>
+
+      {packs.isLoading ? (
         <Spinner />
-      ) : data && data.items.length > 0 ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {data.items.map((p) => (
-            <PackCard key={p.id} pack={p} />
-          ))}
-        </div>
+      ) : packs.isError ? (
+        <ErrorBanner message={errorText(packs.error)} />
+      ) : packs.data && packs.data.items.length > 0 ? (
+        <>
+          <ul className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200 bg-white">
+            {packs.data.items.map((pack) => (
+              <PackRow key={pack.id} pack={pack} />
+            ))}
+          </ul>
+          <Pager
+            page={packs.data.page}
+            pageSize={packs.data.page_size}
+            total={packs.data.total}
+            onChange={(page) => setApplied({ ...applied, page })}
+          />
+        </>
       ) : (
-        <EmptyState
-          title={t("noPacks")}
-          hint={t("noPacksHint")}
-        />
+        <EmptyState title={t("noPacks")} />
       )}
     </>
   );
@@ -105,7 +180,7 @@ export default function Page() {
   return (
     <RequireAuth>
       <AppShell>
-        <MyPacks />
+        <Packs />
       </AppShell>
     </RequireAuth>
   );
