@@ -1,13 +1,240 @@
 @import "tailwindcss";
 
+/* Proof Table design tokens. See DESIGN.md. Neutral proofing grounds keep
+   sticker artwork colour-true; one accent (cut-line magenta) carries the
+   active station, the primary action and kiss-cut selection. */
+
 :root {
-  --background: #fafafa;
-  --foreground: #18181b;
+  color-scheme: light;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --paper: oklch(0.968 0.004 90);
+  --panel: oklch(0.992 0.002 90);
+  --sunk: oklch(0.94 0.005 90);
+  --line: oklch(0.875 0.005 90);
+  --line-strong: oklch(0.76 0.006 90);
+  --ink: oklch(0.21 0.01 270);
+  --ink-2: oklch(0.42 0.01 270);
+  --ink-3: oklch(0.5 0.01 270);
+  --cut: oklch(0.58 0.235 350);
+  --cut-hover: oklch(0.52 0.235 350);
+  --cut-soft: oklch(0.955 0.03 350);
+  --cut-ink: oklch(0.46 0.2 350);
+  --on-cut: oklch(0.99 0 0);
+  --ok: oklch(0.5 0.13 155);
+  --ok-soft: oklch(0.95 0.04 155);
+  --warn: oklch(0.5 0.12 65);
+  --warn-soft: oklch(0.96 0.05 85);
+  --danger: oklch(0.5 0.2 27);
+  --danger-soft: oklch(0.955 0.03 27);
+  --scrim: oklch(0.2 0.01 270 / 0.5);
+  --shadow-pop: 0 1px 2px oklch(0.2 0.01 270 / 0.08), 0 12px 32px -8px oklch(0.2 0.01 270 / 0.28);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: oklch(0.2 0.005 270);
+    --panel: oklch(0.235 0.006 270);
+    --sunk: oklch(0.175 0.005 270);
+    --line: oklch(0.32 0.006 270);
+    --line-strong: oklch(0.43 0.007 270);
+    --ink: oklch(0.95 0.004 90);
+    --ink-2: oklch(0.78 0.005 270);
+    --ink-3: oklch(0.68 0.005 270);
+    --cut: oklch(0.72 0.2 350);
+    --cut-hover: oklch(0.78 0.18 350);
+    --cut-soft: oklch(0.3 0.06 350);
+    --cut-ink: oklch(0.82 0.13 350);
+    --on-cut: oklch(0.16 0.03 350);
+    --ok: oklch(0.78 0.15 155);
+    --ok-soft: oklch(0.3 0.06 155);
+    --warn: oklch(0.82 0.14 80);
+    --warn-soft: oklch(0.31 0.06 80);
+    --danger: oklch(0.75 0.17 27);
+    --danger-soft: oklch(0.3 0.07 27);
+    --scrim: oklch(0.1 0.005 270 / 0.65);
+    --shadow-pop: 0 1px 2px oklch(0 0 0 / 0.4), 0 16px 40px -8px oklch(0 0 0 / 0.6);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: oklch(0.2 0.005 270);
+  --panel: oklch(0.235 0.006 270);
+  --sunk: oklch(0.175 0.005 270);
+  --line: oklch(0.32 0.006 270);
+  --line-strong: oklch(0.43 0.007 270);
+  --ink: oklch(0.95 0.004 90);
+  --ink-2: oklch(0.78 0.005 270);
+  --ink-3: oklch(0.68 0.005 270);
+  --cut: oklch(0.72 0.2 350);
+  --cut-hover: oklch(0.78 0.18 350);
+  --cut-soft: oklch(0.3 0.06 350);
+  --cut-ink: oklch(0.82 0.13 350);
+  --on-cut: oklch(0.16 0.03 350);
+  --ok: oklch(0.78 0.15 155);
+  --ok-soft: oklch(0.3 0.06 155);
+  --warn: oklch(0.82 0.14 80);
+  --warn-soft: oklch(0.31 0.06 80);
+  --danger: oklch(0.75 0.17 27);
+  --danger-soft: oklch(0.3 0.07 27);
+  --scrim: oklch(0.1 0.005 270 / 0.65);
+  --shadow-pop: 0 1px 2px oklch(0 0 0 / 0.4), 0 16px 40px -8px oklch(0 0 0 / 0.6);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-panel: var(--panel);
+  --color-sunk: var(--sunk);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-cut: var(--cut);
+  --color-cut-hover: var(--cut-hover);
+  --color-cut-soft: var(--cut-soft);
+  --color-cut-ink: var(--cut-ink);
+  --color-on-cut: var(--on-cut);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: var(--font-ui), "Segoe UI", system-ui, sans-serif;
+  --font-display: var(--font-head), var(--font-ui), system-ui, sans-serif;
+  --font-mono: var(--font-code), ui-monospace, "SF Mono", Menlo, monospace;
+  --radius-ctl: 4px;
+  --radius-panel: 8px;
+}
+
+html {
+  background: var(--paper);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  font-feature-settings: "tnum" 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  accent-color: var(--cut);
+  caret-color: var(--cut);
+}
+
+/* iOS zooms inputs under 16px; keep real controls readable on phones. */
+@media (max-width: 767px) {
+  input, select, textarea { font-size: 16px; }
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+::selection { background: var(--cut); color: var(--on-cut); }
+
+:focus-visible {
+  outline: 2px solid var(--cut);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Quiet, themed scrollbars (browser surfaces belong to the design too). */
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 10px; border: 2px solid transparent; background-clip: content-box; }
+
+.num, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.nums { font-variant-numeric: tabular-nums; }
+
+/* Kiss-cut selection: a dashed contour offset from the artefact, as on a die
+   line. Apply to any selected/active artefact. */
+.cutline {
+  position: relative;
+}
+.cutline::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1.5px dashed var(--cut);
+  border-radius: 10px;
+  pointer-events: none;
+  animation: cut-draw 180ms var(--ease-out-expo) both;
+}
+@keyframes cut-draw {
+  from { opacity: 0; transform: scale(1.03); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Crop-mark frame for artwork: four corner ticks, drawn with gradients. */
+.crop {
+  --m: var(--line-strong);
+  position: relative;
+  background:
+    linear-gradient(var(--m), var(--m)) top left / 10px 1px no-repeat,
+    linear-gradient(var(--m), var(--m)) top left / 1px 10px no-repeat,
+    linear-gradient(var(--m), var(--m)) top right / 10px 1px no-repeat,
+    linear-gradient(var(--m), var(--m)) top right / 1px 10px no-repeat,
+    linear-gradient(var(--m), var(--m)) bottom left / 10px 1px no-repeat,
+    linear-gradient(var(--m), var(--m)) bottom left / 1px 10px no-repeat,
+    linear-gradient(var(--m), var(--m)) bottom right / 10px 1px no-repeat,
+    linear-gradient(var(--m), var(--m)) bottom right / 1px 10px no-repeat,
+    var(--sunk);
+}
+
+/* Checker ground for transparent sticker PNG/WebP: judges edges and outline. */
+.proof-ground {
+  background-color: var(--sunk);
+  background-image:
+    linear-gradient(45deg, var(--line) 25%, transparent 25%, transparent 75%, var(--line) 75%),
+    linear-gradient(45deg, var(--line) 25%, transparent 25%, transparent 75%, var(--line) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+/* Peel-in: grids reveal once per mount, staggered with --i. */
+.peel {
+  animation: peel 320ms var(--ease-out-expo) both;
+  animation-delay: calc(min(var(--i, 0), 14) * 28ms);
+}
+@keyframes peel {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--sunk) 25%, var(--line) 50%, var(--sunk) 75%) 0 0 / 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--radius-ctl);
+}
+
+dialog.sheet { border: 0; padding: 0; background: transparent; max-width: none; max-height: none; color: inherit; }
+dialog.sheet::backdrop { background: var(--scrim); animation: fade 160ms ease-out; }
+dialog.sheet[open] > .sheet-body { animation: rise 220ms var(--ease-out-expo); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Drawn chevron for native selects (mid-grey reads on both grounds). */
+.ctl-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%238a8a92' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 8l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.55rem center;
+  background-size: 1rem;
 }

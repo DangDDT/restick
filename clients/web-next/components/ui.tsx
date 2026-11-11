@@ -1,94 +1,298 @@
 "use client";
 
-import { useEffect, useState } from "react";
+// Proof Table primitives. Every page composes these; no page-local colours.
+// Colour comes only from semantic tokens (paper, panel, sunk, line, ink, cut,
+// ok, warn, danger) defined in app/globals.css.
+
+import Link from "next/link";
+import { useEffect, useId, useRef, useState } from "react";
 import { useI18n, type MessageKey } from "@/lib/i18n";
+import { Icon, type IconName } from "@/components/icons";
 
-const TONES: Record<string, string> = {
-  green: "bg-emerald-100 text-emerald-700",
-  amber: "bg-amber-100 text-amber-700",
-  red: "bg-red-100 text-red-700",
-  gray: "bg-zinc-100 text-zinc-600",
-  blue: "bg-blue-100 text-blue-700",
+export function cx(...parts: Array<string | false | null | undefined>): string {
+  return parts.filter(Boolean).join(" ");
+}
+
+/* ---------- Status stamp ---------- */
+
+type Tone = "ok" | "warn" | "danger" | "neutral" | "active";
+
+const TONE_CLASS: Record<Tone, string> = {
+  ok: "text-ok bg-ok-soft border-ok/40",
+  warn: "text-warn bg-warn-soft border-warn/40",
+  danger: "text-danger bg-danger-soft border-danger/40",
+  neutral: "text-ink-2 bg-sunk border-line-strong",
+  active: "text-cut-ink bg-cut-soft border-cut/50",
 };
 
-const STATUS: Record<string, { tone: string; label: MessageKey }> = {
-  draft: { tone: "amber", label: "statusDraft" },
-  ready: { tone: "green", label: "statusReady" },
-  revoked: { tone: "gray", label: "statusRevoked" },
-  queued: { tone: "blue", label: "statusQueued" },
-  running: { tone: "blue", label: "statusRunning" },
-  succeeded: { tone: "green", label: "statusSucceeded" },
-  failed: { tone: "red", label: "statusFailed" },
-  interrupted: { tone: "red", label: "statusInterrupted" },
-  active: { tone: "green", label: "statusActive" },
-  inactive: { tone: "gray", label: "statusInactive" },
+const STATUS: Record<string, { tone: Tone; label: MessageKey }> = {
+  draft: { tone: "warn", label: "statusDraft" },
+  ready: { tone: "ok", label: "statusReady" },
+  revoked: { tone: "neutral", label: "statusRevoked" },
+  queued: { tone: "active", label: "statusQueued" },
+  running: { tone: "active", label: "statusRunning" },
+  succeeded: { tone: "ok", label: "statusSucceeded" },
+  failed: { tone: "danger", label: "statusFailed" },
+  interrupted: { tone: "danger", label: "statusInterrupted" },
+  active: { tone: "ok", label: "statusActive" },
+  inactive: { tone: "neutral", label: "statusInactive" },
 };
 
-export function StatusPill({ status }: { status: string }) {
-  const { t } = useI18n();
-  const known = STATUS[status];
-  const tone = TONES[known?.tone ?? "gray"];
+/** Inked rectangular stamp. Use for any state label; never a pastel pill. */
+export function Stamp({ tone = "neutral", children, pulse }: { tone?: Tone; children: React.ReactNode; pulse?: boolean }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${tone}`}
+      className={cx(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-[3px] border px-1.5 py-0.5 text-[11px] font-semibold uppercase leading-4 tracking-[0.06em]",
+        TONE_CLASS[tone],
+      )}
     >
-      {known ? t(known.label) : status}
+      {pulse && <span className="size-1.5 animate-pulse rounded-full bg-current" aria-hidden="true" />}
+      {children}
     </span>
   );
 }
 
-export function Spinner() {
+export function StatusPill({ status }: { status: string }) {
+  const { t } = useI18n();
+  const known = STATUS[status];
+  return (
+    <Stamp tone={known?.tone ?? "neutral"} pulse={status === "running"}>
+      {known ? t(known.label) : status}
+    </Stamp>
+  );
+}
+
+/** Short mono job number, e.g. № a1b2c3. */
+export function JobTag({ id, className }: { id: string; className?: string }) {
+  return (
+    <span className={cx("mono text-[11px] text-ink-3", className)} title={id}>
+      № {id.replace(/-/g, "").slice(0, 6)}
+    </span>
+  );
+}
+
+/* ---------- Feedback ---------- */
+
+export function Spinner({ inline, className }: { inline?: boolean; className?: string }) {
+  const { t } = useI18n();
+  const ring = (
+    <span
+      className={cx("inline-block size-4 animate-spin rounded-full border-2 border-line-strong border-t-cut", className)}
+      aria-hidden="true"
+    />
+  );
+  if (inline) return ring;
+  return (
+    <div className="flex items-center justify-center gap-3 py-16 text-ink-2" role="status">
+      <span className="inline-block size-5 animate-spin rounded-full border-2 border-line-strong border-t-cut" aria-hidden="true" />
+      <span>{t("loading")}</span>
+    </div>
+  );
+}
+
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cx("skeleton", className)} aria-hidden="true" />;
+}
+
+export function SkeletonRows({ rows = 5, className }: { rows?: number; className?: string }) {
   const { t } = useI18n();
   return (
-    <div className="flex items-center justify-center py-12" role="status" aria-label={t("loading")}>
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-indigo-600" />
+    <div className={cx("space-y-3", className)} role="status" aria-label={t("loading")}>
+      {Array.from({ length: rows }, (_, i) => (
+        <Skeleton key={i} className="h-11 w-full" />
+      ))}
     </div>
   );
 }
 
-export function ErrorBanner({ message }: { message: string }) {
+function Banner({ tone, icon, message, role, onDismiss }: { tone: "ok" | "danger" | "warn"; icon: IconName; message: string; role: "alert" | "status"; onDismiss?: () => void }) {
+  const { t } = useI18n();
   return (
-    <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-      {message}
+    <div
+      role={role}
+      className={cx(
+        "flex items-start gap-2.5 rounded-panel border px-3.5 py-2.5 text-sm",
+        tone === "ok" && "border-ok/40 bg-ok-soft text-ok",
+        tone === "danger" && "border-danger/40 bg-danger-soft text-danger",
+        tone === "warn" && "border-warn/40 bg-warn-soft text-warn",
+      )}
+    >
+      <Icon name={icon} size={16} className="mt-0.5 shrink-0" />
+      <span className="min-w-0 flex-1 break-words">{message}</span>
+      {onDismiss && (
+        <button type="button" onClick={onDismiss} aria-label={t("close")} className="-m-1 shrink-0 rounded p-1 opacity-70 hover:opacity-100">
+          <Icon name="close" size={14} />
+        </button>
+      )}
     </div>
   );
 }
 
-export function SuccessBanner({ message }: { message: string }) {
+export function ErrorBanner({ message, onDismiss }: { message: string; onDismiss?: () => void }) {
+  return <Banner tone="danger" icon="alert" message={message} role="alert" onDismiss={onDismiss} />;
+}
+
+export function SuccessBanner({ message, onDismiss }: { message: string; onDismiss?: () => void }) {
+  return <Banner tone="ok" icon="check" message={message} role="status" onDismiss={onDismiss} />;
+}
+
+export function WarnBanner({ message }: { message: string }) {
+  return <Banner tone="warn" icon="info" message={message} role="status" />;
+}
+
+export function EmptyState({
+  title,
+  hint,
+  icon = "image",
+  children,
+}: {
+  title: string;
+  hint?: string;
+  icon?: IconName;
+  children?: React.ReactNode;
+}) {
   return (
-    <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-      {message}
+    <div className="crop flex flex-col items-center gap-3 rounded-panel px-6 py-14 text-center">
+      <span className="flex size-10 items-center justify-center rounded-full border border-line-strong bg-panel text-ink-3">
+        <Icon name={icon} size={20} />
+      </span>
+      <div>
+        <p className="font-display text-base font-semibold text-ink">{title}</p>
+        {hint && <p className="mx-auto mt-1 max-w-[44ch] text-sm text-ink-2">{hint}</p>}
+      </div>
+      {children}
     </div>
   );
 }
 
-export function EmptyState({ title, hint }: { title: string; hint?: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-12 text-center">
-      <p className="text-sm font-medium text-zinc-700">{title}</p>
-      {hint && <p className="mt-1 text-xs text-zinc-500">{hint}</p>}
-    </div>
-  );
-}
+/* ---------- Structure ---------- */
 
 export function PageHeader({
   title,
   subtitle,
   actions,
+  back,
 }: {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  back?: { href: string; label: string };
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <header className="mb-6 flex flex-col gap-3 border-b border-line pb-5 md:flex-row md:items-end md:justify-between">
       <div className="min-w-0">
-        <h1 className="text-xl font-bold text-zinc-900">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-zinc-500">{subtitle}</p>}
+        {back && (
+          <Link href={back.href} className="mb-2 inline-flex items-center gap-1 text-sm text-ink-2 hover:text-ink">
+            <Icon name="chevronRight" size={14} className="rotate-180" />
+            {back.label}
+          </Link>
+        )}
+        <h1 className="font-display text-[1.625rem] font-semibold leading-8 text-ink">{title}</h1>
+        {subtitle && <p className="mt-1 max-w-[68ch] text-sm text-ink-2">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+    </header>
+  );
+}
+
+/** A bounded work surface: hairline border, optional heading row. Never nest Panels. */
+export function Panel({
+  title,
+  actions,
+  children,
+  className,
+  padded = true,
+}: {
+  title?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  padded?: boolean;
+}) {
+  return (
+    <section className={cx("rounded-panel border border-line bg-panel", className)}>
+      {(title || actions) && (
+        <div className="flex min-h-12 items-center justify-between gap-3 border-b border-line px-4 py-2.5">
+          {title && <h2 className="font-display text-[0.9375rem] font-semibold text-ink">{title}</h2>}
+          {actions && <div className="flex items-center gap-2">{actions}</div>}
+        </div>
+      )}
+      <div className={padded ? "p-4" : undefined}>{children}</div>
+    </section>
+  );
+}
+
+/** Unboxed ruled section: heading above a hairline, for page-level grouping. */
+export function Section({ title, hint, actions, children, className }: { title: string; hint?: string; actions?: React.ReactNode; children: React.ReactNode; className?: string }) {
+  return (
+    <section className={cx("py-5", className)}>
+      <div className="mb-3 flex items-end justify-between gap-3 border-b border-line pb-2">
+        <div className="min-w-0">
+          <h2 className="font-display text-base font-semibold text-ink">{title}</h2>
+          {hint && <p className="mt-0.5 text-xs text-ink-2">{hint}</p>}
+        </div>
+        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Artwork frame: crop marks on a proof ground. `checker` shows transparency. */
+export function ArtFrame({
+  children,
+  selected,
+  checker = true,
+  className,
+}: {
+  children: React.ReactNode;
+  selected?: boolean;
+  checker?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cx(
+        "relative flex items-center justify-center overflow-hidden rounded-[6px]",
+        checker ? "proof-ground" : "crop",
+        selected && "cutline",
+        className,
+      )}
+    >
+      {children}
     </div>
   );
+}
+
+export function Kbd({ children }: { children: React.ReactNode }) {
+  return <kbd className="mono rounded-[3px] border border-line-strong bg-sunk px-1.5 py-px text-[11px] text-ink-2">{children}</kbd>;
+}
+
+/* ---------- Controls ---------- */
+
+type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+
+const BUTTON_VARIANT: Record<ButtonVariant, string> = {
+  primary: "bg-cut text-on-cut hover:bg-cut-hover active:translate-y-px",
+  secondary: "border border-line-strong bg-panel text-ink hover:border-ink-3 hover:bg-sunk active:translate-y-px",
+  danger: "border border-danger/50 bg-panel text-danger hover:bg-danger-soft active:translate-y-px",
+  ghost: "text-ink-2 hover:bg-sunk hover:text-ink",
+};
+
+export interface ButtonProps {
+  children?: React.ReactNode;
+  onClick?: () => void;
+  variant?: ButtonVariant;
+  type?: "button" | "submit";
+  disabled?: boolean;
+  className?: string;
+  size?: "sm" | "md";
+  icon?: IconName;
+  loading?: boolean;
+  href?: string;
+  title?: string;
+  "aria-label"?: string;
 }
 
 export function Button({
@@ -97,31 +301,78 @@ export function Button({
   variant = "primary",
   type = "button",
   disabled,
-  className = "",
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  variant?: "primary" | "secondary" | "danger" | "ghost";
-  type?: "button" | "submit";
-  disabled?: boolean;
-  className?: string;
-}) {
-  const base =
-    "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
-  const variants: Record<string, string> = {
-    primary: "bg-indigo-600 text-white hover:bg-indigo-700",
-    secondary: "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50",
-    danger: "bg-red-600 text-white hover:bg-red-700",
-    ghost: "text-zinc-600 hover:bg-zinc-100",
-  };
+  className,
+  size = "md",
+  icon,
+  loading,
+  href,
+  title,
+  "aria-label": ariaLabel,
+}: ButtonProps) {
+  const cls = cx(
+    "inline-flex select-none items-center justify-center gap-2 rounded-ctl font-medium whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 ease-out",
+    "disabled:cursor-not-allowed disabled:opacity-45 aria-disabled:cursor-not-allowed aria-disabled:opacity-45",
+    size === "sm" ? "min-h-8 px-2.5 text-[13px] max-md:min-h-10" : "min-h-9 px-3.5 text-sm max-md:min-h-11",
+    BUTTON_VARIANT[variant],
+    className,
+  );
+  const inner = (
+    <>
+      {loading ? <Spinner inline /> : icon ? <Icon name={icon} size={size === "sm" ? 15 : 16} /> : null}
+      {children}
+    </>
+  );
+  if (href && !disabled) {
+    return (
+      <Link href={href} className={cls} title={title} aria-label={ariaLabel}>
+        {inner}
+      </Link>
+    );
+  }
   return (
     <button
       type={type}
       onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${variants[variant]} ${className}`}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      className={cls}
+      title={title}
+      aria-label={ariaLabel}
     >
-      {children}
+      {inner}
+    </button>
+  );
+}
+
+export function IconButton({
+  icon,
+  label,
+  onClick,
+  variant = "ghost",
+  disabled,
+  className,
+}: {
+  icon: IconName;
+  label: string;
+  onClick?: () => void;
+  variant?: ButtonVariant;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={cx(
+        "inline-flex size-9 shrink-0 items-center justify-center rounded-ctl transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-45 max-md:size-11",
+        BUTTON_VARIANT[variant],
+        className,
+      )}
+    >
+      <Icon name={icon} size={18} />
     </button>
   );
 }
@@ -130,34 +381,262 @@ export function Field({
   label,
   children,
   hint,
+  error,
 }: {
   label: string;
   children: React.ReactNode;
   hint?: string;
+  error?: string;
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-zinc-700">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-medium text-ink">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-zinc-500">{hint}</span>}
+      {hint && !error && <span className="mt-1.5 block text-xs text-ink-2">{hint}</span>}
+      {error && (
+        <span role="alert" className="mt-1.5 block text-xs text-danger">
+          {error}
+        </span>
+      )}
     </label>
   );
 }
 
 export const inputClass =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
+  "block w-full min-h-9 rounded-ctl border border-line-strong bg-panel px-3 py-1.5 text-sm text-ink placeholder:text-ink-3 transition-colors hover:border-ink-3 focus:border-cut focus:outline-none focus:ring-2 focus:ring-cut/25 disabled:cursor-not-allowed disabled:bg-sunk disabled:text-ink-3 aria-[invalid=true]:border-danger max-md:min-h-11";
+
+/** Native select with a drawn chevron; pair with <select className={selectClass}>. */
+export const selectClass = `${inputClass} ctl-select appearance-none pr-8`;
+
+export const checkClass = "size-4 shrink-0 cursor-pointer rounded-[3px] accent-[var(--cut)]";
+
+export function Switch({
+  checked,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cx(
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors duration-150 disabled:opacity-45 max-md:h-6 max-md:w-11",
+        checked ? "border-cut bg-cut" : "border-line-strong bg-sunk",
+      )}
+    >
+      <span
+        className={cx(
+          "absolute left-0.5 size-3.5 rounded-full bg-panel shadow-sm transition-transform duration-150 ease-out max-md:size-4.5",
+          checked ? "translate-x-4 max-md:translate-x-5" : "translate-x-0",
+        )}
+      />
+    </button>
+  );
+}
+
+export interface TabItem<T extends string> {
+  id: T;
+  label: string;
+  count?: number;
+}
+
+export function Tabs<T extends string>({
+  items,
+  value,
+  onChange,
+  label,
+  variant = "underline",
+}: {
+  items: TabItem<T>[];
+  value: T;
+  onChange: (id: T) => void;
+  label: string;
+  variant?: "underline" | "segmented";
+}) {
+  function onKey(event: React.KeyboardEvent, index: number) {
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (!step) return;
+    event.preventDefault();
+    const next = items[(index + step + items.length) % items.length];
+    onChange(next.id);
+    (event.currentTarget.parentElement?.children[(index + step + items.length) % items.length] as HTMLElement | undefined)?.focus();
+  }
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      className={cx(
+        "flex max-w-full overflow-x-auto",
+        variant === "underline" ? "gap-1 border-b border-line" : "w-fit gap-0.5 rounded-ctl border border-line bg-sunk p-0.5",
+      )}
+    >
+      {items.map((item, index) => {
+        const active = item.id === value;
+        return (
+          <button
+            key={item.id}
+            role="tab"
+            type="button"
+            aria-selected={active}
+            tabIndex={active ? 0 : -1}
+            onClick={() => onChange(item.id)}
+            onKeyDown={(event) => onKey(event, index)}
+            className={cx(
+              "inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium transition-colors max-md:min-h-11",
+              variant === "underline"
+                ? cx("-mb-px border-b-2", active ? "border-cut text-ink" : "border-transparent text-ink-2 hover:text-ink")
+                : cx("rounded-[3px]", active ? "bg-panel text-ink shadow-sm" : "text-ink-2 hover:text-ink"),
+            )}
+          >
+            {item.label}
+            {item.count !== undefined && <span className="nums text-xs text-ink-3">{item.count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------- Overlays ---------- */
+
+export function Dialog({
+  title,
+  onClose,
+  children,
+  footer,
+  variant = "center",
+  size = "md",
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  variant?: "center" | "drawer";
+  size?: "sm" | "md" | "lg";
+}) {
+  const { t } = useI18n();
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+
+  // Native <dialog>: modal focus trap, Esc handling and focus restore for free.
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    return () => {
+      if (dialog?.open) dialog.close();
+    };
+  }, []);
+
+  const width = size === "sm" ? "max-w-md" : size === "lg" ? "max-w-4xl" : "max-w-2xl";
+  return (
+    <dialog
+      ref={ref}
+      aria-labelledby={titleId}
+      className={cx(
+        "sheet fixed inset-0 m-0 h-dvh w-dvw open:flex",
+        variant === "drawer" ? "justify-end" : "items-end justify-center p-0 sm:items-center sm:p-4",
+      )}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onClick={(event) => {
+        if (event.target === ref.current) onClose();
+      }}
+    >
+      <div
+        className={cx(
+          "sheet-body flex max-h-[92dvh] w-full flex-col border border-line bg-panel text-ink shadow-[var(--shadow-pop)]",
+          variant === "drawer" ? "h-dvh max-h-none max-w-md border-y-0 border-r-0" : cx(width, "rounded-t-xl sm:rounded-xl"),
+        )}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-3.5">
+          <h2 id={titleId} className="font-display text-lg font-semibold">
+            {title}
+          </h2>
+          <IconButton icon="close" label={t("close")} onClick={onClose} className="-mr-2 -mt-1" />
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-5 py-3">{footer}</div>}
+      </div>
+    </dialog>
+  );
+}
+
+/** Destructive-action confirmation. The action button is the only red element. */
+export function ConfirmDialog({
+  title,
+  body,
+  confirmLabel,
+  onConfirm,
+  onClose,
+  busy,
+  error,
+}: {
+  title: string;
+  body: React.ReactNode;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onClose: () => void;
+  busy?: boolean;
+  error?: string | null;
+}) {
+  const { t } = useI18n();
+  return (
+    <Dialog
+      title={title}
+      onClose={onClose}
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            {t("cancel")}
+          </Button>
+          <Button variant="danger" onClick={onConfirm} loading={busy} icon="trash">
+            {confirmLabel}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3 text-sm text-ink-2">
+        <div>{body}</div>
+        {error && <ErrorBanner message={error} />}
+      </div>
+    </Dialog>
+  );
+}
 
 // Clipboard API needs a secure context and permission; when either is absent the
 // caller's textarea is selected so the operator can copy by hand.
 export function CopyButton({
   text,
   selectRef,
+  variant = "secondary",
+  label,
 }: {
   text: string;
   selectRef?: React.RefObject<HTMLTextAreaElement | null>;
+  variant?: ButtonVariant;
+  label?: string;
 }) {
   const { t } = useI18n();
   const [state, setState] = useState<"idle" | "copied" | "manual">("idle");
+
+  useEffect(() => {
+    if (state !== "copied") return;
+    const timer = window.setTimeout(() => setState("idle"), 2400);
+    return () => window.clearTimeout(timer);
+  }, [state]);
 
   async function copy() {
     try {
@@ -172,48 +651,13 @@ export function CopyButton({
 
   return (
     <div>
-      <Button variant="secondary" onClick={copy}>
-        {state === "copied" ? t("copied") : t("copy")}
+      <Button variant={variant} onClick={copy} icon={state === "copied" ? "check" : "copy"}>
+        {state === "copied" ? t("copied") : (label ?? t("copy"))}
       </Button>
-      {state === "manual" && <p className="mt-1 text-xs text-amber-700">{t("copyManual")}</p>}
-    </div>
-  );
-}
-
-export function Dialog({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  const { t } = useI18n();
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
-      >
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <h2 className="text-lg font-bold text-zinc-900">{title}</h2>
-          <Button variant="ghost" onClick={onClose}>
-            {t("cancel")}
-          </Button>
-        </div>
-        {children}
-      </div>
+      <span role="status" className="sr-only">
+        {state === "copied" ? t("copied") : ""}
+      </span>
+      {state === "manual" && <p className="mt-1.5 max-w-[40ch] text-xs text-warn">{t("copyManual")}</p>}
     </div>
   );
 }
@@ -232,18 +676,18 @@ export function Pager({
   const { t } = useI18n();
   const pages = Math.max(1, Math.ceil(total / pageSize));
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-600">
-      <span>
+    <nav aria-label={t("page")} className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-ink-2">
+      <span className="nums">
         {t("page")} {page}/{pages} · {t("totalRows")} {total}
       </span>
       <div className="flex gap-2">
-        <Button variant="secondary" disabled={page <= 1} onClick={() => onChange(page - 1)}>
+        <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => onChange(page - 1)}>
           {t("previousPage")}
         </Button>
-        <Button variant="secondary" disabled={page >= pages} onClick={() => onChange(page + 1)}>
+        <Button variant="secondary" size="sm" disabled={page >= pages} onClick={() => onChange(page + 1)}>
           {t("nextPage")}
         </Button>
       </div>
-    </div>
+    </nav>
   );
 }

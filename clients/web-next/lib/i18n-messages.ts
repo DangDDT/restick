@@ -261,6 +261,33 @@ export const vi = {
   statusInterrupted: "Bị ngắt",
   statusActive: "Hoạt động",
   statusInactive: "Đã tắt",
+
+  // Proof Table shell, palette and shared controls.
+  close: "Đóng",
+  confirm: "Xác nhận",
+  navMore: "Thêm",
+  navProduce: "Sản xuất",
+  navRelease: "Phát hành",
+  stationCompose: "Soạn",
+  stationSheet: "Tải sheet",
+  stationCut: "Cắt",
+  stationPack: "Pack",
+  stationKey: "Key",
+  skipToContent: "Bỏ qua điều hướng",
+  cmdOpen: "Mở bảng lệnh",
+  cmdTitle: "Bảng lệnh",
+  cmdPlaceholder: "Đi tới trang hoặc chạy lệnh…",
+  cmdEmpty: "Không có lệnh phù hợp.",
+  cmdGoTo: "Đi tới",
+  cmdCommands: "Lệnh",
+  cmdNewPack: "Tạo pack mới",
+  themeSwitchLight: "Chuyển sang giao diện sáng",
+  themeSwitchDark: "Chuyển sang giao diện tối",
+  ownerLabel: "Chủ sở hữu",
+  pageNotFound: "Không tìm thấy trang này.",
+  pageNotFoundHint: "Đường dẫn không tồn tại trong Studio. Quay lại bàn ghép để tiếp tục.",
+  goToFactory: "Về bàn ghép",
+  retry: "Thử lại",
 };
 
 export type MessageKey = keyof typeof vi;
