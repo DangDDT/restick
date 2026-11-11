@@ -5,8 +5,10 @@ import (
 	"errors"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/netip"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -238,32 +240,68 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 
 // upload streams the single "file" part of a bounded multipart body into save.
 // The handler writes the response because the part must be consumed first.
+// upload accepts one image upload. The complete request body is spooled to a
+// temp file under the total 8 MiB + 64 KiB bound and validated end to end before
+// save runs, so trailing junk or a truncated tail can never mutate domain state.
 func (a *admin) upload(w http.ResponseWriter, r *http.Request, status int,
 	save func(io.Reader, string) (any, error), onError func(http.ResponseWriter, error)) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxMultipartBody)
-	reader, err := r.MultipartReader()
-	if err != nil {
+	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	boundary := params["boundary"]
+	if err != nil || mediaType != "multipart/form-data" || boundary == "" {
 		publicError(w, http.StatusUnprocessableEntity, "invalid_content_type", "content type must be multipart/form-data")
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxMultipartBody)
+	spool, err := os.CreateTemp("", "restick-upload-*")
+	if err != nil {
+		publicError(w, http.StatusInternalServerError, "internal", "could not buffer upload")
+		return
+	}
+	defer func() {
+		_ = spool.Close()
+		_ = os.Remove(spool.Name())
+	}()
+	if _, err := io.Copy(spool, r.Body); err != nil {
+		if tooLarge(err) {
+			publicError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "upload exceeds 8 MiB plus form overhead")
+		} else {
+			publicError(w, http.StatusBadRequest, "bad_request", "invalid multipart body")
+		}
+		return
+	}
+
+	filename, err := inspectUpload(spool, boundary)
+	switch {
+	case errors.Is(err, errUploadTooLarge):
+		publicError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "image exceeds 8 MiB")
+		return
+	case errors.Is(err, errUploadMissingFile):
+		publicError(w, http.StatusBadRequest, "bad_request", "missing file part")
+		return
+	case err != nil:
+		publicError(w, http.StatusBadRequest, "bad_request", "invalid multipart body")
+		return
+	}
+
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		publicError(w, http.StatusInternalServerError, "internal", "could not buffer upload")
+		return
+	}
+	reader := multipart.NewReader(spool, boundary)
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			if tooLarge(err) {
-				publicError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "upload exceeds 8 MiB plus form overhead")
-			} else {
-				publicError(w, http.StatusBadRequest, "bad_request", "invalid multipart body")
-			}
+			publicError(w, http.StatusBadRequest, "bad_request", "invalid multipart body")
 			return
 		}
 		if part.FormName() != "file" {
 			_ = part.Close()
 			continue
 		}
-		payload, err := save(io.LimitReader(part, maxUploadFile+1), part.FileName())
+		payload, err := save(io.LimitReader(part, maxUploadFile+1), filename)
 		_ = part.Close()
 		if err != nil {
 			onError(w, err)
@@ -273,6 +311,47 @@ func (a *admin) upload(w http.ResponseWriter, r *http.Request, status int,
 		return
 	}
 	publicError(w, http.StatusBadRequest, "bad_request", "missing file part")
+}
+
+var (
+	errUploadTooLarge    = errors.New("httpx: upload file too large")
+	errUploadMissingFile = errors.New("httpx: upload has no file part")
+)
+
+// inspectUpload drains the whole spooled body once, bounding the file part and
+// rejecting malformed tails, without writing any domain state.
+func inspectUpload(spool *os.File, boundary string) (string, error) {
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	reader := multipart.NewReader(spool, boundary)
+	filename, found := "", false
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		formName, name := part.FormName(), part.FileName()
+		size, err := io.Copy(io.Discard, part)
+		_ = part.Close()
+		if err != nil {
+			return "", err
+		}
+		if formName != "file" || found {
+			continue
+		}
+		if size > maxUploadFile {
+			return "", errUploadTooLarge
+		}
+		filename, found = name, true
+	}
+	if !found {
+		return "", errUploadMissingFile
+	}
+	return filename, nil
 }
 
 func tooLarge(err error) bool {

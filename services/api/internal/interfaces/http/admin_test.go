@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -279,6 +280,73 @@ func (f *adminFixture) readyPack(slug string) packs.Pack {
 	return ready
 }
 
+// adminRouteCase is one admin route with a payload valid enough to reach the
+// domain handler, so removing a guard changes the status instead of failing on
+// malformed input.
+type adminRouteCase struct {
+	method      string
+	target      string
+	body        []byte
+	contentType string
+}
+
+const testResourceID = "00000000-0000-0000-0000-000000000000"
+
+// adminUnsafeRoutes lists every state-changing admin route. Both the client-key
+// and the Origin tests reuse it.
+func adminUnsafeRoutes(t *testing.T) []adminRouteCase {
+	t.Helper()
+	imageBody, imageType := multipartBody(t, "file", "sheet.png", testPNG(t, 2, 2))
+	id := testResourceID
+	jsonBody := func(payload string) []byte { return []byte(payload) }
+	return []adminRouteCase{
+		{http.MethodPost, "/api/v1/admin/fragment-groups", jsonBody(`{"name":"Species"}`), jsonContentType},
+		{http.MethodPut, "/api/v1/admin/fragment-groups/" + id, jsonBody(`{"name":"Species"}`), jsonContentType},
+		{http.MethodDelete, "/api/v1/admin/fragment-groups/" + id, nil, ""},
+		{http.MethodPost, "/api/v1/admin/fragments", jsonBody(`{"group_id":"g","name":"Tail","prompt":"a tail","scope":"identity"}`), jsonContentType},
+		{http.MethodPut, "/api/v1/admin/fragments/" + id, jsonBody(`{"group_id":"g","name":"Tail","prompt":"a tail","scope":"identity"}`), jsonContentType},
+		{http.MethodDelete, "/api/v1/admin/fragments/" + id, nil, ""},
+		{http.MethodPost, "/api/v1/admin/characters", jsonBody(`{"name":"Mèo"}`), jsonContentType},
+		{http.MethodPut, "/api/v1/admin/characters/" + id, jsonBody(`{"name":"Mèo"}`), jsonContentType},
+		{http.MethodDelete, "/api/v1/admin/characters/" + id, nil, ""},
+		{http.MethodPost, "/api/v1/admin/reference-assets", imageBody, imageType},
+		{http.MethodPost, "/api/v1/admin/designs", jsonBody(`{"name":"A","rows":1,"columns":1,"cells":[{"action":"wave"}]}`), jsonContentType},
+		{http.MethodPost, "/api/v1/admin/designs/compile", jsonBody(`{"rows":1,"columns":1,"cells":[{"action":"wave"}]}`), jsonContentType},
+		{http.MethodPost, "/api/v1/admin/designs/suggest", jsonBody(`{"rows":1,"columns":1,"cells":[{"action":"wave"}]}`), jsonContentType},
+		{http.MethodPut, "/api/v1/admin/designs/" + id, jsonBody(`{"name":"A","rows":1,"columns":1,"cells":[{"action":"wave"}]}`), jsonContentType},
+		{http.MethodDelete, "/api/v1/admin/designs/" + id, nil, ""},
+		{http.MethodPost, "/api/v1/admin/packs", jsonBody(`{"slug":"stolen","name":"Stolen","author":"x"}`), jsonContentType},
+		{http.MethodPut, "/api/v1/admin/packs/" + id, jsonBody(`{"name":"Stolen","author":"x","tags":[]}`), jsonContentType},
+		{http.MethodDelete, "/api/v1/admin/packs/" + id, nil, ""},
+		{http.MethodPost, "/api/v1/admin/packs/" + id + "/source", imageBody, imageType},
+		{http.MethodPost, "/api/v1/admin/packs/" + id + "/process", nil, ""},
+		{http.MethodPost, "/api/v1/admin/packs/" + id + "/revoke", nil, ""},
+		{http.MethodPost, "/api/v1/admin/api-keys", jsonBody(`{"name":"stolen"}`), jsonContentType},
+		{http.MethodPost, "/api/v1/admin/api-keys/" + id + "/rotate", nil, ""},
+		{http.MethodDelete, "/api/v1/admin/api-keys/" + id, nil, ""},
+		{http.MethodDelete, "/api/v1/admin/session", nil, ""},
+	}
+}
+
+func adminReadRoutes() []adminRouteCase {
+	id := testResourceID
+	return []adminRouteCase{
+		{http.MethodGet, "/api/v1/admin/session", nil, ""},
+		{http.MethodGet, "/api/v1/admin/fragment-groups", nil, ""},
+		{http.MethodGet, "/api/v1/admin/fragments", nil, ""},
+		{http.MethodGet, "/api/v1/admin/fragments/" + id, nil, ""},
+		{http.MethodGet, "/api/v1/admin/characters", nil, ""},
+		{http.MethodGet, "/api/v1/admin/characters/" + id, nil, ""},
+		{http.MethodGet, "/api/v1/admin/reference-assets/" + id, nil, ""},
+		{http.MethodGet, "/api/v1/admin/designs", nil, ""},
+		{http.MethodGet, "/api/v1/admin/designs/" + id, nil, ""},
+		{http.MethodGet, "/api/v1/admin/packs", nil, ""},
+		{http.MethodGet, "/api/v1/admin/packs/" + id, nil, ""},
+		{http.MethodGet, "/api/v1/admin/jobs/" + id, nil, ""},
+		{http.MethodGet, "/api/v1/admin/api-keys", nil, ""},
+	}
+}
+
 // TestClientKeyCannotMutateAnyAdminRoute proves a real client key cannot reach
 // any admin read or write route, and that rejected writes change no rows.
 func TestClientKeyCannotMutateAnyAdminRoute(t *testing.T) {
@@ -288,57 +356,9 @@ func TestClientKeyCannotMutateAnyAdminRoute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateKey: %v", err)
 	}
-	id := "00000000-0000-0000-0000-000000000000"
-	imageBody, imageType := multipartBody(t, "file", "sheet.png", testPNG(t, 2, 2))
-	jsonBody := func(payload string) []byte { return []byte(payload) }
-
-	routes := []struct {
-		method      string
-		target      string
-		body        []byte
-		contentType string
-	}{
-		{http.MethodGet, "/api/v1/admin/session", nil, ""},
-		{http.MethodGet, "/api/v1/admin/fragment-groups", nil, ""},
-		{http.MethodPost, "/api/v1/admin/fragment-groups", jsonBody(`{"name":"Species"}`), jsonContentType},
-		{http.MethodPut, "/api/v1/admin/fragment-groups/" + id, jsonBody(`{"name":"Species"}`), jsonContentType},
-		{http.MethodDelete, "/api/v1/admin/fragment-groups/" + id, nil, ""},
-		{http.MethodGet, "/api/v1/admin/fragments", nil, ""},
-		{http.MethodPost, "/api/v1/admin/fragments", jsonBody(`{"group_id":"g","name":"Tail","prompt":"a tail","scope":"identity"}`), jsonContentType},
-		{http.MethodGet, "/api/v1/admin/fragments/" + id, nil, ""},
-		{http.MethodPut, "/api/v1/admin/fragments/" + id, jsonBody(`{"group_id":"g","name":"Tail","prompt":"a tail","scope":"identity"}`), jsonContentType},
-		{http.MethodDelete, "/api/v1/admin/fragments/" + id, nil, ""},
-		{http.MethodGet, "/api/v1/admin/characters", nil, ""},
-		{http.MethodPost, "/api/v1/admin/characters", jsonBody(`{"name":"Mèo"}`), jsonContentType},
-		{http.MethodGet, "/api/v1/admin/characters/" + id, nil, ""},
-		{http.MethodPut, "/api/v1/admin/characters/" + id, jsonBody(`{"name":"Mèo"}`), jsonContentType},
-		{http.MethodDelete, "/api/v1/admin/characters/" + id, nil, ""},
-		{http.MethodPost, "/api/v1/admin/reference-assets", imageBody, imageType},
-		{http.MethodGet, "/api/v1/admin/reference-assets/" + id, nil, ""},
-		{http.MethodGet, "/api/v1/admin/designs", nil, ""},
-		{http.MethodPost, "/api/v1/admin/designs", jsonBody(`{"name":"A","rows":1,"columns":1,"cells":[{"action":"wave"}]}`), jsonContentType},
-		{http.MethodPost, "/api/v1/admin/designs/compile", jsonBody(`{"rows":1,"columns":1,"cells":[{"action":"wave"}]}`), jsonContentType},
-		{http.MethodPost, "/api/v1/admin/designs/suggest", jsonBody(`{"rows":1,"columns":1,"cells":[{"action":"wave"}]}`), jsonContentType},
-		{http.MethodGet, "/api/v1/admin/designs/" + id, nil, ""},
-		{http.MethodPut, "/api/v1/admin/designs/" + id, jsonBody(`{"name":"A","rows":1,"columns":1,"cells":[{"action":"wave"}]}`), jsonContentType},
-		{http.MethodDelete, "/api/v1/admin/designs/" + id, nil, ""},
-		{http.MethodGet, "/api/v1/admin/packs", nil, ""},
-		{http.MethodPost, "/api/v1/admin/packs", jsonBody(`{"slug":"stolen","name":"Stolen"}`), jsonContentType},
-		{http.MethodGet, "/api/v1/admin/packs/" + id, nil, ""},
-		{http.MethodPut, "/api/v1/admin/packs/" + id, jsonBody(`{"name":"Stolen","author":"x","tags":[]}`), jsonContentType},
-		{http.MethodDelete, "/api/v1/admin/packs/" + id, nil, ""},
-		{http.MethodPost, "/api/v1/admin/packs/" + id + "/source", imageBody, imageType},
-		{http.MethodPost, "/api/v1/admin/packs/" + id + "/process", nil, ""},
-		{http.MethodPost, "/api/v1/admin/packs/" + id + "/revoke", nil, ""},
-		{http.MethodGet, "/api/v1/admin/jobs/" + id, nil, ""},
-		{http.MethodGet, "/api/v1/admin/api-keys", nil, ""},
-		{http.MethodPost, "/api/v1/admin/api-keys", jsonBody(`{"name":"stolen"}`), jsonContentType},
-		{http.MethodPost, "/api/v1/admin/api-keys/" + id + "/rotate", nil, ""},
-		{http.MethodDelete, "/api/v1/admin/api-keys/" + id, nil, ""},
-	}
 
 	before := f.tableCounts()
-	for _, route := range routes {
+	for _, route := range append(adminUnsafeRoutes(t), adminReadRoutes()...) {
 		headers := map[string]string{"X-Api-Key": key.Raw, adminOriginKey: adminBaseURL}
 		if route.contentType != "" {
 			headers["Content-Type"] = route.contentType
@@ -370,7 +390,7 @@ func TestClientKeyCannotMutateAnyAdminRoute(t *testing.T) {
 }
 
 // TestMissingForeignOriginRejected covers the Origin rule for login and for
-// unsafe admin requests.
+// every unsafe admin route with a real session.
 func TestMissingForeignOriginRejected(t *testing.T) {
 	f := newAdminFixture(t)
 	login := func(origin string) *httptest.ResponseRecorder {
@@ -394,44 +414,46 @@ func TestMissingForeignOriginRejected(t *testing.T) {
 		t.Fatalf("login with origin = %d: %s", rec.Code, rec.Body.String())
 	}
 	f.session = rec.Result().Cookies()[0].Value
-
-	cookie := map[string]string{"Cookie": adminCookieName + "=" + f.session}
+	cookieHeader := adminCookieName + "=" + f.session
 
 	// Safe methods do not need an Origin.
 	if rec := f.get("/api/v1/admin/fragment-groups"); rec.Code != http.StatusOK {
 		t.Fatalf("GET groups = %d", rec.Code)
 	}
 
-	body := []byte(`{"name":"Species"}`)
-	for _, origin := range []string{"", "https://evil.example"} {
-		headers := map[string]string{"Content-Type": jsonContentType, "Cookie": cookie["Cookie"]}
-		if origin != "" {
-			headers[adminOriginKey] = origin
-		}
-		rec := f.request(http.MethodPost, "/api/v1/admin/fragment-groups", body, headers)
-		if rec.Code != http.StatusForbidden {
-			t.Fatalf("POST group with origin %q = %d, want 403", origin, rec.Code)
-		}
-		if code := errorCode(t, rec); code != "origin_not_allowed" {
-			t.Fatalf("POST group with origin %q code = %q", origin, code)
+	// Every unsafe route rejects a missing or foreign Origin before any domain
+	// work; a removed guard would return 201/200/404/422 instead of 403.
+	before := f.tableCounts()
+	for _, route := range adminUnsafeRoutes(t) {
+		for _, origin := range []string{"", "https://evil.example"} {
+			headers := map[string]string{"Cookie": cookieHeader}
+			if route.contentType != "" {
+				headers["Content-Type"] = route.contentType
+			}
+			if origin != "" {
+				headers[adminOriginKey] = origin
+			}
+			rec := f.request(route.method, route.target, route.body, headers)
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("%s %s with origin %q = %d, want 403 (%s)", route.method, route.target, origin, rec.Code, rec.Body.String())
+			}
+			if code := errorCode(t, rec); code != "origin_not_allowed" {
+				t.Fatalf("%s %s with origin %q code = %q, want origin_not_allowed", route.method, route.target, origin, code)
+			}
 		}
 	}
-	var groups int
-	if err := f.db.QueryRow(`SELECT COUNT(*) FROM fragment_groups`).Scan(&groups); err != nil {
-		t.Fatal(err)
+	after := f.tableCounts()
+	for table, count := range before {
+		if after[table] != count {
+			t.Fatalf("%s rows changed from %d to %d after rejected Origin writes", table, count, after[table])
+		}
 	}
-	if groups != 0 {
-		t.Fatalf("fragment_groups = %d after rejected writes", groups)
+	if rec := f.get("/api/v1/admin/session"); rec.Code != http.StatusOK {
+		t.Fatalf("session expired after rejected Origin writes: %d", rec.Code)
 	}
 
 	if rec := f.mutate(http.MethodPost, "/api/v1/admin/fragment-groups", map[string]any{"name": "Species"}); rec.Code != http.StatusCreated {
 		t.Fatalf("POST group with origin = %d: %s", rec.Code, rec.Body.String())
-	}
-
-	// Logout is unsafe too.
-	headers := map[string]string{"Cookie": cookie["Cookie"], "Content-Type": jsonContentType}
-	if rec := f.request(http.MethodDelete, "/api/v1/admin/session", nil, headers); rec.Code != http.StatusForbidden {
-		t.Fatalf("logout without origin = %d, want 403", rec.Code)
 	}
 }
 
@@ -552,6 +574,7 @@ func TestLoginRateLimitWindow(t *testing.T) {
 // TestJSONAndMultipartLimits proves every documented transport bound.
 func TestJSONAndMultipartLimits(t *testing.T) {
 	f := newAdminFixture(t)
+	ctx := context.Background()
 	f.login()
 
 	oversized := fmt.Sprintf(`{"name":%q}`, strings.Repeat("a", maxJSONBody))
@@ -618,6 +641,72 @@ func TestJSONAndMultipartLimits(t *testing.T) {
 	}
 	if groups != 0 {
 		t.Fatalf("fragment_groups = %d after rejected bodies", groups)
+	}
+
+	// The whole body must be read and bounded before any save: a valid image
+	// followed by a huge tail is rejected even when no Content-Length is sent.
+	var tail bytes.Buffer
+	tailWriter := multipart.NewWriter(&tail)
+	filePart, err := tailWriter.CreateFormFile("file", "sheet.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := filePart.Write(testPNG(t, 2, 2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tailWriter.WriteField("junk", strings.Repeat("a", 9<<20)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tailWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	tailType := tailWriter.FormDataContentType()
+	sendUnknownLength := func(target, contentType string, body []byte) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, target, io.NopCloser(bytes.NewReader(body)))
+		req.ContentLength = -1
+		req.RemoteAddr = "192.0.2.10:4000"
+		headers := map[string]string{
+			"Cookie":       adminCookieName + "=" + f.session,
+			adminOriginKey: adminBaseURL,
+			"Content-Type": contentType,
+		}
+		for name, value := range headers {
+			req.Header.Set(name, value)
+		}
+		rec := httptest.NewRecorder()
+		f.handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	before := f.tableCounts()
+	if rec := sendUnknownLength("/api/v1/admin/reference-assets", tailType, tail.Bytes()); rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("reference upload with 9 MiB tail = %d, want 413 (%s)", rec.Code, rec.Body.String())
+	}
+	pack, err := f.packs.Create(ctx, packs.PackDraft{Slug: "slot", Name: "Slot", Author: "Tester"})
+	if err != nil {
+		t.Fatalf("packs.Create: %v", err)
+	}
+	if rec := sendUnknownLength("/api/v1/admin/packs/"+pack.ID+"/source", tailType, tail.Bytes()); rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("pack source with 9 MiB tail = %d, want 413 (%s)", rec.Code, rec.Body.String())
+	}
+	reloaded, err := f.packs.Get(ctx, pack.ID)
+	if err != nil {
+		t.Fatalf("packs.Get: %v", err)
+	}
+	if reloaded.Source != nil {
+		t.Fatalf("pack source changed after a rejected upload: %+v", reloaded.Source)
+	}
+	after := f.tableCounts()
+	if after["reference_assets"] != before["reference_assets"] {
+		t.Fatalf("reference_assets grew from %d to %d after a rejected upload",
+			before["reference_assets"], after["reference_assets"])
+	}
+
+	// A malformed multipart body is 400 and stores nothing.
+	broken := f.adminHeaders()
+	broken["Content-Type"] = tailType
+	if rec := f.request(http.MethodPost, "/api/v1/admin/reference-assets", []byte("not a multipart body"), broken); rec.Code != http.StatusBadRequest {
+		t.Fatalf("malformed multipart = %d, want 400 (%s)", rec.Code, rec.Body.String())
 	}
 
 	// The same route still accepts a valid upload.
