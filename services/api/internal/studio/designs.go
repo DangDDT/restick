@@ -123,6 +123,13 @@ func (s *Service) ListDesigns(ctx context.Context, filter DesignFilter) (DesignP
 // DeleteDesign removes the editable record. Packs that referenced it keep their
 // own snapshot and have design_id cleared by the foreign key.
 func (s *Service) DeleteDesign(ctx context.Context, id string) error {
+	var sheets int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM design_sheets WHERE design_id = ?`, id).Scan(&sheets); err != nil {
+		return fmt.Errorf("studio: count design sheets: %w", err)
+	}
+	if sheets > 0 {
+		return ErrDesignHasSheets
+	}
 	result, err := s.db.ExecContext(ctx, `DELETE FROM designs WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("studio: delete design: %w", err)

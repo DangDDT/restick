@@ -213,6 +213,24 @@ func (s *Store) OpenSource(id string) (*os.File, error) {
 	return openNoFollow(p)
 }
 
+// RemoveSource deletes a persisted source directory. A missing one is not an error.
+func (s *Store) RemoveSource(id string) error {
+	if !idPattern.MatchString(id) {
+		return ErrInvalidSourceID
+	}
+	dir, err := s.path("sources", id)
+	if err != nil {
+		return err
+	}
+	if err := s.verifyDir(dir); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	return os.RemoveAll(dir)
+}
+
 // WorkDir returns (creating if needed) the per-job directory below work/.
 func (s *Store) WorkDir(jobID string) (string, error) {
 	if !jobIDPattern.MatchString(jobID) {

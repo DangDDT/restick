@@ -276,3 +276,22 @@ func TestPathTraversalAndSymlinkAreRejected(t *testing.T) {
 		t.Errorf("WorkDir traversal error = %v", err)
 	}
 }
+
+func TestRemoveSource(t *testing.T) {
+	store := newTestStore(t)
+	source, err := store.SaveSource(context.Background(), bytes.NewReader(encodePNG(t, 4, 4)), "a.png")
+	if err != nil {
+		t.Fatalf("SaveSource: %v", err)
+	}
+	for i := range 2 { // second pass proves idempotence
+		if err := store.RemoveSource(source.ID); err != nil {
+			t.Fatalf("RemoveSource #%d: %v", i+1, err)
+		}
+	}
+	if _, err := store.OpenSource(source.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("OpenSource after remove = %v, want ErrNotFound", err)
+	}
+	if err := store.RemoveSource("../x"); !errors.Is(err, ErrInvalidSourceID) {
+		t.Fatalf("RemoveSource bad id = %v, want ErrInvalidSourceID", err)
+	}
+}

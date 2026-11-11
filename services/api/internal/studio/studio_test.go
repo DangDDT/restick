@@ -10,7 +10,10 @@ import (
 	"image/png"
 	"io"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/eykh/restick/api_svc/internal/assets"
@@ -705,5 +708,196 @@ func TestSeedVietnamPack(t *testing.T) {
 		if !strings.Contains(design.Prompt, "Character: ") || !strings.Contains(design.Prompt, "Palette: ") {
 			t.Fatalf("design %q prompt lacks character or palette:\n%s", design.Name, design.Prompt)
 		}
+	}
+}
+
+func sheetTestService(t *testing.T) (*Service, *sql.DB, string, Design) {
+	t.Helper()
+	dir := t.TempDir()
+	db, err := storage.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("storage.Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	files, err := assets.NewStore(dir)
+	if err != nil {
+		t.Fatalf("assets.NewStore: %v", err)
+	}
+	service := NewService(db, files)
+	group := mustGroup(t, service, "Nhận dạng", 10)
+	scarf := mustFragment(t, service, group.ID, "a red scarf", ScopeIdentity)
+	design, err := service.SaveDesign(context.Background(), sheetDraft([]string{scarf.ID}, []string{group.ID}))
+	if err != nil {
+		t.Fatalf("SaveDesign: %v", err)
+	}
+	return service, db, dir, design
+}
+
+func pngVariant(t *testing.T, n int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	img.Set(0, 0, color.RGBA{R: uint8(n), G: uint8(n >> 8), B: 7, A: 255})
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, img); err != nil {
+		t.Fatalf("png.Encode: %v", err)
+	}
+	return buffer.Bytes()
+}
+
+func sourceDirs(t *testing.T, dir string) int {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(dir, "sources"))
+	if err != nil {
+		t.Fatalf("read sources: %v", err)
+	}
+	return len(entries)
+}
+
+func TestSaveSheetStoresProviderAndPromptSnapshot(t *testing.T) {
+	service, _, _, design := sheetTestService(t)
+	ctx := context.Background()
+	sheet, err := service.SaveSheet(ctx, design.ID, bytes.NewReader(pngVariant(t, 1)), "a.png", "gemini", "v2")
+	if err != nil {
+		t.Fatalf("SaveSheet: %v", err)
+	}
+	if sheet.Provider != "gemini" || sheet.Note != "v2" || sheet.PromptSnapshot != design.Prompt || sheet.DesignID != design.ID {
+		t.Fatalf("unexpected sheet %+v", sheet)
+	}
+	list, err := service.ListSheets(ctx, design.ID)
+	if err != nil || len(list) != 1 || list[0].ID != sheet.ID {
+		t.Fatalf("ListSheets = %v, %v", list, err)
+	}
+	opened, file, err := service.OpenSheet(ctx, design.ID, sheet.ID)
+	if err != nil {
+		t.Fatalf("OpenSheet: %v", err)
+	}
+	file.Close()
+	if opened.ID != sheet.ID {
+		t.Fatalf("OpenSheet id = %s", opened.ID)
+	}
+	if _, err := service.GetSheet(ctx, "other", sheet.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetSheet wrong design = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSaveSheetRejectsBadProvider(t *testing.T) {
+	service, _, dir, design := sheetTestService(t)
+	for _, provider := range []string{"", "Bad Provider", strings.Repeat("a", 33)} {
+		_, err := service.SaveSheet(context.Background(), design.ID, bytes.NewReader(pngVariant(t, 1)), "a.png", provider, "")
+		if !errors.Is(err, ErrInvalid) {
+			t.Fatalf("provider %q: err = %v, want ErrInvalid", provider, err)
+		}
+	}
+	if n := sourceDirs(t, dir); n != 0 {
+		t.Fatalf("sources has %d dirs, want 0", n)
+	}
+}
+
+func TestSaveSheetDuplicateChecksumReturnsExisting(t *testing.T) {
+	service, _, dir, design := sheetTestService(t)
+	ctx := context.Background()
+	data := pngVariant(t, 1)
+	first, err := service.SaveSheet(ctx, design.ID, bytes.NewReader(data), "a.png", "gemini", "")
+	if err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	second, err := service.SaveSheet(ctx, design.ID, bytes.NewReader(data), "b.png", "gemini", "")
+	if err != nil || second.ID != first.ID {
+		t.Fatalf("second = %+v, %v; want id %s", second, err, first.ID)
+	}
+	if list, _ := service.ListSheets(ctx, design.ID); len(list) != 1 {
+		t.Fatalf("len = %d, want 1", len(list))
+	}
+	if n := sourceDirs(t, dir); n != 1 {
+		t.Fatalf("sources has %d dirs, want 1", n)
+	}
+}
+
+func TestSaveSheetConcurrentDuplicate(t *testing.T) {
+	service, _, dir, design := sheetTestService(t)
+	ctx := context.Background()
+	data := pngVariant(t, 1)
+	ids := make([]string, 2)
+	errs := make([]error, 2)
+	var wg sync.WaitGroup
+	for i := range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sheet, err := service.SaveSheet(ctx, design.ID, bytes.NewReader(data), "a.png", "gemini", "")
+			ids[i], errs[i] = sheet.ID, err
+		}()
+	}
+	wg.Wait()
+	if errs[0] != nil || errs[1] != nil || ids[0] != ids[1] {
+		t.Fatalf("results = %v %v, ids %v", errs[0], errs[1], ids)
+	}
+	if list, _ := service.ListSheets(ctx, design.ID); len(list) != 1 {
+		t.Fatalf("len = %d, want 1", len(list))
+	}
+	if n := sourceDirs(t, dir); n != 1 {
+		t.Fatalf("sources has %d dirs, want 1", n)
+	}
+}
+
+func TestSaveSheetLimit(t *testing.T) {
+	service, _, dir, design := sheetTestService(t)
+	ctx := context.Background()
+	for i := range MaxSheetsPerDesign {
+		if _, err := service.SaveSheet(ctx, design.ID, bytes.NewReader(pngVariant(t, i)), "a.png", "gemini", ""); err != nil {
+			t.Fatalf("sheet %d: %v", i, err)
+		}
+	}
+	_, err := service.SaveSheet(ctx, design.ID, bytes.NewReader(pngVariant(t, 999)), "a.png", "gemini", "")
+	if !errors.Is(err, ErrSheetLimit) {
+		t.Fatalf("21st = %v, want ErrSheetLimit", err)
+	}
+	if n := sourceDirs(t, dir); n != MaxSheetsPerDesign {
+		t.Fatalf("sources has %d dirs, want %d", n, MaxSheetsPerDesign)
+	}
+}
+
+func TestDeleteSheetBlockedWhilePackUsesIt(t *testing.T) {
+	service, db, dir, design := sheetTestService(t)
+	ctx := context.Background()
+	sheet, err := service.SaveSheet(ctx, design.ID, bytes.NewReader(pngVariant(t, 1)), "a.png", "gemini", "")
+	if err != nil {
+		t.Fatalf("SaveSheet: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO packs (id, slug, name, author, sheet_id) VALUES ('p1', 'p1', 'P', 'A', ?)`, sheet.ID); err != nil {
+		t.Fatalf("insert pack: %v", err)
+	}
+	if err := service.DeleteSheet(ctx, design.ID, sheet.ID); !errors.Is(err, ErrSheetInUse) {
+		t.Fatalf("DeleteSheet = %v, want ErrSheetInUse", err)
+	}
+	if n := sourceDirs(t, dir); n != 1 {
+		t.Fatalf("sources has %d dirs after blocked delete, want 1", n)
+	}
+	if _, err := db.Exec(`UPDATE packs SET sheet_id = NULL WHERE id = 'p1'`); err != nil {
+		t.Fatalf("clear sheet_id: %v", err)
+	}
+	if err := service.DeleteSheet(ctx, design.ID, sheet.ID); err != nil {
+		t.Fatalf("DeleteSheet: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "sources", sheet.ID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("source dir still exists: %v", err)
+	}
+}
+
+func TestDeleteDesignBlockedWithSheets(t *testing.T) {
+	service, _, _, design := sheetTestService(t)
+	ctx := context.Background()
+	sheet, err := service.SaveSheet(ctx, design.ID, bytes.NewReader(pngVariant(t, 1)), "a.png", "gemini", "")
+	if err != nil {
+		t.Fatalf("SaveSheet: %v", err)
+	}
+	if err := service.DeleteDesign(ctx, design.ID); !errors.Is(err, ErrDesignHasSheets) {
+		t.Fatalf("DeleteDesign = %v, want ErrDesignHasSheets", err)
+	}
+	if err := service.DeleteSheet(ctx, design.ID, sheet.ID); err != nil {
+		t.Fatalf("DeleteSheet: %v", err)
+	}
+	if err := service.DeleteDesign(ctx, design.ID); err != nil {
+		t.Fatalf("DeleteDesign after sheet removal: %v", err)
 	}
 }

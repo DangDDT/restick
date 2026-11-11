@@ -243,3 +243,23 @@ type DesignPage struct {
 	PageSize int      `json:"page_size"`
 	Total    int      `json:"total"`
 }
+
+// MaxSheetsPerDesign caps the generated sheets kept for one design.
+const MaxSheetsPerDesign = 20
+
+// Sheet is one externally generated sticker sheet image for a design, with the
+// provider that made it and the prompt the design had at upload time.
+type Sheet struct {
+	ID             string    `json:"id"`
+	DesignID       string    `json:"design_id"`
+	Provider       string    `json:"provider"`
+	Note           string    `json:"note"`
+	PromptSnapshot string    `json:"prompt_snapshot"`
+	Filename       string    `json:"filename"`
+	MediaType      string    `json:"media_type"`
+	ByteSize       int64     `json:"byte_size"`
+	Width          int       `json:"width"`
+	Height         int       `json:"height"`
+	ChecksumSHA256 string    `json:"checksum_sha256"`
+	CreatedAt      time.Time `json:"created_at"`
+}
