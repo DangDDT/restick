@@ -94,14 +94,18 @@ func TestFactoryRoundTrip(t *testing.T) {
 		t.Fatalf("design snapshot changed after editing the library fragment: %+v", reloaded.Snapshot.Selections)
 	}
 
+	sheetA := env.uploadSheet(design.ID, sheetPNG(quadrantColorsA))
 	var pack packView
 	env.mustAdmin(http.MethodPost, "/api/v1/admin/packs", map[string]any{
 		"slug": "acceptance-pack", "name": "Acceptance Pack", "author": "Owner",
-		"description": "round trip", "tags": []string{"acceptance"}, "design_id": design.ID,
+		"description": "round trip", "tags": []string{"acceptance"}, "design_id": design.ID, "sheet_id": sheetA,
 	}, &pack, http.StatusCreated)
 
-	// Version 1: upload the owned sheet, run the real Python child, publish.
-	env.uploadSource(pack.ID, sheetPNG(quadrantColorsA))
+	// A client key sees only packs it was granted.
+	env.mustAdmin(http.MethodPut, "/api/v1/admin/api-keys/"+env.keyID+"/packs",
+		map[string]any{"pack_ids": []string{pack.ID}}, nil, http.StatusOK)
+
+	// Version 1: run the real Python child on the uploaded sheet, publish.
 	job := env.process(pack.ID)
 	if job.Version != 1 {
 		t.Fatalf("first job version = %d, want 1", job.Version)
@@ -109,7 +113,11 @@ func TestFactoryRoundTrip(t *testing.T) {
 	v1 := env.captureVersion(pack.ID, "acceptance")
 
 	// Version 2: a different sheet proves the current pointer and checksum move.
-	env.uploadSource(pack.ID, sheetPNG(quadrantColorsB))
+	sheetB := env.uploadSheet(design.ID, sheetPNG(quadrantColorsB))
+	env.mustAdmin(http.MethodPut, "/api/v1/admin/packs/"+pack.ID, map[string]any{
+		"name": "Acceptance Pack", "author": "Owner", "description": "round trip",
+		"tags": []string{"acceptance"}, "design_id": design.ID, "sheet_id": sheetB,
+	}, nil, http.StatusOK)
 	job = env.process(pack.ID)
 	if job.Version != 2 {
 		t.Fatalf("second job version = %d, want 2", job.Version)
@@ -124,13 +132,32 @@ func TestFactoryRoundTrip(t *testing.T) {
 		t.Fatalf("old version bundle while ready: status %d, bytes equal %v", status, bytes.Equal(oldZip, v1.zipBytes))
 	}
 
+	// A second ready pack the key was not granted stays invisible to it.
+	var other packView
+	env.mustAdmin(http.MethodPost, "/api/v1/admin/packs", map[string]any{
+		"slug": "ungranted-pack", "name": "Ungranted Pack", "author": "Owner",
+		"description": "not granted", "tags": []string{"ungranted"}, "design_id": design.ID, "sheet_id": sheetA,
+	}, &other, http.StatusCreated)
+	env.process(other.ID)
+	status, _, data := env.keyCall(http.MethodGet, env.baseURL+"/api/v1/packs/"+other.ID)
+	env.expectStatus("ungranted pack detail", status, http.StatusNotFound, data)
+	var visible struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	env.decodeKeyJSON("/api/v1/packs", &visible)
+	if len(visible.Items) != 1 || visible.Items[0].ID != pack.ID {
+		t.Fatalf("granted key list = %+v, want only %s", visible.Items, pack.ID)
+	}
+
 	// Catalog metadata edits leave the committed ZIP bytes and checksum alone.
 	env.mustAdmin(http.MethodPut, "/api/v1/admin/packs/"+pack.ID, map[string]any{
 		"name": "Acceptance Pack Renamed", "author": "Owner", "description": "catalog edit",
-		"tags": []string{"acceptance", "edited"}, "design_id": design.ID,
+		"tags": []string{"acceptance", "edited"}, "design_id": design.ID, "sheet_id": sheetB,
 	}, nil, http.StatusOK)
 	var edited sdkPack
-	status, _, data := env.keyCall(http.MethodGet, env.baseURL+"/api/v1/packs/"+pack.ID)
+	status, _, data = env.keyCall(http.MethodGet, env.baseURL+"/api/v1/packs/"+pack.ID)
 	env.expectStatus("SDK pack detail after edit", status, http.StatusOK, data)
 	if err := json.Unmarshal(data, &edited); err != nil {
 		t.Fatalf("decode edited pack: %v", err)
@@ -214,6 +241,7 @@ type factoryEnv struct {
 	admin   *http.Client
 	key     *http.Client
 	apiKey  string
+	keyID   string
 }
 
 func newFactoryEnv(t *testing.T) *factoryEnv {
@@ -285,6 +313,7 @@ func (e *factoryEnv) login() {
 	e.t.Helper()
 	e.mustAdmin(http.MethodPost, "/api/v1/admin/session", map[string]string{"password": ownerPassword}, nil, http.StatusNoContent)
 	var created struct {
+		ID  string `json:"id"`
 		Raw string `json:"raw"`
 	}
 	e.mustAdmin(http.MethodPost, "/api/v1/admin/api-keys", map[string]string{"name": "acceptance-client"}, &created, http.StatusCreated)
@@ -292,6 +321,7 @@ func (e *factoryEnv) login() {
 		e.t.Fatalf("created key is malformed")
 	}
 	e.apiKey = created.Raw
+	e.keyID = created.ID
 }
 
 func (e *factoryEnv) call(client *http.Client, method, target string, headers map[string]string, body []byte) (int, http.Header, []byte) {
@@ -369,7 +399,8 @@ func (e *factoryEnv) decodeKeyJSON(target string, out any) {
 	}
 }
 
-func (e *factoryEnv) uploadSource(packID string, imageBytes []byte) {
+// uploadSheet stores one generated sheet on the design and returns its id.
+func (e *factoryEnv) uploadSheet(designID string, imageBytes []byte) string {
 	e.t.Helper()
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -380,14 +411,24 @@ func (e *factoryEnv) uploadSource(packID string, imageBytes []byte) {
 	if _, err := part.Write(imageBytes); err != nil {
 		e.t.Fatalf("multipart write: %v", err)
 	}
+	if err := writer.WriteField("provider", "gemini"); err != nil {
+		e.t.Fatalf("multipart provider: %v", err)
+	}
 	if err := writer.Close(); err != nil {
 		e.t.Fatalf("multipart close: %v", err)
 	}
-	status, _, data := e.call(e.admin, http.MethodPost, e.baseURL+"/api/v1/admin/packs/"+packID+"/source",
+	status, _, data := e.call(e.admin, http.MethodPost, e.baseURL+"/api/v1/admin/designs/"+designID+"/sheets",
 		map[string]string{"Content-Type": writer.FormDataContentType(), "Origin": e.baseURL}, buf.Bytes())
-	if status != http.StatusOK {
-		e.t.Fatalf("source upload: status %d: %s", status, data)
+	if status != http.StatusCreated {
+		e.t.Fatalf("sheet upload: status %d: %s", status, data)
 	}
+	var sheet struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &sheet); err != nil || sheet.ID == "" {
+		e.t.Fatalf("sheet upload: decode %q: %v", data, err)
+	}
+	return sheet.ID
 }
 
 func (e *factoryEnv) process(packID string) jobView {
