@@ -20,6 +20,7 @@ func TestBundleChecksumContract(t *testing.T) {
 	f := newPublicFixture(t)
 	created := f.publish("alpha", 2)
 	id := created.pack.ID
+	f.grant(f.keyID, id)
 	meta := decodeBody(t, f.request(http.MethodGet, "/api/v1/packs/"+id+"/bundle", f.keyHeaders()))
 
 	rec := f.request(http.MethodGet, "/v1/bundles/"+id+"/v/1", f.keyHeaders())
@@ -95,6 +96,7 @@ func TestOldCommittedVersionStillDownloads(t *testing.T) {
 	v1 := f.publish("alpha", 2)
 	v2 := f.publishNextVersion(v1, 2)
 	id := v1.pack.ID
+	f.grant(f.keyID, id)
 
 	old := f.request(http.MethodGet, "/v1/bundles/"+id+"/v/1", f.keyHeaders())
 	if old.Code != http.StatusOK || !bytes.Equal(old.Body.Bytes(), v1.bundle) {
@@ -129,6 +131,7 @@ func TestAuthPrecedesHeadRangeAnd304(t *testing.T) {
 	f := newPublicFixture(t)
 	created := f.publish("alpha", 2)
 	id := created.pack.ID
+	f.grant(f.keyID, id)
 	bundleURL := "/v1/bundles/" + id + "/v/1"
 	object := objectURLFor("packs/" + id + "/v1/000.webp")
 
@@ -215,6 +218,7 @@ func TestQueryAPIKeyDoesNotAuthorize(t *testing.T) {
 	f := newPublicFixture(t)
 	created := f.publish("alpha", 1)
 	id := created.pack.ID
+	f.grant(f.keyID, id)
 	for _, target := range []string{
 		"/api/v1/packs?api_key=" + f.apiKey,
 		"/api/v1/packs/" + id + "?key=" + f.apiKey,

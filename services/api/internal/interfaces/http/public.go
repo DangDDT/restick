@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -51,21 +52,38 @@ func (a *publicAPI) mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/bundles/{id}/v/{version}", a.serveBundle)
 }
 
-// authorize accepts a client key header or the owner session cookie. Query
+// principal is the authenticated caller: the owner session (sees every pack)
+// or an API key (sees only its granted packs).
+type principal struct {
+	keyID string
+	owner bool
+}
+
+// authenticate accepts a client key header or the owner session cookie. Query
 // string keys are never consulted, so keys cannot leak into URLs or logs.
-func (a *publicAPI) authorize(r *http.Request) bool {
+func (a *publicAPI) authenticate(r *http.Request) (principal, bool) {
 	now := time.Now()
 	if key := strings.TrimSpace(r.Header.Get("X-Api-Key")); key != "" {
-		if err := a.auth.ValidateKey(r.Context(), key, now); err == nil {
-			return true
+		if keyID, err := a.auth.AuthenticateKey(r.Context(), key, now); err == nil {
+			return principal{keyID: keyID}, true
 		}
 	}
 	if cookie, err := r.Cookie(adminCookieName); err == nil {
 		if err := a.auth.ValidateSession(r.Context(), cookie.Value, now); err == nil {
-			return true
+			return principal{owner: true}, true
 		}
 	}
-	return false
+	return principal{}, false
+}
+
+// granted reports whether p may see the pack at all. It runs before any status
+// check so a non-granted revoked pack is indistinguishable from a missing one.
+func (a *publicAPI) granted(r *http.Request, p principal, packID string) bool {
+	if p.owner {
+		return true
+	}
+	ok, err := a.auth.KeyHasPack(r.Context(), p.keyID, packID)
+	return err == nil && ok
 }
 
 func publicJSON(w http.ResponseWriter, status int, payload any) {
@@ -103,7 +121,8 @@ func (a *publicAPI) summary(p packs.Pack) map[string]any {
 }
 
 func (a *publicAPI) listPacks(w http.ResponseWriter, r *http.Request) {
-	if !a.authorize(r) {
+	who, ok := a.authenticate(r)
+	if !ok {
 		a.unauthorized(w)
 		return
 	}
@@ -111,7 +130,7 @@ func (a *publicAPI) listPacks(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(query.Get("page"))
 	size, _ := strconv.Atoi(query.Get("page_size"))
 	result, err := a.catalog.ListReady(r.Context(), packs.Filter{
-		Tag: query.Get("tag"), Page: page, PageSize: size,
+		Tag: query.Get("tag"), KeyID: who.keyID, Page: page, PageSize: size,
 	})
 	if err != nil {
 		publicError(w, http.StatusInternalServerError, "internal", "could not list packs")
@@ -128,7 +147,11 @@ func (a *publicAPI) listPacks(w http.ResponseWriter, r *http.Request) {
 
 // visiblePack resolves a pack for a public read: 404 for missing/draft,
 // 410 for revoked.
-func (a *publicAPI) visiblePack(w http.ResponseWriter, r *http.Request, id string) (packs.Pack, bool) {
+func (a *publicAPI) visiblePack(w http.ResponseWriter, r *http.Request, who principal, id string) (packs.Pack, bool) {
+	if !a.granted(r, who, id) {
+		publicError(w, http.StatusNotFound, "not_found", "pack not found")
+		return packs.Pack{}, false
+	}
 	p, err := a.catalog.Get(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, packs.ErrNotFound) {
@@ -151,11 +174,12 @@ func (a *publicAPI) visiblePack(w http.ResponseWriter, r *http.Request, id strin
 }
 
 func (a *publicAPI) getPack(w http.ResponseWriter, r *http.Request) {
-	if !a.authorize(r) {
+	who, ok := a.authenticate(r)
+	if !ok {
 		a.unauthorized(w)
 		return
 	}
-	p, ok := a.visiblePack(w, r, r.PathValue("id"))
+	p, ok := a.visiblePack(w, r, who, r.PathValue("id"))
 	if !ok {
 		return
 	}
@@ -189,11 +213,12 @@ func (a *publicAPI) getPack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *publicAPI) bundleMeta(w http.ResponseWriter, r *http.Request) {
-	if !a.authorize(r) {
+	who, ok := a.authenticate(r)
+	if !ok {
 		a.unauthorized(w)
 		return
 	}
-	p, ok := a.visiblePack(w, r, r.PathValue("id"))
+	p, ok := a.visiblePack(w, r, who, r.PathValue("id"))
 	if !ok {
 		return
 	}
@@ -205,7 +230,8 @@ func (a *publicAPI) bundleMeta(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *publicAPI) tombstones(w http.ResponseWriter, r *http.Request) {
-	if !a.authorize(r) {
+	who, ok := a.authenticate(r)
+	if !ok {
 		a.unauthorized(w)
 		return
 	}
@@ -223,6 +249,13 @@ func (a *publicAPI) tombstones(w http.ResponseWriter, r *http.Request) {
 		publicError(w, http.StatusInternalServerError, "internal", "could not list tombstones")
 		return
 	}
+	if !who.owner {
+		items, err = a.keyTombstones(r, who.keyID, since, items)
+		if err != nil {
+			publicError(w, http.StatusInternalServerError, "internal", "could not list tombstones")
+			return
+		}
+	}
 	out := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		out = append(out, map[string]any{
@@ -231,4 +264,37 @@ func (a *publicAPI) tombstones(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	publicJSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+// keyTombstones restricts revoke tombstones to the key's granted packs and
+// adds an "access_removed" entry for every grant taken away since `since`.
+func (a *publicAPI) keyTombstones(r *http.Request, keyID string, since time.Time, all []packs.Tombstone) ([]packs.Tombstone, error) {
+	granted, err := a.auth.KeyPacks(r.Context(), keyID)
+	if err != nil {
+		return nil, err
+	}
+	removals, err := a.auth.KeyRemovals(r.Context(), keyID, since)
+	if err != nil {
+		return nil, err
+	}
+	have := make(map[string]bool, len(granted))
+	for _, id := range granted {
+		have[id] = true
+	}
+	out := []packs.Tombstone{}
+	for _, t := range all {
+		if have[t.PackID] {
+			out = append(out, t)
+		}
+	}
+	for _, rm := range removals {
+		out = append(out, packs.Tombstone{PackID: rm.PackID, RevokedAt: rm.RemovedAt, ReasonCode: "access_removed"})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if !out[i].RevokedAt.Equal(out[j].RevokedAt) {
+			return out[i].RevokedAt.Before(out[j].RevokedAt)
+		}
+		return out[i].PackID < out[j].PackID
+	})
+	return out, nil
 }

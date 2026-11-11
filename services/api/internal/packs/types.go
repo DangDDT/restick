@@ -87,6 +87,7 @@ type Pack struct {
 // capped at 100.
 type Filter struct {
 	Tag      string
+	KeyID    string // when set, only packs granted to this API key
 	Page     int
 	PageSize int
 }

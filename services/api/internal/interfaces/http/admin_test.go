@@ -1221,6 +1221,9 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateKey: %v", err)
 	}
+	if err := f.auth.SetKeyPacks(ctx, key.ID, []string{ready.ID}); err != nil {
+		t.Fatalf("SetKeyPacks: %v", err)
+	}
 	if rec := f.request(http.MethodGet, "/api/v1/packs/"+ready.ID, nil, map[string]string{"X-Api-Key": key.Raw}); rec.Code != http.StatusGone {
 		t.Fatalf("SDK view of revoked pack = %d, want 410", rec.Code)
 	}

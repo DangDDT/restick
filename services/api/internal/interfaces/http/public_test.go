@@ -32,7 +32,9 @@ type publicFixture struct {
 	catalog *packs.Service
 	files   *assets.Store
 	handler http.Handler
+	auth    *auth.Service
 	apiKey  string
+	keyID   string
 	session string
 }
 
@@ -72,7 +74,7 @@ func newPublicFixture(t *testing.T) *publicFixture {
 	return &publicFixture{
 		t: t, root: root, db: db, catalog: catalog, files: files,
 		handler: NewPublicHandler(catalog, files, authSvc, testPublicBase+"/"),
-		apiKey:  key.Raw, session: session,
+		auth:    authSvc, apiKey: key.Raw, keyID: key.ID, session: session,
 	}
 }
 
@@ -222,6 +224,19 @@ func (f *publicFixture) request(method, target string, headers map[string]string
 	return rec
 }
 
+// grant adds packs to the fixture key's grants, keeping the existing ones.
+func (f *publicFixture) grant(keyID string, packIDs ...string) {
+	f.t.Helper()
+	ctx := context.Background()
+	current, err := f.auth.KeyPacks(ctx, keyID)
+	if err != nil {
+		f.t.Fatalf("KeyPacks: %v", err)
+	}
+	if err := f.auth.SetKeyPacks(ctx, keyID, append(current, packIDs...)); err != nil {
+		f.t.Fatalf("SetKeyPacks: %v", err)
+	}
+}
+
 func (f *publicFixture) keyHeaders() map[string]string {
 	return map[string]string{"X-Api-Key": f.apiKey}
 }
@@ -244,6 +259,7 @@ func TestPublicCatalogVisibilityAndPagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.grant(f.keyID, alpha.pack.ID, second.pack.ID, gamma.pack.ID, draft.ID)
 	f.revoke(second.pack.ID, "2026-11-10T10:00:00Z")
 	// Pin fixed UTC-second timestamps so ordering never depends on wall clock
 	// or random UUIDs: gamma is newer, so it sorts first.
@@ -302,6 +318,7 @@ func TestExistingSDKResponseFields(t *testing.T) {
 	f := newPublicFixture(t)
 	created := f.publish("alpha", 2, "cute")
 	id := created.pack.ID
+	f.grant(f.keyID, id)
 
 	list := decodeBody(t, f.request(http.MethodGet, "/api/v1/packs", f.keyHeaders()))
 	item := list["items"].([]any)[0].(map[string]any)
@@ -367,6 +384,7 @@ func TestTombstoneInclusiveTimestamp(t *testing.T) {
 	first := f.publish("alpha", 1)
 	second := f.publish("beta", 1)
 	old := f.publish("gamma", 1)
+	f.grant(f.keyID, first.pack.ID, second.pack.ID, old.pack.ID)
 	f.revoke(old.pack.ID, "2026-11-10T09:00:00Z")
 	f.revoke(first.pack.ID, "2026-11-10T10:00:01Z")
 	f.revoke(second.pack.ID, "2026-11-10T10:00:01Z")
@@ -377,6 +395,7 @@ func TestTombstoneInclusiveTimestamp(t *testing.T) {
 	}
 
 	since := decodeBody(t, f.request(http.MethodGet, "/api/v1/tombstones?since=2026-11-10T10:00:01Z", f.keyHeaders()))
+	lowerID := min(first.pack.ID, second.pack.ID)
 	items := since["items"].([]any)
 	if len(items) != 2 {
 		t.Fatalf("inclusive since items = %d", len(items))
@@ -391,8 +410,8 @@ func TestTombstoneInclusiveTimestamp(t *testing.T) {
 				t.Fatalf("tombstone missing %s: %v", field, entry)
 			}
 		}
-		if i == 0 && entry["pack_id"] != first.pack.ID {
-			t.Fatalf("same-second order = %v, want insertion order", entry["pack_id"])
+		if i == 0 && entry["pack_id"] != lowerID {
+			t.Fatalf("same-second order = %v, want pack_id order %s", entry["pack_id"], lowerID)
 		}
 	}
 
@@ -404,5 +423,138 @@ func TestTombstoneInclusiveTimestamp(t *testing.T) {
 	invalid := f.request(http.MethodGet, "/api/v1/tombstones?since=10-minutes-ago", f.keyHeaders())
 	if invalid.Code != http.StatusBadRequest {
 		t.Fatalf("invalid since status = %d", invalid.Code)
+	}
+}
+
+func (f *publicFixture) allRoutes(id string) map[string]string {
+	return map[string]string{
+		"detail":      "/api/v1/packs/" + id,
+		"bundle meta": "/api/v1/packs/" + id + "/bundle",
+		"object":      "/v1/objects/packs/" + id + "/v1/000.webp",
+		"bundle":      "/v1/bundles/" + id + "/v/1",
+	}
+}
+
+func (f *publicFixture) expectStatus(headers map[string]string, id string, want int) {
+	f.t.Helper()
+	for name, target := range f.allRoutes(id) {
+		if rec := f.request(http.MethodGet, target, headers); rec.Code != want {
+			f.t.Errorf("%s %s = %d, want %d", name, target, rec.Code, want)
+		}
+	}
+}
+
+func TestKeyWithoutGrantsSeesNothing(t *testing.T) {
+	f := newPublicFixture(t)
+	p := f.publish("alpha", 1)
+	rec := f.request(http.MethodGet, "/api/v1/packs", f.keyHeaders())
+	body := decodeBody(t, rec)
+	if rec.Code != http.StatusOK || len(body["items"].([]any)) != 0 || body["total"].(float64) != 0 {
+		t.Fatalf("list = %d %v", rec.Code, body)
+	}
+	f.expectStatus(f.keyHeaders(), p.pack.ID, http.StatusNotFound)
+}
+
+func TestGrantedPackVisibleOnAllRoutes(t *testing.T) {
+	f := newPublicFixture(t)
+	a := f.publish("alpha", 1)
+	b := f.publish("beta", 1)
+	f.grant(f.keyID, a.pack.ID)
+	body := decodeBody(t, f.request(http.MethodGet, "/api/v1/packs", f.keyHeaders()))
+	items := body["items"].([]any)
+	if len(items) != 1 || body["total"].(float64) != 1 || items[0].(map[string]any)["id"] != a.pack.ID {
+		t.Fatalf("list = %v", body)
+	}
+	f.expectStatus(f.keyHeaders(), a.pack.ID, http.StatusOK)
+	f.expectStatus(f.keyHeaders(), b.pack.ID, http.StatusNotFound)
+	if rec := f.request(http.MethodHead, "/api/v1/packs/"+b.pack.ID, f.keyHeaders()); rec.Code != http.StatusNotFound {
+		t.Fatalf("HEAD non-granted = %d", rec.Code)
+	}
+	if rec := f.request(http.MethodHead, "/api/v1/packs/"+a.pack.ID, f.keyHeaders()); rec.Code != http.StatusOK {
+		t.Fatalf("HEAD granted = %d", rec.Code)
+	}
+}
+
+func TestNonGrantedRevokedPackIs404NotGone(t *testing.T) {
+	f := newPublicFixture(t)
+	granted := f.publish("alpha", 1)
+	other := f.publish("beta", 1)
+	f.grant(f.keyID, granted.pack.ID)
+	f.revoke(granted.pack.ID, "2026-11-10T10:00:00Z")
+	f.revoke(other.pack.ID, "2026-11-10T10:00:00Z")
+	f.expectStatus(f.keyHeaders(), granted.pack.ID, http.StatusGone)
+	f.expectStatus(f.keyHeaders(), other.pack.ID, http.StatusNotFound)
+}
+
+func TestOwnerSessionIgnoresGrants(t *testing.T) {
+	f := newPublicFixture(t)
+	p := f.publish("alpha", 1)
+	cookie := map[string]string{"Cookie": adminCookieName + "=" + f.session}
+	f.expectStatus(cookie, p.pack.ID, http.StatusOK)
+	body := decodeBody(t, f.request(http.MethodGet, "/api/v1/packs", cookie))
+	if body["total"].(float64) != 1 {
+		t.Fatalf("owner list = %v", body)
+	}
+}
+
+func TestTombstonesRespectGrants(t *testing.T) {
+	f := newPublicFixture(t)
+	a := f.publish("alpha", 1)
+	b := f.publish("beta", 1)
+	f.grant(f.keyID, a.pack.ID)
+	f.revoke(a.pack.ID, "2026-11-10T10:00:00Z")
+	f.revoke(b.pack.ID, "2026-11-10T10:00:00Z")
+
+	list := func(since string) []map[string]any {
+		target := "/api/v1/tombstones"
+		if since != "" {
+			target += "?since=" + since
+		}
+		var out []map[string]any
+		for _, item := range decodeBody(t, f.request(http.MethodGet, target, f.keyHeaders()))["items"].([]any) {
+			out = append(out, item.(map[string]any))
+		}
+		return out
+	}
+	if got := list(""); len(got) != 1 || got[0]["pack_id"] != a.pack.ID || got[0]["reason_code"] != "revoked" {
+		t.Fatalf("granted-only tombstones = %v", got)
+	}
+
+	c := f.publish("gamma", 1)
+	f.grant(f.keyID, c.pack.ID)
+	if err := f.auth.SetKeyPacks(context.Background(), f.keyID, []string{a.pack.ID}); err != nil {
+		t.Fatal(err)
+	}
+	got := list("")
+	var removal map[string]any
+	for _, item := range got {
+		if item["pack_id"] == c.pack.ID {
+			removal = item
+		}
+	}
+	if len(got) != 2 || removal == nil || removal["reason_code"] != "access_removed" || removal["checksum_sha256"] != "" {
+		t.Fatalf("removal tombstones = %v", got)
+	}
+	revokedAt, err := time.Parse("2006-01-02T15:04:05Z", removal["revoked_at"].(string))
+	if err != nil {
+		t.Fatalf("removal revoked_at = %v", removal["revoked_at"])
+	}
+	// since is inclusive on the removal source and filters the revoke source.
+	if n := len(list(revokedAt.Format(time.RFC3339))); n != 1 {
+		t.Fatalf("since=removed_at returned %d, want only the removal", n)
+	}
+	if n := len(list("2026-11-10T10:00:00Z")); n != 2 {
+		t.Fatalf("since=revoke time returned %d, want 2", n)
+	}
+	f.grant(f.keyID, c.pack.ID)
+	for _, item := range list("") {
+		if item["pack_id"] == c.pack.ID {
+			t.Fatalf("re-granted pack still tombstoned: %v", item)
+		}
+	}
+	// Owner sees the unfiltered revoke list, never removals.
+	owner := decodeBody(t, f.request(http.MethodGet, "/api/v1/tombstones", map[string]string{"Cookie": adminCookieName + "=" + f.session}))
+	if n := len(owner["items"].([]any)); n != 2 {
+		t.Fatalf("owner tombstones = %d, want 2", n)
 	}
 }

@@ -172,6 +172,10 @@ func (s *Service) ListReady(ctx context.Context, filter Filter) (Page, error) {
 	from := packFrom + join
 	countFrom := ` FROM packs p` + join
 	where := ` WHERE p.status = 'ready'`
+	if filter.KeyID != "" {
+		where += ` AND p.id IN (SELECT pack_id FROM api_key_packs WHERE key_id = ?)`
+		args = append(args, filter.KeyID)
+	}
 
 	var total int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*)`+countFrom+where, args...).Scan(&total); err != nil {

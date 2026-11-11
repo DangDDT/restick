@@ -16,13 +16,14 @@ import (
 // a data-root relative path that must match a row in the version allowlist;
 // there is no generic file browser.
 func (a *publicAPI) serveObject(w http.ResponseWriter, r *http.Request) {
-	if !a.authorize(r) {
+	who, ok := a.authenticate(r)
+	if !ok {
 		a.unauthorized(w)
 		return
 	}
 	rel := strings.TrimPrefix(r.PathValue("key"), "/")
 	packID, version, ok := splitObjectKey(rel)
-	if !ok {
+	if !ok || !a.granted(r, who, packID) {
 		publicError(w, http.StatusNotFound, "not_found", "file not found")
 		return
 	}
@@ -65,7 +66,8 @@ func (a *publicAPI) serveObject(w http.ResponseWriter, r *http.Request) {
 // serveBundle streams the ZIP of any committed version of a ready pack. A
 // revoked pack blocks every version.
 func (a *publicAPI) serveBundle(w http.ResponseWriter, r *http.Request) {
-	if !a.authorize(r) {
+	who, ok := a.authenticate(r)
+	if !ok {
 		a.unauthorized(w)
 		return
 	}
@@ -75,6 +77,10 @@ func (a *publicAPI) serveBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	packID := r.PathValue("id")
+	if !a.granted(r, who, packID) {
+		publicError(w, http.StatusNotFound, "not_found", "bundle not found")
+		return
+	}
 	p, err := a.catalog.Get(r.Context(), packID)
 	if err != nil {
 		publicError(w, http.StatusNotFound, "not_found", "bundle not found")
