@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 
 export default function Home() {
+  const { t } = useI18n();
   const router = useRouter();
 
   useEffect(() => {

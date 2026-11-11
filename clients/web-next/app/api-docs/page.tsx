@@ -3,9 +3,10 @@
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
 import { PageHeader } from "@/components/ui";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 
 export default function Page() {
+  const { t } = useI18n();
   return (
     <RequireAuth>
       <AppShell>

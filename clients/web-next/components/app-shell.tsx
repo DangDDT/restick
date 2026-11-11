@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
+import { errorText } from "@/lib/api";
+import { ErrorBanner } from "@/components/ui";
 
 const NAV = [
   { href: "/factory", label: "navFactory" },
@@ -15,9 +18,11 @@ const NAV = [
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const { username, logout } = useAuth();
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
@@ -33,14 +38,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <button
             onClick={async () => {
-              await logout();
-              router.replace("/login");
+              setLogoutError(null);
+              try {
+                await logout();
+                router.replace("/login");
+              } catch (err) {
+                setLogoutError(errorText(err));
+              }
             }}
             className="rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
           >
             {t("signOut")}
           </button>
         </div>
+        {logoutError && <div className="px-3 pb-3"><ErrorBanner message={logoutError} /></div>}
 
         <nav aria-label={t("navStudio")} className="px-3 pb-4">
           <p className="hidden px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 md:block">

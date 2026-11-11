@@ -1,7 +1,5 @@
-// Vietnamese UI catalog. The studio UI is Vietnamese by design; the English
-// text in a design/prompt is authored content, not a translated interface.
-// `t()` in lib/i18n.tsx is typed on these keys, so a missing label fails the
-// type check instead of rendering a key.
+// Vietnamese is the default UI catalog. Prompt and fragment text stays authored
+// content, never translated by the interface locale.
 
 export const vi = {
   appName: "Restick Studio",
@@ -266,3 +264,36 @@ export const vi = {
 };
 
 export type MessageKey = keyof typeof vi;
+
+export type Locale = "vi" | "en";
+export const LOCALE_STORAGE_KEY = "restick_locale";
+
+// Retain the existing English labels; new studio labels fall back to Vietnamese.
+const en: Partial<Record<MessageKey, string>> = {
+  loading: "Loading…",
+  cancel: "Cancel",
+  copy: "Copy",
+  copied: "Copied!",
+  delete: "Delete",
+  edit: "Edit",
+  save: "Save",
+  signIn: "Sign in",
+  signOut: "Sign out",
+  signingIn: "Signing in…",
+  password: "Password",
+  packAuthor: "Author",
+  packName: "Name",
+  packSlug: "Slug",
+  packTags: "Tags (comma-separated)",
+  uploading: "Uploading…",
+  noPacks: "No packs yet",
+  deletePack: "Delete pack",
+  statusDraft: "Draft",
+  statusRevoked: "Revoked",
+  keysTitle: "API Keys",
+  keysSubtitle: "Manage keys for the Restick SDK",
+  keyName: "Key name",
+  actions: "Actions",
+};
+
+export const messages: Record<Locale, Partial<Record<MessageKey, string>>> = { vi, en };

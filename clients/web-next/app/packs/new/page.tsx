@@ -15,7 +15,7 @@ import {
   inputClass,
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import type { AdminPack, Design, DesignPage, PackCreate } from "@/lib/types";
 
 async function fetchAllDesigns(): Promise<Design[]> {
@@ -28,6 +28,7 @@ async function fetchAllDesigns(): Promise<Design[]> {
 }
 
 function NewPack() {
+  const { t } = useI18n();
   const router = useRouter();
   const designs = useQuery({ queryKey: ["designs-all"], queryFn: fetchAllDesigns });
   const [designId, setDesignId] = useState("");

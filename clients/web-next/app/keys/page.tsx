@@ -18,10 +18,11 @@ import {
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import type { CreatedKey, Key, KeyList } from "@/lib/types";
 
 function Keys() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [expiry, setExpiry] = useState("");

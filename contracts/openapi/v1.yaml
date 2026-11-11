@@ -540,6 +540,10 @@ components:
               type: array
               items: { $ref: '#/components/schemas/AdminPackSticker' }
             bundle_url: { type: string }
+            latest_job:
+              description: Latest processing attempt by reserved version, including active state or terminal failure diagnostics. Omitted before the first attempt.
+              allOf:
+                - $ref: '#/components/schemas/Job'
 
     AdminPackPage:
       type: object
@@ -1014,18 +1018,6 @@ paths:
         "422": { $ref: '#/components/responses/Unprocessable' }
 
   /api/v1/admin/fragments/{id}:
-    get:
-      tags: [Admin library]
-      summary: Get one fragment
-      security: [{ OwnerCookie: [] }]
-      parameters:
-        - $ref: '#/components/parameters/ResourceID'
-      responses:
-        "200":
-          description: Fragment
-          content: { application/json: { schema: { $ref: '#/components/schemas/Fragment' } } }
-        "401": { $ref: '#/components/responses/Unauthorized' }
-        "404": { $ref: '#/components/responses/NotFound' }
     put:
       tags: [Admin library]
       summary: Update a fragment
@@ -1439,6 +1431,7 @@ paths:
         "403": { $ref: '#/components/responses/Forbidden' }
         "404": { $ref: '#/components/responses/NotFound' }
         "409": { $ref: '#/components/responses/Conflict' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
 
   /api/v1/admin/jobs/{id}:
     get:

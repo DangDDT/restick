@@ -3,9 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   const { isReady, username } = useAuth();
   const router = useRouter();
 

@@ -146,6 +146,22 @@ func (r *Runner) Get(ctx context.Context, id string) (Job, error) {
 	return job, nil
 }
 
+// LatestForPack returns the latest attempt, including terminal diagnostics.
+// Reserved versions increase even when an attempt fails or is interrupted.
+func (r *Runner) LatestForPack(ctx context.Context, packID string) (*Job, error) {
+	if !isUUID(packID) {
+		return nil, ErrNotFound
+	}
+	job, err := scanJob(r.db.QueryRowContext(ctx, jobSelect+` WHERE pack_id = ? ORDER BY version DESC LIMIT 1`, packID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("jobs: latest pack job: %w", err)
+	}
+	return &job, nil
+}
+
 // Revoke ends a pack in one transaction: it writes the single tombstone,
 // interrupts every queued or running job and then cancels the active child.
 // A late completion can never publish because packs.CommitProcessed requires
@@ -301,6 +317,27 @@ func (r *Runner) execute(ctx context.Context, job Job) {
 		r.activePack, r.cancelActive = "", nil
 		r.mu.Unlock()
 	}()
+
+	// Register first: a revoke either already persisted an interruption or can
+	// now cancel this execution, including between this check and child startup.
+	var runnable bool
+	if err := r.db.QueryRowContext(runCtx, `SELECT EXISTS (
+		SELECT 1 FROM processing_jobs j JOIN packs p ON p.id = j.pack_id
+		WHERE j.id = ? AND j.status = 'running' AND p.status != 'revoked'
+	)`, job.ID).Scan(&runnable); err != nil {
+		switch {
+		case errors.Is(runCtx.Err(), context.DeadlineExceeded):
+			r.fail(ctx, job, CodeTimeout, fmt.Sprintf("processing did not finish within %s", r.timeout))
+		case ctx.Err() != nil:
+			r.finish(ctx, job, StatusInterrupted, CodeShutdown, "the server stopped while this job was running")
+		default:
+			r.fail(ctx, job, CodeProcessorFailed, err.Error())
+		}
+		return
+	}
+	if !runnable {
+		return
+	}
 
 	request, err := r.prepare(job)
 	if err != nil {

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n";
 import type { AdminPack, AdminPackPage } from "@/lib/types";
 
@@ -31,6 +31,7 @@ const STATUS_LABEL: Record<"draft" | "ready" | "revoked", MessageKey> = {
 };
 
 function PackRow({ pack }: { pack: AdminPack }) {
+  const { t } = useI18n();
   return (
     <li className="flex flex-wrap items-center gap-4 px-4 py-3">
       <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
@@ -79,6 +80,7 @@ function PackRow({ pack }: { pack: AdminPack }) {
 }
 
 function Packs() {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [tag, setTag] = useState("");

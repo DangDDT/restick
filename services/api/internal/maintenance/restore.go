@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -188,14 +189,23 @@ func copyBackup(ctx context.Context, srcRoot, dstRoot string, files map[string]m
 // applyDatabase validates the staged database, forces the new owner credentials
 // and leaves a checkpointed database file behind, without WAL side files.
 func applyDatabase(ctx context.Context, stagingDir string, files map[string]manifestFile, password []byte) error {
-	db, err := storage.Open(ctx, stagingDir)
+	u := url.URL{Scheme: "file", Path: filepath.Join(stagingDir, storage.DBFileName)}
+	db, err := sql.Open("sqlite", u.String()+"?mode=ro")
+	if err != nil {
+		return fmt.Errorf("%w: inspect restored database: %v", ErrBackupInvalid, err)
+	}
+	restoreErr := validateDatabase(ctx, db, files)
+	if closeErr := db.Close(); restoreErr == nil {
+		restoreErr = closeErr
+	}
+	if restoreErr != nil {
+		return restoreErr
+	}
+	db, err = storage.Open(ctx, stagingDir)
 	if err != nil {
 		return fmt.Errorf("%w: open restored database: %v", ErrBackupInvalid, err)
 	}
-	restoreErr := validateDatabase(ctx, db, files)
-	if restoreErr == nil {
-		restoreErr = resetCredentials(ctx, db, password)
-	}
+	restoreErr = resetCredentials(ctx, db, password)
 	if restoreErr == nil {
 		if _, err := db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
 			restoreErr = fmt.Errorf("maintenance: checkpoint restored database: %w", err)
@@ -225,6 +235,9 @@ var requiredTables = []string{
 func validateDatabase(ctx context.Context, db *sql.DB, files map[string]manifestFile) error {
 	if err := checkSchema(ctx, db); err != nil {
 		return err
+	}
+	if err := storage.CheckSchemaVersion(ctx, db); err != nil {
+		return fmt.Errorf("%w: %v", ErrBackupInvalid, err)
 	}
 	var integrity string
 	if err := db.QueryRowContext(ctx, `PRAGMA integrity_check`).Scan(&integrity); err != nil {
@@ -311,6 +324,9 @@ func sourceIndex(files map[string]manifestFile) (map[string]manifestFile, error)
 		parts := strings.Split(rel, "/")
 		if len(parts) != 3 || parts[0] != "sources" {
 			continue
+		}
+		if parts[2] != "original.png" && parts[2] != "original.jpg" && parts[2] != "original.webp" {
+			return nil, fmt.Errorf("%w: noncanonical source path %s", ErrBackupInvalid, rel)
 		}
 		if _, duplicate := bySource[parts[1]]; duplicate {
 			return nil, fmt.Errorf("%w: source %s has more than one file", ErrBackupInvalid, parts[1])

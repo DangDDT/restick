@@ -497,6 +497,55 @@ func TestRestoreRejectsTamperedOrEscapingFiles(t *testing.T) {
 	}
 }
 
+func TestRestoreRejectsIncompatibleBackups(t *testing.T) {
+	f := buildFixture(t)
+	base := backupFixture(t, f)
+	password := writePassword(t, newPassword)
+	for _, name := range []string{"renamed source", "unsupported source extension", "newer schema"} {
+		t.Run(name, func(t *testing.T) {
+			backupDir := filepath.Join(t.TempDir(), "backup")
+			copyTree(t, base, backupDir)
+			if name == "newer schema" {
+				dbPath := filepath.Join(backupDir, storage.DBFileName)
+				db, err := sql.Open("sqlite", dbPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				execSQL(t, db, `INSERT INTO schema_migrations (version, name) VALUES (2, 'future_schema')`)
+				if err := db.Close(); err != nil {
+					t.Fatal(err)
+				}
+				digest, size := digestOf(t, dbPath)
+				editManifest(t, backupDir, func(m *backupManifest) {
+					setEntry(m, storage.DBFileName, digest, size)
+				})
+			} else {
+				basename := "renamed.png"
+				if name == "unsupported source extension" {
+					basename = "original.gif"
+				}
+				rel := filepath.ToSlash(filepath.Join(filepath.Dir(f.sourceRel), basename))
+				if err := os.Rename(filepath.Join(backupDir, filepath.FromSlash(f.sourceRel)),
+					filepath.Join(backupDir, filepath.FromSlash(rel))); err != nil {
+					t.Fatal(err)
+				}
+				editManifest(t, backupDir, func(m *backupManifest) {
+					for i := range m.Files {
+						if m.Files[i].Path == f.sourceRel {
+							m.Files[i].Path = rel
+						}
+					}
+				})
+			}
+			target := filepath.Join(t.TempDir(), "data")
+			if err := Restore(context.Background(), backupDir, target, password); !errors.Is(err, ErrBackupInvalid) {
+				t.Fatalf("Restore error = %v, want ErrBackupInvalid", err)
+			}
+			assertOnlyLock(t, target)
+		})
+	}
+}
+
 func TestRestoredFilesMatchDatabase(t *testing.T) {
 	ctx := context.Background()
 	f := buildFixture(t)

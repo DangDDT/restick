@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { t, type MessageKey } from "@/lib/i18n";
+import { useI18n, type MessageKey } from "@/lib/i18n";
 
 const TONES: Record<string, string> = {
   green: "bg-emerald-100 text-emerald-700",
@@ -25,6 +25,7 @@ const STATUS: Record<string, { tone: string; label: MessageKey }> = {
 };
 
 export function StatusPill({ status }: { status: string }) {
+  const { t } = useI18n();
   const known = STATUS[status];
   const tone = TONES[known?.tone ?? "gray"];
   return (
@@ -37,6 +38,7 @@ export function StatusPill({ status }: { status: string }) {
 }
 
 export function Spinner() {
+  const { t } = useI18n();
   return (
     <div className="flex items-center justify-center py-12" role="status" aria-label={t("loading")}>
       <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-indigo-600" />
@@ -154,6 +156,7 @@ export function CopyButton({
   text: string;
   selectRef?: React.RefObject<HTMLTextAreaElement | null>;
 }) {
+  const { t } = useI18n();
   const [state, setState] = useState<"idle" | "copied" | "manual">("idle");
 
   async function copy() {
@@ -186,6 +189,7 @@ export function Dialog({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -225,6 +229,7 @@ export function Pager({
   total: number;
   onChange: (page: number) => void;
 }) {
+  const { t } = useI18n();
   const pages = Math.max(1, Math.ceil(total / pageSize));
   return (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-600">

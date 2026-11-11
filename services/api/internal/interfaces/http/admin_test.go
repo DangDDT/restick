@@ -334,7 +334,6 @@ func adminReadRoutes() []adminRouteCase {
 		{http.MethodGet, "/api/v1/admin/session", nil, ""},
 		{http.MethodGet, "/api/v1/admin/fragment-groups", nil, ""},
 		{http.MethodGet, "/api/v1/admin/fragments", nil, ""},
-		{http.MethodGet, "/api/v1/admin/fragments/" + id, nil, ""},
 		{http.MethodGet, "/api/v1/admin/characters", nil, ""},
 		{http.MethodGet, "/api/v1/admin/characters/" + id, nil, ""},
 		{http.MethodGet, "/api/v1/admin/reference-assets/" + id, nil, ""},
@@ -851,6 +850,59 @@ func TestStaticExportedUIRouting(t *testing.T) {
 		rec := f.request(http.MethodGet, target, nil, nil)
 		if rec.Code != http.StatusNotFound || !strings.HasPrefix(rec.Header().Get("Content-Type"), "application/json") {
 			t.Fatalf("%s = %d %q", target, rec.Code, rec.Header().Get("Content-Type"))
+		}
+	}
+}
+
+func TestAdminPackDetailDiscoversLatestJob(t *testing.T) {
+	f := newAdminFixture(t)
+	f.login()
+	for _, packState := range []string{"draft", "ready"} {
+		var pack packs.Pack
+		if packState == "ready" {
+			pack = f.readyPack("detail-ready")
+		} else {
+			var err error
+			pack, err = f.packs.Create(context.Background(), packs.PackDraft{
+				Slug: "detail-draft", Name: "Detail draft", Author: "Tester",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		rec := f.get("/api/v1/admin/packs/" + pack.ID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("pack detail = %d: %s", rec.Code, rec.Body.String())
+		}
+		if latest := decodeMap(t, rec)["latest_job"]; latest != nil {
+			t.Fatalf("pack without jobs has latest_job = %v", latest)
+		}
+		for index, status := range []string{"queued", "running", "failed"} {
+			id := fmt.Sprintf("%s-job-%d", pack.ID, index)
+			if _, err := f.db.Exec(`UPDATE processing_jobs SET status = 'succeeded' WHERE pack_id = ?`, pack.ID); err != nil {
+				t.Fatal(err)
+			}
+			code, message := "", ""
+			if status == "failed" {
+				code, message = "processor_failed", "layout has two objects in one cell"
+			}
+			if _, err := f.db.Exec(`INSERT INTO processing_jobs
+				(id, pack_id, version, status, request_json, error_code, error_message)
+				VALUES (?, ?, ?, ?, '{"schema_version":1}', ?, ?)`,
+				id, pack.ID, index+2, status, code, message); err != nil {
+				t.Fatal(err)
+			}
+			rec := f.get("/api/v1/admin/packs/" + pack.ID)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("pack detail = %d: %s", rec.Code, rec.Body.String())
+			}
+			latest, ok := decodeMap(t, rec)["latest_job"].(map[string]any)
+			if !ok || latest["id"] != id || latest["status"] != status {
+				t.Fatalf("%s pack latest job = %v, want %s/%s", packState, latest, id, status)
+			}
+			if status == "failed" && (latest["error_code"] != code || latest["error_message"] != message) {
+				t.Fatalf("latest failure diagnostics = %v", latest)
+			}
 		}
 	}
 }

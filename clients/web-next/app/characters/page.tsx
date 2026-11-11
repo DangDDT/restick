@@ -16,7 +16,7 @@ import {
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import type {
   Character,
   CharacterDraft,
@@ -25,6 +25,7 @@ import type {
 } from "@/lib/types";
 
 function ReferencePreview({ assetId }: { assetId: string }) {
+  const { t } = useI18n();
   return (
     // The private route answers only with the session cookie; no key in the URL.
     // eslint-disable-next-line @next/next/no-img-element
@@ -45,6 +46,7 @@ function CharacterForm({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(character?.name ?? "");
@@ -173,6 +175,7 @@ function CharacterForm({
 }
 
 function Characters() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [form, setForm] = useState<{ open: boolean; character: Character | null }>({
     open: false,
@@ -222,6 +225,7 @@ function Characters() {
       {form.open && (
         <div className="mb-6">
           <CharacterForm
+            key={form.character?.id ?? "create-character"}
             character={form.character}
             onClose={() => setForm({ open: false, character: null })}
             onSaved={setMessage}

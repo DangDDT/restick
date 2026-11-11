@@ -16,7 +16,7 @@ import {
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import type {
   Colors,
   Fragment,
@@ -44,6 +44,7 @@ const SCOPE_LABEL: Record<Scope, "scopeIdentity" | "scopePack" | "scopeSticker">
 };
 
 function GroupSection() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -201,6 +202,7 @@ function FragmentForm({
   fragment: Fragment | null;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [groupId, setGroupId] = useState(fragment?.group_id ?? groups[0]?.id ?? "");
   const [name, setName] = useState(fragment?.name ?? "");
@@ -354,6 +356,7 @@ function FragmentForm({
 }
 
 function FragmentSection({ groups }: { groups: Group[] }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
@@ -406,6 +409,7 @@ function FragmentSection({ groups }: { groups: Group[] }) {
 
       {form.open && (
         <FragmentForm
+          key={form.fragment?.id ?? "create-fragment"}
           groups={groups}
           fragment={form.fragment}
           onClose={() => setForm({ open: false, fragment: null })}
@@ -558,6 +562,7 @@ function FragmentSection({ groups }: { groups: Group[] }) {
 }
 
 function Library() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<"groups" | "fragments">("fragments");
   const groups = useQuery({
     queryKey: ["groups"],

@@ -53,6 +53,23 @@ func loadMigrations() ([]migration, error) {
 	return migrations, nil
 }
 
+// CheckSchemaVersion rejects unsupported databases without migrating or writing
+// to them. Restore calls it on its read-only staging connection.
+func CheckSchemaVersion(ctx context.Context, db *sql.DB) error {
+	migrations, err := loadMigrations()
+	if err != nil {
+		return err
+	}
+	var current int
+	if err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&current); err != nil {
+		return fmt.Errorf("storage: read schema version: %w", err)
+	}
+	if current < 1 || current > len(migrations) {
+		return fmt.Errorf("storage: unsupported schema version %d (image supports through %d)", current, len(migrations))
+	}
+	return nil
+}
+
 // migrate applies every migration newer than the recorded schema version. Each
 // migration and its version record commit in one transaction.
 func migrate(ctx context.Context, db *sql.DB, migrations []migration) error {

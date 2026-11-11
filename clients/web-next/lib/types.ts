@@ -247,6 +247,7 @@ export interface AdminPackSticker {
 export interface AdminPackDetail extends AdminPack {
   stickers: AdminPackSticker[];
   bundle_url: string;
+  latest_job?: Job;
 }
 
 export interface AdminPackPage {

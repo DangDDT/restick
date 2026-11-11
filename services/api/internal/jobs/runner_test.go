@@ -555,6 +555,103 @@ func TestRevokeWinsLateCompletion(t *testing.T) {
 	}
 }
 
+func TestRevokeBeforeExecutionDoesNotStartProcessor(t *testing.T) {
+	h := newHarness(t)
+	var calls int
+	fake := &fakeProcessor{process: func(ctx context.Context, request JobRequest) (JobResult, error) {
+		calls++
+		return writeProcessedOutput(t, request, request.Rows*request.Columns)
+	}}
+	runner := NewRunner(h.db, h.store, fake, time.Minute)
+	job := claimReplacement(t, h, runner)
+	if err := runner.Revoke(context.Background(), job.PackID); err != nil {
+		t.Fatal(err)
+	}
+	runner.execute(context.Background(), job)
+	if calls != 1 {
+		t.Fatalf("processor ran %d times, want only the committed first version", calls)
+	}
+	interrupted := waitJob(t, runner, job.ID, StatusInterrupted)
+	if interrupted.ErrorCode != CodePackRevoked {
+		t.Fatalf("revoked job error = %q", interrupted.ErrorCode)
+	}
+}
+
+func TestRevokeCancelsActiveProcessor(t *testing.T) {
+	h := newHarness(t)
+	started := make(chan struct{})
+	cancelled := make(chan struct{})
+	var calls int
+	fake := &fakeProcessor{process: func(ctx context.Context, request JobRequest) (JobResult, error) {
+		calls++
+		if calls == 1 {
+			return writeProcessedOutput(t, request, request.Rows*request.Columns)
+		}
+		close(started)
+		<-ctx.Done()
+		close(cancelled)
+		return JobResult{}, ctx.Err()
+	}}
+	runner := NewRunner(h.db, h.store, fake, time.Minute)
+	job := claimReplacement(t, h, runner)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runner.execute(ctx, job)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("replacement processor never started")
+	}
+	if err := runner.Revoke(ctx, job.PackID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-cancelled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("revoke did not cancel the active processor")
+	}
+	<-done
+	interrupted := waitJob(t, runner, job.ID, StatusInterrupted)
+	if interrupted.ErrorCode != CodePackRevoked {
+		t.Fatalf("revoked job error = %q", interrupted.ErrorCode)
+	}
+	pack, err := h.catalog.Get(context.Background(), job.PackID)
+	if err != nil || pack.Status != packs.StatusRevoked || pack.CurrentVersion != 1 {
+		t.Fatalf("revoke changed committed version: %+v, %v", pack, err)
+	}
+}
+
+// claimReplacement leaves a ready pack's second job between claim and execute.
+func claimReplacement(t *testing.T, h *harness, runner *Runner) Job {
+	t.Helper()
+	ctx := context.Background()
+	packID, designID, sourceID := h.newPack("claimed-replacement")
+	if _, err := runner.Enqueue(ctx, packID, sourceID, designID); err != nil {
+		t.Fatal(err)
+	}
+	first, err := runner.claim(ctx)
+	if err != nil || first == nil {
+		t.Fatalf("claim first job: %+v, %v", first, err)
+	}
+	runner.execute(ctx, *first)
+	waitJob(t, runner, first.ID, StatusSucceeded)
+	if _, err := runner.Enqueue(ctx, packID, sourceID, designID); err != nil {
+		t.Fatal(err)
+	}
+	second, err := runner.claim(ctx)
+	if err != nil || second == nil {
+		t.Fatalf("claim replacement: %+v, %v", second, err)
+	}
+	return *second
+}
+
 func TestRevokeRejectsDraftPackWithActiveJob(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()

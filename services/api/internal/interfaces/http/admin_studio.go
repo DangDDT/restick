@@ -83,15 +83,6 @@ func (a *admin) listFragments(w http.ResponseWriter, r *http.Request) {
 	publicJSON(w, http.StatusOK, page)
 }
 
-func (a *admin) getFragment(w http.ResponseWriter, r *http.Request) {
-	fragment, err := a.studio.GetFragment(r.Context(), r.PathValue("id"))
-	if err != nil {
-		writeStudioError(w, err)
-		return
-	}
-	publicJSON(w, http.StatusOK, fragment)
-}
-
 func (a *admin) createFragment(w http.ResponseWriter, r *http.Request) {
 	var draft studio.FragmentDraft
 	if !decodeJSON(w, r, &draft) {

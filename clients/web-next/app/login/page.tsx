@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import { Button, ErrorBanner, Field, inputClass } from "@/components/ui";
 
 export default function LoginPage() {
+  const { t } = useI18n();
   const { login } = useAuth();
   const router = useRouter();
   const [password, setPassword] = useState("");

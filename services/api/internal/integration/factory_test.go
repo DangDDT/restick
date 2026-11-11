@@ -31,9 +31,10 @@ import (
 )
 
 const (
-	ownerPassword = "acceptance-owner-password"
-	jobDeadline   = 3 * time.Minute
-	pollInterval  = 100 * time.Millisecond
+	ownerPassword    = "acceptance-owner-password"
+	processorTimeout = 2 * time.Minute
+	jobDeadline      = processorTimeout + 30*time.Second
+	pollInterval     = 100 * time.Millisecond
 )
 
 // TestFactoryRoundTrip drives the production services end to end over real TLS:
@@ -233,7 +234,7 @@ func newFactoryEnv(t *testing.T) *factoryEnv {
 	}
 	studioSvc := studio.NewService(db, files)
 	catalog := packs.NewService(db)
-	runner := jobs.NewRunner(db, files, jobs.PythonProcessor{}, 5*time.Minute)
+	runner := jobs.NewRunner(db, files, jobs.PythonProcessor{}, processorTimeout)
 
 	// The TLS origin is known from the listener, so the reviewed handler can be
 	// built with the exact public base URL before the server starts accepting.

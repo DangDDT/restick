@@ -59,6 +59,7 @@ type adminPackDetail struct {
 	adminPack
 	Stickers  []adminPackSticker `json:"stickers"`
 	BundleURL string             `json:"bundle_url"`
+	LatestJob *adminJob          `json:"latest_job,omitempty"`
 }
 
 func (a *admin) pack(p packs.Pack) adminPack {
@@ -161,6 +162,15 @@ func (a *admin) getPack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	detail := adminPackDetail{adminPack: a.pack(pack), Stickers: []adminPackSticker{}}
+	latest, err := a.jobs.LatestForPack(r.Context(), pack.ID)
+	if err != nil {
+		writePackError(w, err)
+		return
+	}
+	if latest != nil {
+		job := jobJSON(*latest)
+		detail.LatestJob = &job
+	}
 	if pack.CurrentVersion > 0 {
 		version, err := a.packs.GetVersion(r.Context(), pack.ID, pack.CurrentVersion)
 		if err != nil {

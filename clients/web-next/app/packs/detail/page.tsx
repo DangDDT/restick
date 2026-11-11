@@ -19,7 +19,7 @@ import {
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { formatBytes, formatDate } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import type { AdminPack, AdminPackDetail, Job, JobStatus, PackUpdate } from "@/lib/types";
 
 const POLL_MS = 3000;
@@ -32,6 +32,7 @@ function isTerminal(status: JobStatus): boolean {
 }
 
 function CatalogForm({ pack, onDone }: { pack: AdminPackDetail; onDone: (message: string | null) => void }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [name, setName] = useState(pack.name);
   const [author, setAuthor] = useState(pack.author);
@@ -98,6 +99,7 @@ function CatalogForm({ pack, onDone }: { pack: AdminPackDetail; onDone: (message
 }
 
 function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string | null }) {
+  const { t } = useI18n();
   const router = useRouter();
   const qc = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -105,7 +107,7 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(initialJobId);
+  const [requestedJobId, setJobId] = useState<string | null>(null);
   const [pollExpired, setPollExpired] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -113,12 +115,15 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
   const pack = useQuery({
     queryKey: ["admin-pack", id],
     queryFn: () => api<AdminPackDetail>(`/api/v1/admin/packs/${id}`),
+    refetchOnMount: "always",
   });
+  const jobId = requestedJobId ?? pack.data?.latest_job?.id ?? initialJobId;
 
   const job = useQuery({
     queryKey: ["job", jobId],
     queryFn: () => api<Job>(`/api/v1/admin/jobs/${jobId}`),
     enabled: Boolean(jobId),
+    initialData: () => pack.data?.latest_job?.id === jobId ? pack.data.latest_job : undefined,
     refetchInterval: (query) => {
       const data = query.state.data;
       if (data && isTerminal(data.status)) return false;
@@ -171,8 +176,8 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
       const created = await api<Job>(`/api/v1/admin/packs/${id}/process`, { method: "POST" });
       setJobId(created.id);
       setPollExpired(false);
-      // Keep the job id in the URL so a reload resumes polling (there is no
-      // "list jobs for pack" endpoint).
+      // Keep explicit job links reloadable; ordinary navigation discovers the
+      // latest durable attempt through the admin detail response.
       router.replace(`/packs/detail?id=${encodeURIComponent(id)}&job=${encodeURIComponent(created.id)}`);
       setMessage(t("processStarted"));
       qc.invalidateQueries({ queryKey: ["admin-pack", id] });
@@ -434,6 +439,7 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
 }
 
 function DetailPage() {
+  const { t } = useI18n();
   const params = useSearchParams();
   const id = params.get("id");
   const jobId = params.get("job");
@@ -442,7 +448,7 @@ function DetailPage() {
     <RequireAuth>
       <AppShell>
         {id ? (
-          <PackDetailView id={id} initialJobId={jobId} />
+          <PackDetailView key={id} id={id} initialJobId={jobId} />
         ) : (
           <>
             <PageHeader title={t("detailTitle")} />

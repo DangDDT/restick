@@ -7,13 +7,24 @@ database, one bind-mounted data directory, and one Python child only while a
 job runs. There is no Node runtime, PostgreSQL, MinIO, gRPC mesh or FTP service.
 
 - **Studio UI:** `/login`, `/factory`, `/library`, `/characters`, `/packs`,
-  `/packs/new`, `/packs/detail?id=…`, `/keys`, `/api-docs` (Vietnamese UI).
+  `/packs/new`, `/packs/detail?id=…`, `/keys`, `/api-docs` (Vietnamese by default,
+  with the existing persisted locale/provider foundation and Vietnamese fallback
+  for new labels; authored fragment/prompt text is never translated).
 - **Read API for the SDK:** `GET /api/v1/packs*`, `/api/v1/tombstones`,
   `/v1/objects/{key...}`, `/v1/bundles/{id}/v/{version}` with `X-Api-Key` or the
   owner session cookie.
 - **Admin API:** `/api/v1/admin/*`, owner session only.
 - **Canonical contract:** [`contracts/openapi/v1.yaml`](contracts/openapi/v1.yaml)
   (served read-only at `/openapi.yaml`, Swagger shell at `/docs`).
+
+Pack detail discovers the latest durable processing attempt on ordinary entry
+from `/packs`, including queued/running status and the latest terminal error;
+explicit `?job=…` links remain reloadable. Revoking a ready pack prevents a
+claimed replacement from starting or cancels its active child. Saving a design
+temporarily disables switching designs so a late response cannot retarget the
+editor. Replacing a fragment selection clears its old pin; removing a group
+removes its pins. A failed logout leaves the studio authenticated and displays
+the failure rather than claiming the session ended.
 
 The design is in
 [`docs/specs/2026-11-10-single-operator-sticker-factory-design.md`](docs/specs/2026-11-10-single-operator-sticker-factory-design.md).
@@ -166,6 +177,9 @@ Notes:
   database there.
 - The restore password file is trimmed of surrounding whitespace, so a trailing
   newline is fine but a password cannot begin or end with whitespace.
+- Restore checks the backup database read-only before migrations or credential
+  reset, rejects migration versions newer than the image, and requires canonical
+  source paths `sources/<id>/original.png`, `original.jpg` or `original.webp`.
 - Backup checksums detect corruption, not authenticity; keep backups outside the
   product and only restore backups produced on this instance.
 - Restoring disables every restored API key and clears owner sessions; create a

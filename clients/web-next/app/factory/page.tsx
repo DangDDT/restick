@@ -18,7 +18,7 @@ import {
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import type {
   Cell,
   CharacterList,
@@ -139,7 +139,7 @@ function stateFromDesign(design: Design, fragmentsById: Map<string, Fragment>): 
     paletteId: draft.palette_id ?? "",
     groupIds,
     selections,
-    pinned: [...(draft.pinned_fragment_ids ?? [])],
+    pinned: (draft.pinned_fragment_ids ?? []).filter((id) => Object.values(selections).includes(id)),
     freeText: draft.free_text ?? "",
     rows: draft.rows,
     columns: draft.columns,
@@ -151,13 +151,14 @@ function stateFromDesign(design: Design, fragmentsById: Map<string, Fragment>): 
 
 function draftFromState(state: BuilderState): Draft {
   const cells = resizeCells(state.cells, state.rows * state.columns);
+  const selected = state.groupIds.map((id) => state.selections[id]).filter(Boolean);
   return {
     id: state.id ?? undefined,
     name: state.name.trim(),
     character_id: state.characterId,
     group_ids: state.groupIds,
-    fragment_ids: Array.from(new Set(Object.values(state.selections).filter(Boolean))),
-    pinned_fragment_ids: state.pinned,
+    fragment_ids: Array.from(new Set(selected)),
+    pinned_fragment_ids: state.pinned.filter((id) => selected.includes(id)),
     palette_id: state.paletteId,
     free_text: state.freeText,
     rows: state.rows,
@@ -191,6 +192,7 @@ function FragmentPicker({
   onToggle: (id: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
   const visible = fragments.filter(
@@ -248,6 +250,7 @@ function FragmentPicker({
 }
 
 function Factory() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const [state, setState] = useState<BuilderState>(blankState);
@@ -281,8 +284,8 @@ function Factory() {
 
   const saveDesign = useMutation({
     mutationFn: (draft: Draft) =>
-      state.id
-        ? api<Design>(`/api/v1/admin/designs/${state.id}`, { method: "PUT", json: draft })
+      draft.id
+        ? api<Design>(`/api/v1/admin/designs/${draft.id}`, { method: "PUT", json: draft })
         : api<Design>("/api/v1/admin/designs", { method: "POST", json: draft }),
     onSuccess: (saved) => {
       setError(null);
@@ -306,11 +309,14 @@ function Factory() {
     onError: (err) => setError(errorText(err)),
   });
 
+  const editorBusy = saveDesign.isPending || deleteDesign.isPending;
+
   function update(patch: Partial<BuilderState>) {
     setState((current) => ({ ...current, ...patch }));
   }
 
   function loadDesign(design: Design) {
+    if (editorBusy) return;
     setError(null);
     setNotice(null);
     setCompiledPrompt(design.compiled_prompt);
@@ -337,6 +343,16 @@ function Factory() {
     }));
   }
 
+  function selectFragment(groupId: string, fragmentId: string) {
+    setState((current) => ({
+      ...current,
+      selections: { ...current.selections, [groupId]: fragmentId },
+      pinned: current.pinned.filter(
+        (id) => id !== current.selections[groupId] && fragmentsById.get(id)?.group_id !== groupId,
+      ),
+    }));
+  }
+
   function removeGroup(groupId: string) {
     setState((current) => {
       const selections = { ...current.selections };
@@ -346,7 +362,7 @@ function Factory() {
         ...current,
         groupIds: current.groupIds.filter((id) => id !== groupId),
         selections,
-        pinned: removed ? current.pinned.filter((id) => id !== removed) : current.pinned,
+        pinned: current.pinned.filter((id) => id !== removed && fragmentsById.get(id)?.group_id !== groupId),
       };
     });
   }
@@ -416,7 +432,7 @@ function Factory() {
       <PageHeader
         title={t("factoryTitle")}
         subtitle={t("factorySubtitle")}
-        actions={<Button onClick={() => { setState(blankState()); setCompiledPrompt(""); setError(null); setNotice(null); }}>{t("newDesign")}</Button>}
+        actions={<Button disabled={editorBusy} onClick={() => { setState(blankState()); setCompiledPrompt(""); setError(null); setNotice(null); }}>{t("newDesign")}</Button>}
       />
 
       <p className="mb-5 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
@@ -447,7 +463,7 @@ function Factory() {
                 <li key={design.id}>
                   <button
                     onClick={() => loadDesign(design)}
-                    disabled={!fragments.data}
+                    disabled={!fragments.data || editorBusy}
                     className={`w-full rounded-lg border px-3 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50 ${
                       state.id === design.id
                         ? "border-indigo-500 bg-indigo-50"
@@ -588,11 +604,7 @@ function Factory() {
                         <Field label={t("fragment")}>
                           <select
                             value={selectedId}
-                            onChange={(e) =>
-                              update({
-                                selections: { ...state.selections, [groupId]: e.target.value },
-                              })
-                            }
+                            onChange={(e) => selectFragment(groupId, e.target.value)}
                             className={inputClass}
                           >
                             <option value="">{t("chooseFragment")}</option>
@@ -776,7 +788,7 @@ function Factory() {
                 <Button variant="secondary" onClick={() => void compile()} disabled={compiling}>
                   {compiling ? t("compiling") : t("compile")}
                 </Button>
-                <Button onClick={save} disabled={saveDesign.isPending}>
+                <Button onClick={save} disabled={editorBusy}>
                   {saveDesign.isPending
                     ? t("saving")
                     : state.id
@@ -789,7 +801,7 @@ function Factory() {
                     onClick={() => {
                       if (window.confirm(t("deleteDesignConfirm"))) deleteDesign.mutate(state.id!);
                     }}
-                    disabled={deleteDesign.isPending}
+                    disabled={editorBusy}
                   >
                     {t("deleteDesign")}
                   </Button>

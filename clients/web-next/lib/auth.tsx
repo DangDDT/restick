@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import type { SessionInfo } from "./types";
 
 // The owner session is an HttpOnly cookie; this provider only tracks whether
@@ -51,8 +51,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     try {
       await api<void>("/api/v1/admin/session", { method: "DELETE" });
-    } catch {
-      // The session may already be gone; the local state is cleared regardless.
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.status !== 401) throw err;
     }
     setUsername(null);
   }, []);

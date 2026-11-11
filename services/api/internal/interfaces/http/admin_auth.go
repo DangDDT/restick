@@ -61,7 +61,6 @@ func (a *admin) mount(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /api/v1/admin/fragments", a.sessionOnly(a.listFragments))
 	mux.HandleFunc("POST /api/v1/admin/fragments", a.ownerOnly(a.createFragment))
-	mux.HandleFunc("GET /api/v1/admin/fragments/{id}", a.sessionOnly(a.getFragment))
 	mux.HandleFunc("PUT /api/v1/admin/fragments/{id}", a.ownerOnly(a.updateFragment))
 	mux.HandleFunc("DELETE /api/v1/admin/fragments/{id}", a.ownerOnly(a.archiveFragment))
 
