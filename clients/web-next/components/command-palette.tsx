@@ -19,6 +19,13 @@ export function CommandPalette({ commands, onClose }: { commands: Command[]; onC
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // The native dialog opens in a parent effect, so focus after it is open.
+  useEffect(() => {
+    const id = window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => window.clearTimeout(id);
+  }, []);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -54,7 +61,7 @@ export function CommandPalette({ commands, onClose }: { commands: Command[]; onC
         <div className="relative">
           <Icon name="search" size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
           <input
-            autoFocus
+            ref={inputRef}
             role="combobox"
             aria-expanded="true"
             aria-controls="cmd-list"

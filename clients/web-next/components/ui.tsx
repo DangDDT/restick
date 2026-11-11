@@ -532,6 +532,8 @@ export function Dialog({
   useEffect(() => {
     const dialog = ref.current;
     if (dialog && !dialog.open) dialog.showModal();
+    // React autoFocus fires before the dialog is open; honour data-autofocus here.
+    dialog?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
     return () => {
       if (dialog?.open) dialog.close();
     };

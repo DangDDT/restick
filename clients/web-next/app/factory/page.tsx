@@ -224,7 +224,7 @@ function FragmentPicker({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className={inputClass}
-          autoFocus
+          data-autofocus
         />
       </Field>
       <div className="mt-3 max-h-72 space-y-0.5 overflow-y-auto">
@@ -453,6 +453,8 @@ function Factory() {
         subtitle={t("factorySubtitle")}
         actions={
           <Button
+            variant="secondary"
+            icon="plus"
             disabled={editorBusy}
             onClick={() => {
               setState(blankState());
@@ -888,7 +890,7 @@ function Factory() {
         <Button variant="secondary" icon="docs" onClick={() => setPromptSheetOpen(true)}>
           {t("facViewPrompt")}
         </Button>
-        <CopyButton text={compiledPrompt} />
+        <CopyButton text={compiledPrompt} variant="primary" />
       </div>
       <div aria-hidden="true" className="h-24 lg:hidden" />
 

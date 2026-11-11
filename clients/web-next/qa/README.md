@@ -12,3 +12,6 @@ Test-only: a mock of the admin API + static export, and a screenshot sweep. Not 
 - The sweep logs in with `POST /api/v1/admin/session`; the `/login` route is shot logged out. It refuses 127.0.0.1:8080 (the real instance).
 - Seeded pack ids: `pk-draft-1` (running job), `pk-ready-1`, `pk-revoked-1`. Detail route: `/packs/detail?id=pk-draft-1`.
 - Regenerate the pristine baseline: `git archive 2a4f07b clients/web-next | tar -x -C <scratch>`, `cp -cR <worktree>/clients/web-next/node_modules <scratch>/clients/web-next/` (a symlink breaks Turbopack), `npx next build`, then `STATIC_DIR=<scratch>/clients/web-next/out node qa/mock-server.mjs "" 4501`.
+
+## Interaction / a11y sweep
+`node qa/interact.mjs [baseUrl]` (mock running): login error, ⌘K palette, theme persistence, skip link, key create/confirm, library drawer, validation, pack states, dark + mobile viewport shots, empty/error/slow scenarios, axe-core WCAG 2.x AA on 8 routes x light/dark x 1440/390. Shots go to `docs/redesign/screens/states/`.

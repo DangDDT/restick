@@ -2,13 +2,13 @@
   "label": "after",
   "baseUrl": "http://localhost:4500",
   "scenario": "default",
-  "generatedAt": "2026-11-11T08:03:52.527Z",
+  "generatedAt": "2026-11-11T08:15:41.391Z",
   "summary": {
     "routes": 10,
     "screenshots": 40,
     "routes_with_console_errors": 8,
     "routes_with_failed_requests": 0,
-    "routes_with_horizontal_overflow": 1,
+    "routes_with_horizontal_overflow": 0,
     "auth_redirects": 0,
     "loading_placeholders": 0
   },
@@ -656,9 +656,9 @@
       "failed_requests": [],
       "expected_401": [],
       "horizontal_overflow": {
-        "scrollWidth": 836,
+        "scrollWidth": 768,
         "innerWidth": 768,
-        "overflow": true
+        "overflow": false
       }
     },
     {

@@ -181,7 +181,7 @@ function Keys() {
       ) : list.length > 0 ? (
         <>
           {/* Desktop: a ruled table. */}
-          <div className="hidden overflow-x-auto border-y border-line md:block">
+          <div className="relative hidden overflow-x-auto border-y border-line md:block">
             <table className="w-full min-w-[46rem] text-left text-sm">
               <thead className="border-b border-line text-xs font-medium text-ink-3">
                 <tr>

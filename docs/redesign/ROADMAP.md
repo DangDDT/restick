@@ -7,28 +7,30 @@ Evidence: `docs/redesign/screens/before|after/` (10 routes x 1440/1280/768/390, 
 - **Rendered** = loaded in headless Chromium against the fixture mock at 4 widths, 0 failed requests, 0 detector findings.
 - **Interacted / audited** = states, keyboard, contrast actually exercised. Not yet done unless ticked.
 
+## Verification summary (latest run)
+- `node qa/shoot.mjs after`: 10 routes x 4 widths, 0 failed requests, 0 horizontal overflow, 0 detector findings.
+- `node qa/interact.mjs`: **77/77 steps passed**, including axe-core (WCAG 2.0/2.1/2.2 A+AA) with zero violations on 8 routes in light and dark at 1440 and 390.
+- Bugs found and fixed by this sweep: `/keys` 768px overflow (sr-only inside non-relative scroller); ⌘K palette and factory fragment picker did not receive typing (React `autoFocus` fires before native `<dialog>` opens; `Dialog` now honours `data-autofocus`); two magenta primaries on `/factory` (now Copy only).
+
 ## Routes
 | Route | Implemented | Rendered 4 widths | Interacted / audited |
 |---|---|---|---|
-| shell (rail, tabs, ⌘K, theme) | yes | yes (via every route) | no |
-| `/login` | yes | yes | no |
+| shell (rail, tabs, ⌘K, theme) | yes | yes | palette, theme persistence, skip link, axe |
+| `/login` | yes | yes | wrong-password alert |
 | `/` splash | yes | n/a (redirect) | no |
-| `/factory` | yes | yes | no |
-| `/library` | yes | yes | no |
-| `/characters` | yes | yes | no |
-| `/packs` | yes | yes | no |
-| `/packs/new` | yes | yes | no |
-| `/packs/detail` (draft) | yes | yes | no |
-| `/packs/detail` ready / revoked / failed job | yes | **not shot** | no |
-| `/keys` | yes | yes (768px reports document overflow) | no |
-| `/api-docs` | frame only | yes | no |
+| `/factory` | yes | yes | axe, mobile sticky bar viewport check, dark |
+| `/library` | yes | yes | create drawer + Esc, axe, dark |
+| `/characters` | yes | yes | axe, dark (forms not exercised) |
+| `/packs` | yes | yes | empty/error/slow states, axe |
+| `/packs/new` | yes | yes | empty-submit validation, axe |
+| `/packs/detail` draft / ready / revoked | yes | draft only (ready/revoked shot at 1440) | delete confirm, axe |
+| `/keys` | yes | yes | create + one-time secret, disable confirm, axe |
+| `/api-docs` | frame only | yes | axe |
 | 404 | yes | yes | no |
 
-## Open items (next session starts here)
-1. Fix `/keys` 768px horizontal overflow.
-2. Exercise: dialogs/drawers, forms and validation, delete/revoke confirms, key secret reveal, palette keyboard flow, mock scenarios `empty`/`error`/`slow`/`loggedout`.
-3. Dark theme visual pass on every route.
-4. Contrast and keyboard audit (Impeccable `audit`), then `critique`, `polish`, `harden`, `adapt` passes.
-5. Viewport (not full-page) check of mobile sticky prompt bar on `/factory` against the bottom tab bar.
-6. Two unused-variable lint warnings (`stickers`, `data`) in page sources.
-7. Known limit: `/api-docs` inner document is Go-served `/docs`, outside this frontend.
+## Not verified / open
+1. Real-backend behaviour (all checks use the fixture mock; `/v1/*` not mocked).
+2. Character create/edit/upload, pack source upload, job `failed`/`interrupted` views, rotate-key flow: implemented, not exercised.
+3. Screen-reader pass and real-device (iOS Safari) check.
+4. Two unused-variable lint warnings in page sources.
+5. `/api-docs` inner document is Go-served `/docs`, outside this frontend.
