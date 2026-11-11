@@ -63,6 +63,18 @@ jobs:
         with:
           go-version: '1.26.x'
           cache-dependency-path: services/api/go.sum
+      # internal/integration runs the real Python machine job through the fixed
+      # `python` argv, so this job installs the actual processor rather than
+      # skipping the round trip.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/img_tool/pyproject.toml
+      - name: Install image processor
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e services/img_tool
       - name: Vet & Test
         working-directory: services/api
         run: |

@@ -164,12 +164,21 @@ Runtime needs Go 1.26 and Python 3.12. `cmd/restick` tests serve the actual
 exported UI, so build the export before the full Go test command; targeted
 storage-only tests do not need it.
 
+The factory round-trip integration test (`internal/integration`) runs the real
+Python machine job; `python` on `PATH` must resolve to an interpreter with
+`services/img_tool` installed (the CI `Go API` job installs Python 3.12 and the
+editable package beside the Go toolchain for exactly this reason).
+
 ```bash
 # Static studio export (required by ./cmd/restick tests)
 cd clients/web-next && npm ci && npm run build   # writes out/
 
 # Go tests (module-local)
 cd services/api && go test ./...
+
+# Real-processor factory round trip only (no missing-Python skip)
+pip install -e services/img_tool
+cd services/api && go test -count=1 -run '^TestFactoryRoundTrip$' ./internal/integration
 
 # Python core, local CLI and machine job
 cd services/img_tool && pip install -e . && python -m unittest discover -s tests -v
