@@ -131,6 +131,19 @@ All maintenance commands are in the same image and take the exclusive app lock.
 **Stop the server first** (`docker compose stop restick`); a running writer makes
 them fail with "stop the service first".
 
+Pre-create both host mount directories with UID/GID 10001; otherwise Docker
+creates missing directories as root on Linux. The restore target must be empty:
+
+```bash
+install -d -o 10001 -g 10001 ./backups ./data-restored
+```
+
+On Docker Desktop, apply the same file-sharing ownership setup as the data
+directory. Recreate `secrets/admin_password` with the new password and the
+ownership/modes from Quickstart before reset or restore. After a successful
+restore, point `RESTICK_DATA_HOST` at the new directory before starting;
+keep the original directory untouched until recovery is accepted.
+
 ```bash
 # Back up database + sources/packs/bundles (work/ and secrets excluded).
 docker compose run --rm -v "$PWD/backups:/backup" restick backup --output /backup/2026-11-11
@@ -169,19 +182,25 @@ Python machine job; `python` on `PATH` must resolve to an interpreter with
 `services/img_tool` installed (the CI `Go API` job installs Python 3.12 and the
 editable package beside the Go toolchain for exactly this reason).
 
+Run these commands from the repository root. The virtual environment keeps the
+same real processor available to both Go integration tests and Python tests:
+
 ```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e services/img_tool
+
 # Static studio export (required by ./cmd/restick tests)
-cd clients/web-next && npm ci && npm run build   # writes out/
+(cd clients/web-next && npm ci && npm run build)   # writes out/
 
 # Go tests (module-local)
-cd services/api && go test ./...
+go -C services/api test ./...
 
 # Real-processor factory round trip only (no missing-Python skip)
-pip install -e services/img_tool
-cd services/api && go test -count=1 -run '^TestFactoryRoundTrip$' ./internal/integration
+go -C services/api test -count=1 -run '^TestFactoryRoundTrip$' ./internal/integration
 
 # Python core, local CLI and machine job
-cd services/img_tool && pip install -e . && python -m unittest discover -s tests -v
+python -m unittest discover -s services/img_tool/tests -v
 img_tool --help
 ```
 
@@ -209,3 +228,43 @@ raw key is shown once.
 `ghcr.io/<owner>/restick:<commit-sha>` only — an immutable tag, no `latest` and
 no SSH deploy. Deploy by pulling that tag or digest on the VPS and recreating
 the one compose service.
+
+## Local acceptance evidence (2026-11-11)
+
+Executed on the isolated factory branch, against the real single-service image
+and local HTTPS origin. This is local acceptance, not a VPS deployment or a
+claim that hosted CI ran successfully.
+
+| Criterion | Exercised evidence |
+| --- | --- |
+| AC01 — one runtime and persistence | Actual image ran healthy as UID10001 with read-only root, only one app service; force-recreate preserved metadata and exact SDK/ZIP bytes. No Node/PostgreSQL/MinIO/gRPC runtime. |
+| AC02 — owner/client separation | Auth/admin HTTP tests and production-dependency round trip; real browser login/logout, key rotation/disable; restore rejected old session and key. Offline password-reset path covered by command tests. |
+| AC03 — seed and snapshots | Canonical 754 fragments +24 palettes inventory checked during seed implementation; studio restart/edit/snapshot regressions; custom mobile/desktop groups, fragments and palettes created/edited in the browser. |
+| AC04 — composition | Desktop and390px mobile: pinned selection and every editable grid field unchanged after suggestion; compile, denied-clipboard manual selection, save and full reload verified. |
+| AC05 — processing | Real Python child produced four512×512 stickers and128×128 thumbnails from owned2×2 fixture; ready pack downloaded, ZIP members compared byte-for-byte with public objects. |
+| AC06 — failure isolation | Python machine/core and Go assets/jobs regressions cover invalid input, bounds, timeout/crash and preserving the committed version; affected packages passed with race detector. |
+| AC07 — job/recovery boundaries | Jobs/publication regressions cover active-job exclusion, interrupted recovery and private work/orphans; browser reload of its running job URL resumed polling to ready. |
+| AC08 — SDK integrity | Flutter config/downloader13 tests passed, including checksum/traversal/hostile ZIP cases. Real SDK payload checksum was SHA256 of sticker bytes in manifest order, independently compared with bundle members (not ZIP hash). |
+| AC09 — revoke/sync | Real desktop/mobile revoke made all10 captured URLs per pack return410; repeated owner revoke preserved inclusive tombstone cursor. Round-trip regression covers both committed versions. Already-downloaded offline files cannot be recalled. |
+| AC10 — file/auth boundaries | HTTP/assets/auth regressions cover traversal/symlink/private roots, query-key rejection and auth before HEAD/range/conditional responses. Cookie-backed private reference previews loaded in both browser sizes. |
+| AC11 — static studio | Full12-step desktop/mobile workflow, runtime pack IDs and eight direct route/root reloads; no Next server. Both browser console error lists empty; mobile document had no horizontal overflow. |
+| AC12 — offline recovery | Stopped writer, same-image backup, restore into a different empty mount with new password; old session/key401, all restored keys disabled, new key fetched the exact pre-backup pack/ZIP. Backup manifest held14 hashed allowlisted files, no work or bootstrap secret. |
+| AC13 — cutover | Canonical OpenAPI validated; Compose config checked with empty bootstrap directory; actual image/static export exercised. CI installs Node24 export and Python3.12 processor in the Go job. Old host data/volumes untouched; no push, merge or remote deploy. |
+
+Final integration checks: affected Go module `go test -race -count=1 ./...`
+(11 packages), Python35 tests, Flutter config/downloader13 tests all passed.
+Web lint/static export passed; the unchanged export was served by the actual
+container for browser checks. Dart tests used the CLI fallback after the Dart
+MCP environment reported a standalone-SDK configuration failure.
+
+Recovery fixture: SDK checksum
+`3065839d21c56d9de53358bf26c869a9b1753045bac18dfe3bfca77857a386f2`;
+ZIP128168 bytes, SHA256
+`5798b0b0ab4e5c332157bc14d3a8f2fdca363def75261c9751e7eaef27ee0670`,
+identical before recreate and after restore.
+
+**Not exercised:** owner-supplied AI artwork, AI-output quality, resource
+benchmarks, public-domain TLS or a VPS deployment. The four-shape fixture does
+not substitute for the owner's required real-AI-image acceptance run. Local
+browser checks trusted only the generated test certificate. SwaggerUI loads
+its assets from `unpkg.com` and needs that host reachable in the browser.
