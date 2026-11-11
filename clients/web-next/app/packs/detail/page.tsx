@@ -3,14 +3,17 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { DesignPanel } from "@/components/design-panel";
+import { SheetPicker, sheetImageURL } from "@/components/design-sheets";
 import { RequireAuth } from "@/components/guards";
 import { Icon } from "@/components/icons";
 import {
   ArtFrame,
   Button,
   ConfirmDialog,
+  Dialog,
   EmptyState,
   ErrorBanner,
   Field,
@@ -26,6 +29,7 @@ import {
   inputClass,
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { providerName } from "@/lib/ai-providers";
 import { formatBytes, formatDate } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import type { AdminPack, AdminPackDetail, Job, JobStatus, PackUpdate } from "@/lib/types";
@@ -63,6 +67,7 @@ function CatalogForm({ pack, onDone }: { pack: AdminPackDetail; onDone: (message
           .map((tag) => tag.trim())
           .filter((tag) => tag.length > 0),
         design_id: pack.design_id,
+        sheet_id: pack.sheet_id,
       };
       await api<AdminPack>(`/api/v1/admin/packs/${pack.id}`, { method: "PUT", json: body });
       qc.invalidateQueries({ queryKey: ["admin-pack", pack.id] });
@@ -103,31 +108,31 @@ function CatalogForm({ pack, onDone }: { pack: AdminPackDetail; onDone: (message
 
 /** Station flow: Sheet -> Cắt -> Sẵn sàng. Derived only from data already on the page. */
 function StationFlow({
-  sourceName,
-  hasSource,
+  sheetName,
+  hasSheet,
   jobStatus,
   packStatus,
 }: {
-  sourceName?: string;
-  hasSource: boolean;
+  sheetName?: string;
+  hasSheet: boolean;
   jobStatus?: JobStatus;
   packStatus: string;
 }) {
   const { t } = useI18n();
   const jobActive = jobStatus === "queued" || jobStatus === "running";
-  const current = !hasSource ? 0 : jobActive || packStatus === "draft" ? 1 : 2;
+  const current = !hasSheet ? 0 : jobActive || packStatus === "draft" ? 1 : 2;
 
   const stations = [
     {
       key: "sheet",
       label: t("stationSheet"),
-      body: hasSource ? (
+      body: hasSheet ? (
         <span className="mono flex min-w-0 items-center gap-1.5 text-xs text-ok">
           <Icon name="check" size={14} className="shrink-0" />
-          <span className="truncate">{sourceName}</span>
+          <span className="truncate">{sheetName}</span>
         </span>
       ) : (
-        <span className="text-xs text-ink-2">{t("noSource")}</span>
+        <span className="text-xs text-ink-2">{t("noSheet")}</span>
       ),
     },
     {
@@ -174,11 +179,12 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
   const { t } = useI18n();
   const router = useRouter();
   const qc = useQueryClient();
-  const fileInput = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [pickedSheet, setPickedSheet] = useState("");
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [sheetError, setSheetError] = useState<string | null>(null);
   const [requestedJobId, setJobId] = useState<string | null>(null);
   const [pollExpired, setPollExpired] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -222,24 +228,30 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
     qc.invalidateQueries({ queryKey: ["admin-packs"] });
   }, [jobStatus, id, qc]);
 
-  async function uploadSource() {
-    if (!file) return;
-    setUploading(true);
-    setError(null);
+  async function changeSheet() {
+    if (!pack.data || !pickedSheet || pickedSheet === pack.data.sheet_id) return;
+    setSheetBusy(true);
+    setSheetError(null);
     setMessage(null);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      await api<AdminPack>(`/api/v1/admin/packs/${id}/source`, { form });
-      if (fileInput.current) fileInput.current.value = "";
-      setFile(null);
-      setMessage(t("sourceUploaded"));
+      const body: PackUpdate = {
+        name: pack.data.name,
+        author: pack.data.author,
+        description: pack.data.description,
+        tags: pack.data.tags ?? [],
+        design_id: pack.data.design_id,
+        sheet_id: pickedSheet,
+      };
+      await api<AdminPack>(`/api/v1/admin/packs/${id}`, { method: "PUT", json: body });
+      setSheetOpen(false);
+      setMessage(t("sheetChanged"));
       qc.invalidateQueries({ queryKey: ["admin-pack", id] });
       qc.invalidateQueries({ queryKey: ["admin-packs"] });
     } catch (err) {
-      setError(errorText(err));
+      // A running job keeps the sheet fixed: the 409 job_active message names the wait.
+      setSheetError(errorText(err));
     } finally {
-      setUploading(false);
+      setSheetBusy(false);
     }
   }
 
@@ -310,6 +322,7 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
   }
 
   const data = pack.data;
+  const designId = data.design_id ?? "";
   const jobRunning = job.data ? !isTerminal(job.data.status) : false;
   const pollStopped = pollExpired && Boolean(job.data && !isTerminal(job.data.status));
 
@@ -340,8 +353,8 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
 
       <div className="py-5">
         <StationFlow
-          hasSource={Boolean(data.source)}
-          sourceName={data.source?.filename}
+          hasSheet={Boolean(data.sheet)}
+          sheetName={data.sheet?.filename}
           jobStatus={job.data?.status}
           packStatus={data.status}
         />
@@ -349,52 +362,62 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
 
       <div className="grid gap-x-8 lg:grid-cols-2">
         <Section
-          title={t("sourceLabel")}
+          title={t("sheetLabel")}
           actions={
-            <Button
-              onClick={() => void startProcessing()}
-              disabled={starting || jobRunning || !data.source || data.status === "revoked"}
-              loading={starting}
-              icon="scissors"
-              size="sm"
-            >
-              {starting ? t("processing") : t("process")}
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setPickedSheet(data.sheet_id);
+                  setSheetError(null);
+                  setSheetOpen(true);
+                }}
+                disabled={!designId || data.status === "revoked"}
+              >
+                {t("changeSheet")}
+              </Button>
+              <Button
+                onClick={() => void startProcessing()}
+                disabled={starting || jobRunning || !data.sheet || data.status === "revoked"}
+                loading={starting}
+                icon="scissors"
+                size="sm"
+              >
+                {starting ? t("processing") : t("process")}
+              </Button>
+            </>
           }
         >
-          {data.source ? (
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-              <dt className="text-ink-3">{t("sourceLabel")}</dt>
-              <dd className="mono break-all text-xs text-ink">{data.source.filename}</dd>
-              <dt className="text-ink-3">{t("dimensions")}</dt>
-              <dd className="num text-ink">
-                {data.source.width}×{data.source.height} · {formatBytes(data.source.byte_size)}
-              </dd>
-              <dt className="text-ink-3">{t("checksum")}</dt>
-              <dd className="mono break-all text-[11px] text-ink-2">{data.source.checksum_sha256}</dd>
-            </dl>
-          ) : (
-            <p className="text-sm text-ink-2">{t("noSource")}</p>
-          )}
-
-          <div className="mt-4 space-y-3">
-            <Field label={t("uploadSource")} hint={t("uploadSourceHint")}>
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                className="block w-full text-sm text-ink-2 file:mr-3 file:min-h-9 file:cursor-pointer file:rounded-ctl file:border file:border-line-strong file:bg-panel file:px-3 file:text-sm file:font-medium file:text-ink hover:file:bg-sunk max-md:file:min-h-11"
-              />
-            </Field>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="secondary" icon="upload" onClick={() => void uploadSource()} disabled={!file || uploading} loading={uploading}>
-                {uploading ? t("uploading") : t("uploadSource")}
-              </Button>
+          {data.sheet ? (
+            <div className="space-y-3">
+              <ArtFrame className="aspect-[4/3] w-full max-w-xs">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  data-qa="pack-sheet-image"
+                  src={sheetImageURL(designId, data.sheet.id)}
+                  alt={data.sheet.filename}
+                  className="size-full object-contain p-1"
+                />
+              </ArtFrame>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                <dt className="text-ink-3">{t("sheetProvider")}</dt>
+                <dd className="text-ink">{providerName(data.sheet.provider)}</dd>
+                <dt className="text-ink-3">{t("sheetLabel")}</dt>
+                <dd className="mono break-all text-xs text-ink">{data.sheet.filename}</dd>
+                <dt className="text-ink-3">{t("dimensions")}</dt>
+                <dd className="num text-ink">
+                  {data.sheet.width}×{data.sheet.height} · {formatBytes(data.sheet.byte_size)}
+                </dd>
+                <dt className="text-ink-3">{t("checksum")}</dt>
+                <dd className="mono break-all text-[11px] text-ink-2">{data.sheet.checksum_sha256}</dd>
+              </dl>
             </div>
-            <p className="text-xs text-ink-2">{t("processHint")}</p>
-            {data.status === "revoked" && <p className="text-xs text-ink-2">{t("revokedHint")}</p>}
-          </div>
+          ) : (
+            <p className="text-sm text-ink-2">{t("noSheet")}</p>
+          )}
+          <p className="mt-4 text-xs text-ink-2">{t("processHint")}</p>
+          {data.status === "revoked" && <p className="text-xs text-ink-2">{t("revokedHint")}</p>}
         </Section>
 
         <Section
@@ -433,6 +456,12 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
           )}
         </Section>
       </div>
+
+      {data.design && (
+        <Section title={t("designLabel")}>
+          <DesignPanel design={data.design} />
+        </Section>
+      )}
 
       <Section title={t("jobLabel")} actions={job.data && <StatusPill status={job.data.status} />}>
         {/* Live region: job status changes are announced without moving focus. */}
@@ -542,6 +571,37 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
             </Button>
           )}
         </div>
+      )}
+
+      {sheetOpen && designId && (
+        <Dialog
+          title={t("changeSheet")}
+          onClose={() => {
+            if (sheetBusy) return;
+            setSheetOpen(false);
+          }}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setSheetOpen(false)} disabled={sheetBusy}>
+                {t("cancel")}
+              </Button>
+              <Button
+                onClick={() => void changeSheet()}
+                disabled={!pickedSheet || pickedSheet === data.sheet_id}
+                loading={sheetBusy}
+              >
+                {sheetBusy ? t("saving") : t("save")}
+              </Button>
+            </>
+          }
+        >
+          {sheetError && (
+            <div className="mb-3">
+              <ErrorBanner message={sheetError} />
+            </div>
+          )}
+          <SheetPicker designId={designId} value={pickedSheet} onChange={setPickedSheet} />
+        </Dialog>
       )}
 
       {confirm && (

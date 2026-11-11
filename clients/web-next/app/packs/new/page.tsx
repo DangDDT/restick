@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { DesignPanel } from "@/components/design-panel";
+import { SheetPicker } from "@/components/design-sheets";
 import { RequireAuth } from "@/components/guards";
 import { Button, ErrorBanner, Field, PageHeader, Section, SkeletonRows, inputClass, selectClass } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
@@ -24,6 +26,7 @@ function NewPack() {
   const router = useRouter();
   const designs = useQuery({ queryKey: ["designs-all"], queryFn: fetchAllDesigns });
   const [designId, setDesignId] = useState("");
+  const [sheetId, setSheetId] = useState("");
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [author, setAuthor] = useState("");
@@ -31,13 +34,18 @@ function NewPack() {
   const [tags, setTags] = useState("");
   const [busy, setBusy] = useState(false);
   const [designError, setDesignError] = useState<string | null>(null);
+  const [sheetError, setSheetError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const design = designs.data?.find((item) => item.id === designId);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
     setDesignError(null);
+    setSheetError(null);
     if (!designId) return setDesignError(t("designRequired"));
+    if (!sheetId) return setSheetError(t("sheetRequired"));
     setBusy(true);
     try {
       const body: PackCreate = {
@@ -50,6 +58,7 @@ function NewPack() {
           .map((tag) => tag.trim())
           .filter((tag) => tag.length > 0),
         design_id: designId,
+        sheet_id: sheetId,
       };
       const created = await api<AdminPack>("/api/v1/admin/packs", { method: "POST", json: body });
       router.replace(`/packs/detail?id=${encodeURIComponent(created.id)}`);
@@ -92,19 +101,44 @@ function NewPack() {
                 value={designId}
                 onChange={(event) => {
                   setDesignId(event.target.value);
+                  // A sheet belongs to one design; switching designs drops the old choice.
+                  setSheetId("");
                   setDesignError(null);
+                  setSheetError(null);
                 }}
                 className={selectClass}
                 aria-invalid={Boolean(designError) || undefined}
               >
                 <option value="">{t("chooseDesign")}</option>
-                {designs.data?.map((design) => (
-                  <option key={design.id} value={design.id}>
-                    {design.name} ({design.rows}×{design.columns})
+                {designs.data?.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} ({item.rows}×{item.columns})
                   </option>
                 ))}
               </select>
             </Field>
+
+            {design && (
+              <div className="mt-5 space-y-5">
+                <DesignPanel design={design} />
+                <div>
+                  <p className="mb-1.5 text-[13px] font-medium text-ink">{t("sheetLabel")}</p>
+                  <SheetPicker
+                    designId={design.id}
+                    value={sheetId}
+                    onChange={(next) => {
+                      setSheetId(next);
+                      setSheetError(null);
+                    }}
+                  />
+                  {sheetError && (
+                    <p role="alert" className="mt-1.5 text-xs text-danger">
+                      {sheetError}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </Section>
 
           <Section title={t("pkCatalogSection")}>
