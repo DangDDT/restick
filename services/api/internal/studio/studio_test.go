@@ -901,3 +901,58 @@ func TestDeleteDesignBlockedWithSheets(t *testing.T) {
 		t.Fatalf("DeleteDesign after sheet removal: %v", err)
 	}
 }
+
+func TestSaveSheetDuplicateAtLimitReturnsExisting(t *testing.T) {
+	service, _, dir, design := sheetTestService(t)
+	ctx := context.Background()
+	var first Sheet
+	for i := range MaxSheetsPerDesign {
+		sheet, err := service.SaveSheet(ctx, design.ID, bytes.NewReader(pngVariant(t, i)), "a.png", "gemini", "")
+		if err != nil {
+			t.Fatalf("sheet %d: %v", i, err)
+		}
+		if i == 0 {
+			first = sheet
+		}
+	}
+	again, err := service.SaveSheet(ctx, design.ID, bytes.NewReader(pngVariant(t, 0)), "b.png", "gemini", "")
+	if err != nil || again.ID != first.ID {
+		t.Fatalf("re-upload = %+v, %v; want id %s", again, err, first.ID)
+	}
+	if n := sourceDirs(t, dir); n != MaxSheetsPerDesign {
+		t.Fatalf("sources has %d dirs, want %d", n, MaxSheetsPerDesign)
+	}
+}
+
+func TestListSheetsNewestFirst(t *testing.T) {
+	service, _, _, design := sheetTestService(t)
+	ctx := context.Background()
+	var ids []string
+	for i := range 3 {
+		sheet, err := service.SaveSheet(ctx, design.ID, bytes.NewReader(pngVariant(t, i)), "a.png", "gemini", "")
+		if err != nil {
+			t.Fatalf("sheet %d: %v", i, err)
+		}
+		ids = append(ids, sheet.ID)
+	}
+	list, err := service.ListSheets(ctx, design.ID)
+	if err != nil || len(list) != 3 {
+		t.Fatalf("ListSheets = %d, %v", len(list), err)
+	}
+	for i, sheet := range list {
+		if sheet.ID != ids[2-i] {
+			t.Fatalf("position %d = %s, want %s", i, sheet.ID, ids[2-i])
+		}
+	}
+}
+
+func TestSaveSheetUnknownDesignLeavesNoDirectory(t *testing.T) {
+	service, _, dir, _ := sheetTestService(t)
+	_, err := service.SaveSheet(context.Background(), "missing", bytes.NewReader(pngVariant(t, 1)), "a.png", "gemini", "")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+	if n := sourceDirs(t, dir); n != 0 {
+		t.Fatalf("sources has %d dirs, want 0", n)
+	}
+}

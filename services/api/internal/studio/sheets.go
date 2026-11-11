@@ -13,10 +13,13 @@ import (
 )
 
 var (
-	ErrSheetLimit       = errors.New("studio: design already has the maximum number of sheets")
-	ErrSheetInUse       = errors.New("studio: sheet is used by a pack")
-	ErrDesignHasSheets  = errors.New("studio: design still has sheets")
-	providerPattern     = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
+	ErrSheetLimit      = errors.New("studio: design already has the maximum number of sheets")
+	ErrSheetInUse      = errors.New("studio: sheet is used by a pack")
+	ErrDesignHasSheets = errors.New("studio: design still has sheets")
+	providerPattern    = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
+)
+
+const (
 	maxSheetNoteLength  = 500
 	sheetColumns        = `id, design_id, provider, note, prompt_snapshot, filename, media_type, byte_size, width, height, checksum_sha256, created_at`
 	errSheetUniqueText  = "UNIQUE constraint failed"
@@ -38,14 +41,17 @@ func (s *Service) SaveSheet(ctx context.Context, designID string, r io.Reader, f
 	if err != nil {
 		return Sheet{}, err
 	}
-	if n, err := s.countSheets(ctx, designID); err != nil {
-		return Sheet{}, err
-	} else if n >= MaxSheetsPerDesign {
-		return Sheet{}, ErrSheetLimit
-	}
 	source, err := s.files.SaveSource(ctx, r, filename)
 	if err != nil {
 		return Sheet{}, err
+	}
+	// Identical bytes win over the limit check: return the existing sheet.
+	if existing, err := s.sheetByChecksum(ctx, designID, source.ChecksumSHA256); err == nil {
+		_ = s.files.RemoveSource(source.ID)
+		return existing, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		_ = s.files.RemoveSource(source.ID)
+		return Sheet{}, fmt.Errorf("studio: find duplicate sheet: %w", err)
 	}
 	// The count guard in the INSERT keeps concurrent uploads under the limit.
 	result, err := s.db.ExecContext(ctx, `INSERT INTO design_sheets
@@ -64,7 +70,11 @@ func (s *Service) SaveSheet(ctx context.Context, designID string, r io.Reader, f
 	if err != nil {
 		_ = s.files.RemoveSource(source.ID)
 		if strings.Contains(err.Error(), errSheetUniqueText) {
-			return s.sheetByChecksum(ctx, designID, source.ChecksumSHA256)
+			winner, err := s.sheetByChecksum(ctx, designID, source.ChecksumSHA256)
+			if err != nil {
+				return Sheet{}, fmt.Errorf("studio: find duplicate sheet: %w", err)
+			}
+			return winner, nil
 		}
 		return Sheet{}, fmt.Errorf("studio: insert sheet: %w", err)
 	}
@@ -145,19 +155,11 @@ func (s *Service) DeleteSheet(ctx context.Context, designID, sheetID string) err
 	return s.files.RemoveSource(sheetID)
 }
 
-func (s *Service) countSheets(ctx context.Context, designID string) (int, error) {
-	var n int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM design_sheets WHERE design_id = ?`, designID).Scan(&n); err != nil {
-		return 0, fmt.Errorf("studio: count sheets: %w", err)
-	}
-	return n, nil
-}
-
 func (s *Service) sheetByChecksum(ctx context.Context, designID, checksum string) (Sheet, error) {
 	item, err := scanSheet(s.db.QueryRowContext(ctx, `SELECT `+sheetColumns+` FROM design_sheets
 		WHERE design_id = ? AND checksum_sha256 = ?`, designID, checksum))
 	if err != nil {
-		return Sheet{}, fmt.Errorf("studio: find duplicate sheet: %w", err)
+		return Sheet{}, err
 	}
 	return item, nil
 }
