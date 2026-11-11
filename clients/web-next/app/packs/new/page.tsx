@@ -1,19 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
-import {
-  Button,
-  ErrorBanner,
-  Field,
-  PageHeader,
-  Spinner,
-  inputClass,
-} from "@/components/ui";
+import { Button, ErrorBanner, Field, PageHeader, Section, SkeletonRows, inputClass, selectClass } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { AdminPack, Design, DesignPage, PackCreate } from "@/lib/types";
@@ -38,12 +30,14 @@ function NewPack() {
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
   const [busy, setBusy] = useState(false);
+  const [designError, setDesignError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
-    if (!designId) return setError(t("designRequired"));
+    setDesignError(null);
+    if (!designId) return setDesignError(t("designRequired"));
     setBusy(true);
     try {
       const body: PackCreate = {
@@ -67,100 +61,87 @@ function NewPack() {
 
   return (
     <>
-      <PageHeader
-        title={t("newPack")}
-        subtitle={t("packsSubtitle")}
-        actions={
-          <Link
-            href="/packs"
-            className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            {t("back")}
-          </Link>
-        }
-      />
+      <PageHeader title={t("newPack")} subtitle={t("packsSubtitle")} back={{ href: "/packs", label: t("back") }} />
 
       {error && (
-        <div className="mb-4">
+        <div className="mb-5">
           <ErrorBanner message={error} />
         </div>
       )}
 
       {designs.isError && (
-        <div className="mb-4">
+        <div className="mb-5 space-y-3">
           <ErrorBanner message={errorText(designs.error)} />
+          <Button variant="secondary" icon="refresh" onClick={() => void designs.refetch()}>
+            {t("retry")}
+          </Button>
         </div>
       )}
 
       {designs.isLoading ? (
-        <Spinner />
+        <SkeletonRows rows={4} />
       ) : (
-        <form
-          onSubmit={submit}
-          className="max-w-2xl space-y-4 rounded-xl border border-zinc-200 bg-white p-6"
-        >
-          <Field
-            label={t("designSelect")}
-            hint={
-              designs.data && designs.data.length === 0 ? t("noDesignsHint") : t("designPickHint")
-            }
-          >
-            <select
-              value={designId}
-              onChange={(event) => setDesignId(event.target.value)}
-              className={inputClass}
+        <form onSubmit={submit} className="max-w-3xl" aria-busy={busy || undefined}>
+          <Section title={t("designLabel")}>
+            <Field
+              label={t("designSelect")}
+              hint={designs.data && designs.data.length === 0 ? t("noDesignsHint") : t("designPickHint")}
+              error={designError ?? undefined}
             >
-              <option value="">{t("chooseDesign")}</option>
-              {designs.data?.map((design) => (
-                <option key={design.id} value={design.id}>
-                  {design.name} ({design.rows}×{design.columns})
-                </option>
-              ))}
-            </select>
-          </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={t("packName")}>
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                className={inputClass}
-                required
-              />
+              <select
+                value={designId}
+                onChange={(event) => {
+                  setDesignId(event.target.value);
+                  setDesignError(null);
+                }}
+                className={selectClass}
+                aria-invalid={Boolean(designError) || undefined}
+              >
+                <option value="">{t("chooseDesign")}</option>
+                {designs.data?.map((design) => (
+                  <option key={design.id} value={design.id}>
+                    {design.name} ({design.rows}×{design.columns})
+                  </option>
+                ))}
+              </select>
             </Field>
-            <Field label={t("packSlug")} hint={t("slugHint")}>
-              <input
-                value={slug}
-                onChange={(event) => setSlug(event.target.value)}
-                className={inputClass}
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                required
-              />
-            </Field>
-            <Field label={t("packAuthor")}>
-              <input
-                value={author}
-                onChange={(event) => setAuthor(event.target.value)}
-                className={inputClass}
-              />
-            </Field>
-            <Field label={t("packTags")}>
-              <input
-                value={tags}
-                onChange={(event) => setTags(event.target.value)}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-          <Field label={t("packDescription")}>
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={3}
-              className={inputClass}
-            />
-          </Field>
-          <div className="flex justify-end">
-            <Button type="submit" disabled={busy}>
+          </Section>
+
+          <Section title={t("pkCatalogSection")}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t("packName")}>
+                <input value={name} onChange={(event) => setName(event.target.value)} className={inputClass} required />
+              </Field>
+              <Field label={t("packSlug")} hint={t("slugHint")}>
+                <input
+                  value={slug}
+                  onChange={(event) => setSlug(event.target.value)}
+                  className={inputClass}
+                  pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                  required
+                />
+              </Field>
+              <Field label={t("packAuthor")}>
+                <input value={author} onChange={(event) => setAuthor(event.target.value)} className={inputClass} />
+              </Field>
+              <Field label={t("packTags")}>
+                <input value={tags} onChange={(event) => setTags(event.target.value)} className={inputClass} />
+              </Field>
+            </div>
+            <div className="mt-4">
+              <Field label={t("packDescription")}>
+                <textarea
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  rows={3}
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </Section>
+
+          <div className="flex justify-end pt-2">
+            <Button type="submit" disabled={busy} loading={busy} icon={busy ? undefined : "plus"}>
               {busy ? t("creatingPack") : t("createPack")}
             </Button>
           </div>

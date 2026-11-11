@@ -5,16 +5,21 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
+import { Icon } from "@/components/icons";
 import {
+  ArtFrame,
   Button,
   EmptyState,
   ErrorBanner,
   Field,
+  JobTag,
   PageHeader,
   Pager,
-  Spinner,
+  SkeletonRows,
   StatusPill,
+  cx,
   inputClass,
+  selectClass,
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
@@ -32,49 +37,49 @@ const STATUS_LABEL: Record<"draft" | "ready" | "revoked", MessageKey> = {
 
 function PackRow({ pack }: { pack: AdminPack }) {
   const { t } = useI18n();
+  const detailHref = `/packs/detail?id=${encodeURIComponent(pack.id)}`;
   return (
-    <li className="flex flex-wrap items-center gap-4 px-4 py-3">
-      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
+    <li className="relative flex items-center gap-4 py-3 pr-1">
+      <ArtFrame className="size-16 shrink-0 rounded-[4px]" checker>
         {pack.thumbnail_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={pack.thumbnail_url}
-            alt={pack.name}
-            className="h-full w-full object-cover"
+            alt=""
             loading="lazy"
+            className="size-full object-contain"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-xl text-zinc-300">▦</div>
+          <Icon name="pack" size={20} className="text-ink-3" />
         )}
-      </div>
+      </ArtFrame>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="truncate text-sm font-semibold text-zinc-900">{pack.name}</p>
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <Link
+            href={detailHref}
+            className="min-w-0 truncate font-display text-[0.9375rem] font-semibold text-ink after:absolute after:inset-0 after:content-[''] hover:underline"
+          >
+            {pack.name}
+          </Link>
           <StatusPill status={pack.status} />
+          <JobTag id={pack.id} />
         </div>
-        <p className="mt-0.5 truncate text-xs text-zinc-500">
-          {pack.slug} · {pack.author} · {t("versionLabel")} {pack.current_version} ·{" "}
-          {pack.sticker_count} {t("stickerCount")} · {t("updatedAt")} {formatDate(pack.updated_at)}
+        <p className="mono mt-0.5 truncate text-xs text-ink-3">
+          {pack.slug} · v{pack.current_version} · {formatDate(pack.updated_at)}
         </p>
-        {(pack.tags ?? []).length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {(pack.tags ?? []).map((tag) => (
-              <span
-                key={tag}
-                className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-2">
+          <span className="num">
+            {pack.sticker_count} {t("stickerCount")}
+          </span>
+          <span className="truncate">{pack.author}</span>
+          {(pack.tags ?? []).map((tag) => (
+            <span key={tag} className="rounded-[3px] border border-line-strong px-1.5 py-px text-[11px] text-ink-2">
+              {tag}
+            </span>
+          ))}
+        </div>
       </div>
-      <Link
-        href={`/packs/detail?id=${encodeURIComponent(pack.id)}`}
-        className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-      >
-        {t("open")}
-      </Link>
+      <Icon name="chevronRight" size={16} className="shrink-0 text-ink-3" aria-hidden="true" />
     </li>
   );
 }
@@ -104,12 +109,9 @@ function Packs() {
         title={t("packsTitle")}
         subtitle={t("packsSubtitle")}
         actions={
-          <Link
-            href="/packs/new"
-            className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
+          <Button href="/packs/new" icon="plus">
             {t("newPack")}
-          </Link>
+          </Button>
         }
       />
 
@@ -118,7 +120,7 @@ function Packs() {
           event.preventDefault();
           setApplied({ query: query.trim(), status, tag: tag.trim(), page: 1 });
         }}
-        className="mb-5 grid gap-3 rounded-xl border border-zinc-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4"
+        className="mb-5 grid gap-3 border-y border-line py-4 sm:grid-cols-2 lg:grid-cols-[1fr_11rem_11rem_auto]"
       >
         <Field label={t("search")}>
           <input
@@ -129,11 +131,7 @@ function Packs() {
           />
         </Field>
         <Field label={t("filterStatus")}>
-          <select
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-            className={inputClass}
-          >
+          <select value={status} onChange={(event) => setStatus(event.target.value)} className={selectClass}>
             {STATUSES.map((value) => (
               <option key={value || "all"} value={value}>
                 {value ? t(STATUS_LABEL[value]) : t("allStatuses")}
@@ -142,24 +140,27 @@ function Packs() {
           </select>
         </Field>
         <Field label={t("filterTag")}>
-          <input
-            value={tag}
-            onChange={(event) => setTag(event.target.value)}
-            className={inputClass}
-          />
+          <input value={tag} onChange={(event) => setTag(event.target.value)} className={inputClass} />
         </Field>
         <div className="flex items-end">
-          <Button type="submit">{t("search")}</Button>
+          <Button type="submit" icon="search" className="w-full lg:w-auto">
+            {t("search")}
+          </Button>
         </div>
       </form>
 
       {packs.isLoading ? (
-        <Spinner />
+        <SkeletonRows rows={5} className="border-y border-line py-3" />
       ) : packs.isError ? (
-        <ErrorBanner message={errorText(packs.error)} />
+        <div className="space-y-3">
+          <ErrorBanner message={errorText(packs.error)} />
+          <Button variant="secondary" icon="refresh" onClick={() => void packs.refetch()}>
+            {t("retry")}
+          </Button>
+        </div>
       ) : packs.data && packs.data.items.length > 0 ? (
         <>
-          <ul className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200 bg-white">
+          <ul className={cx("divide-y divide-line border-y border-line")}>
             {packs.data.items.map((pack) => (
               <PackRow key={pack.id} pack={pack} />
             ))}
@@ -172,7 +173,11 @@ function Packs() {
           />
         </>
       ) : (
-        <EmptyState title={t("noPacks")} />
+        <EmptyState title={t("noPacks")} icon="pack">
+          <Button href="/packs/new" icon="plus">
+            {t("newPack")}
+          </Button>
+        </EmptyState>
       )}
     </>
   );

@@ -288,6 +288,15 @@ export const vi = {
   pageNotFoundHint: "Đường dẫn không tồn tại trong Studio. Quay lại bàn ghép để tiếp tục.",
   goToFactory: "Về bàn ghép",
   retry: "Thử lại",
+  pkStationFlow: "Tiến trình pack",
+  pkCatalogSection: "Thông tin catalog",
+  pkNoJob: "Chưa có job xử lý cho pack này.",
+  pkRevokeTitle: "Thu hồi pack này?",
+  pkDeleteTitle: "Xóa pack nháp?",
+  keyRotateTitle: "Xoay khóa này?",
+  keyDisableTitle: "Vô hiệu hóa khóa này?",
+  facBasics: "Thông tin thiết kế",
+  facViewPrompt: "Xem prompt",
 };
 
 export type MessageKey = keyof typeof vi;

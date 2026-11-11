@@ -5,13 +5,17 @@ import { useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
 import {
+  ArtFrame,
   Button,
+  ConfirmDialog,
+  Dialog,
   EmptyState,
   ErrorBanner,
   Field,
   PageHeader,
-  Spinner,
+  SkeletonRows,
   SuccessBanner,
+  WarnBanner,
   inputClass,
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
@@ -24,16 +28,18 @@ import type {
   ReferenceAsset,
 } from "@/lib/types";
 
-function ReferencePreview({ assetId }: { assetId: string }) {
+function ReferencePreview({ assetId, className }: { assetId: string; className?: string }) {
   const { t } = useI18n();
   return (
-    // The private route answers only with the session cookie; no key in the URL.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={`/api/v1/admin/reference-assets/${assetId}`}
-      alt={t("referenceImage")}
-      className="h-24 w-24 rounded-lg border border-zinc-200 object-cover"
-    />
+    <ArtFrame className={className}>
+      {/* The private route answers only with the session cookie; no key in the URL. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/api/v1/admin/reference-assets/${assetId}`}
+        alt={t("referenceImage")}
+        className="h-full w-full object-contain"
+      />
+    </ArtFrame>
   );
 }
 
@@ -55,6 +61,7 @@ function CharacterForm({
   const [rightsNotes, setRightsNotes] = useState(character?.rights_notes ?? "");
   const [assetId, setAssetId] = useState(character?.reference_asset_id ?? "");
   const [asset, setAsset] = useState<ReferenceAsset | null>(null);
+  const [nameError, setNameError] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -91,7 +98,11 @@ function CharacterForm({
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!name.trim()) return setError(t("nameRequired"));
+    if (!name.trim()) {
+      setNameError(t("nameRequired"));
+      return;
+    }
+    setNameError(undefined);
     setError(null);
     save.mutate({
       name: name.trim(),
@@ -103,74 +114,82 @@ function CharacterForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4">
-      <h3 className="text-sm font-semibold text-zinc-700">
-        {character ? t("edit") : t("newCharacter")}
-      </h3>
-      {error && <ErrorBanner message={error} />}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={t("characterName")}>
-          <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label={t("characterDescription")}>
+    <Dialog title={character ? t("edit") : t("newCharacter")} onClose={onClose} variant="drawer">
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        {error && <ErrorBanner message={error} />}
+
+        <Field label={t("characterName")} error={nameError}>
           <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-invalid={Boolean(nameError) || undefined}
             className={inputClass}
           />
         </Field>
-      </div>
-      <Field label={t("identityNotes")}>
-        <textarea
-          value={identityNotes}
-          onChange={(e) => setIdentityNotes(e.target.value)}
-          rows={2}
-          className={inputClass}
-        />
-      </Field>
-      <Field label={t("rightsNotes")} hint={t("rightsHint")}>
-        <textarea
-          value={rightsNotes}
-          onChange={(e) => setRightsNotes(e.target.value)}
-          rows={2}
-          className={inputClass}
-        />
-      </Field>
+        <Field label={t("characterDescription")}>
+          <input value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
+        </Field>
+        <Field label={t("identityNotes")}>
+          <textarea
+            value={identityNotes}
+            onChange={(e) => setIdentityNotes(e.target.value)}
+            rows={3}
+            className={inputClass}
+          />
+        </Field>
+        <Field label={t("rightsNotes")} hint={t("rightsHint")}>
+          <textarea
+            value={rightsNotes}
+            onChange={(e) => setRightsNotes(e.target.value)}
+            rows={2}
+            className={inputClass}
+          />
+        </Field>
 
-      <div className="rounded-lg border border-zinc-200 p-3">
-        <p className="mb-2 text-sm font-medium text-zinc-700">{t("referenceImage")}</p>
-        <div className="flex flex-wrap items-center gap-3">
-          {assetId ? (
-            <ReferencePreview assetId={assetId} />
-          ) : (
-            <span className="text-xs text-zinc-500">{t("referenceMissing")}</span>
-          )}
-          <div className="min-w-0">
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(e) => void upload(e.target.files?.[0])}
-              aria-label={t("referenceUpload")}
-              className="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
-            />
-            <p className="mt-1 text-xs text-zinc-500">
-              {uploading ? t("uploading") : asset ? `${asset.filename} · ${asset.width}×${asset.height}` : t("referenceHint")}
-            </p>
+        <fieldset className="space-y-3 border-t border-line pt-4">
+          <legend className="mb-2 text-[13px] font-medium text-ink">{t("referenceImage")}</legend>
+          <WarnBanner message={t("referenceHint")} />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            {assetId ? (
+              <ReferencePreview assetId={assetId} className="size-40 shrink-0" />
+            ) : (
+              <ArtFrame className="size-40 shrink-0">
+                <span className="px-3 text-center text-xs text-ink-2">{t("referenceMissing")}</span>
+              </ArtFrame>
+            )}
+            <div className="min-w-0 flex-1 space-y-2">
+              <span className="block text-[13px] text-ink-2">{t("referenceUpload")}</span>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => void upload(e.target.files?.[0])}
+                aria-label={t("referenceUpload")}
+                disabled={uploading}
+                className="block w-full text-sm text-ink-2 file:mr-3 file:min-h-9 file:cursor-pointer file:rounded-ctl file:border file:border-line-strong file:bg-panel file:px-3 file:text-sm file:font-medium file:text-ink hover:file:bg-sunk disabled:opacity-45 max-md:file:min-h-11"
+              />
+              <p role="status" aria-live="polite" className="text-xs text-ink-2">
+                {uploading
+                  ? t("uploading")
+                  : asset
+                    ? `${asset.filename} · ${asset.width}×${asset.height}`
+                    : ""}
+              </p>
+              {asset && <p className="text-xs font-medium text-ok">{t("referenceUploaded")}</p>}
+            </div>
           </div>
-        </div>
-        {asset && <p className="mt-2 text-xs text-emerald-700">{t("referenceUploaded")}</p>}
-      </div>
+        </fieldset>
 
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={onClose}>
-          {t("cancel")}
-        </Button>
-        <Button type="submit" disabled={save.isPending || uploading}>
-          {save.isPending ? t("saving") : t("save")}
-        </Button>
-      </div>
-    </form>
+        <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
+          <Button variant="secondary" onClick={onClose} disabled={save.isPending}>
+            {t("cancel")}
+          </Button>
+          <Button type="submit" loading={save.isPending} disabled={uploading}>
+            {save.isPending ? t("saving") : t("save")}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
@@ -181,8 +200,8 @@ function Characters() {
     open: false,
     character: null,
   });
+  const [archiveTarget, setArchiveTarget] = useState<Character | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const characters = useQuery({
     queryKey: ["characters"],
@@ -192,12 +211,16 @@ function Characters() {
   const archive = useMutation({
     mutationFn: (id: string) => api<void>(`/api/v1/admin/characters/${id}`, { method: "DELETE" }),
     onSuccess: () => {
-      setError(null);
+      setArchiveTarget(null);
       setMessage(t("characterArchived"));
       qc.invalidateQueries({ queryKey: ["characters"] });
     },
-    onError: (err) => setError(errorText(err)),
   });
+
+  function closeArchive() {
+    archive.reset();
+    setArchiveTarget(null);
+  }
 
   return (
     <>
@@ -205,95 +228,110 @@ function Characters() {
         title={t("charactersTitle")}
         subtitle={t("charactersSubtitle")}
         actions={
-          <Button onClick={() => setForm({ open: true, character: null })}>
+          <Button icon="plus" onClick={() => setForm({ open: true, character: null })}>
             {t("newCharacter")}
           </Button>
         }
       />
 
       {message && (
-        <div className="mb-4">
-          <SuccessBanner message={message} />
-        </div>
-      )}
-      {error && (
-        <div className="mb-4">
-          <ErrorBanner message={error} />
+        <div className="mb-5">
+          <SuccessBanner message={message} onDismiss={() => setMessage(null)} />
         </div>
       )}
 
       {form.open && (
-        <div className="mb-6">
-          <CharacterForm
-            key={form.character?.id ?? "create-character"}
-            character={form.character}
-            onClose={() => setForm({ open: false, character: null })}
-            onSaved={setMessage}
-          />
-        </div>
+        <CharacterForm
+          key={form.character?.id ?? "create-character"}
+          character={form.character}
+          onClose={() => setForm({ open: false, character: null })}
+          onSaved={setMessage}
+        />
       )}
 
       {characters.isLoading ? (
-        <Spinner />
+        <SkeletonRows rows={3} />
       ) : characters.isError ? (
-        <ErrorBanner message={errorText(characters.error)} />
+        <div className="space-y-3">
+          <ErrorBanner message={errorText(characters.error)} />
+          <Button variant="secondary" icon="refresh" onClick={() => characters.refetch()}>
+            {t("retry")}
+          </Button>
+        </div>
       ) : characters.data && characters.data.items.length > 0 ? (
-        <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {characters.data.items.map((character) => (
-            <li key={character.id} className="rounded-xl border border-zinc-200 bg-white p-4">
-              <div className="flex items-start gap-3">
+        <section className="space-y-4">
+          <WarnBanner message={t("referenceHint")} />
+          <ul aria-label={t("charactersTitle")} className="divide-y divide-line border-y border-line">
+            {characters.data.items.map((character) => (
+              <li key={character.id} className="flex flex-col gap-4 py-4 sm:flex-row sm:items-start">
                 {character.reference_asset_id ? (
-                  <ReferencePreview assetId={character.reference_asset_id} />
+                  <ReferencePreview assetId={character.reference_asset_id} className="size-20 shrink-0" />
                 ) : (
-                  <div className="flex h-24 w-24 items-center justify-center rounded-lg border border-dashed border-zinc-300 text-xs text-zinc-400">
-                    {t("referenceMissing")}
-                  </div>
+                  <ArtFrame className="size-20 shrink-0">
+                    <span className="px-2 text-center text-[11px] leading-4 text-ink-2">{t("referenceMissing")}</span>
+                  </ArtFrame>
                 )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-zinc-900">{character.name}</p>
-                  <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">
-                    {character.description || t("none")}
-                  </p>
-                  <p className="mt-1 text-[11px] text-zinc-400">
-                    {t("updatedAt")} {formatDate(character.updated_at)}
-                  </p>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <h3 className="min-w-0 break-words text-sm font-semibold text-ink">{character.name}</h3>
+                    <span className="mono text-[11px] text-ink-3">
+                      {t("updatedAt")} {formatDate(character.updated_at)}
+                    </span>
+                  </div>
+                  <p className="break-words text-sm text-ink-2">{character.description || t("none")}</p>
+                  {character.identity_notes && (
+                    <p className="break-words text-xs text-ink-2">
+                      <span className="font-medium text-ink">{t("identityNotes")}: </span>
+                      {character.identity_notes}
+                    </p>
+                  )}
+                  {character.rights_notes && (
+                    <p className="break-words text-xs text-ink-2">
+                      <span className="font-medium text-ink">{t("rightsNotes")}: </span>
+                      {character.rights_notes}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <Button
+                      variant="secondary"
+                      icon="edit"
+                      onClick={() => setForm({ open: true, character })}
+                    >
+                      {t("edit")}
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => {
+                        archive.reset();
+                        setArchiveTarget(character);
+                      }}
+                    >
+                      {t("archive")}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              {character.identity_notes && (
-                <p className="mt-3 text-xs text-zinc-600">
-                  <span className="font-medium">{t("identityNotes")}: </span>
-                  {character.identity_notes}
-                </p>
-              )}
-              {character.rights_notes && (
-                <p className="mt-1 text-xs text-zinc-600">
-                  <span className="font-medium">{t("rightsNotes")}: </span>
-                  {character.rights_notes}
-                </p>
-              )}
-              <p className="mt-2 text-xs text-zinc-500">{t("referenceHint")}</p>
-              <div className="mt-3 flex gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => setForm({ open: true, character })}
-                >
-                  {t("edit")}
-                </Button>
-                <Button
-                  variant="danger"
-                  onClick={() => {
-                    if (window.confirm(t("characterArchiveConfirm"))) archive.mutate(character.id);
-                  }}
-                  disabled={archive.isPending}
-                >
-                  {t("archive")}
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : (
-        <EmptyState title={t("noCharacters")} />
+        <EmptyState title={t("noCharacters")} icon="character">
+          <Button icon="plus" onClick={() => setForm({ open: true, character: null })}>
+            {t("newCharacter")}
+          </Button>
+        </EmptyState>
+      )}
+
+      {archiveTarget && (
+        <ConfirmDialog
+          title={t("archive")}
+          body={t("characterArchiveConfirm")}
+          confirmLabel={t("archive")}
+          busy={archive.isPending}
+          error={archive.isError ? errorText(archive.error) : null}
+          onConfirm={() => archive.mutate(archiveTarget.id)}
+          onClose={closeArchive}
+        />
       )}
     </>
   );

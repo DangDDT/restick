@@ -1,0 +1,14 @@
+{
+  "name": "web-next-qa",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "QA tooling for the studio UI: mock admin server and screenshot sweep. Not part of the app build.",
+  "scripts": {
+    "mock": "node mock-server.mjs",
+    "shoot": "node shoot.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.0"
+  }
+}

@@ -1,9 +1,58 @@
 "use client";
 
+import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
-import { PageHeader } from "@/components/ui";
+import { Icon } from "@/components/icons";
+import { Button, PageHeader, cx } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
+
+function DocsFrame() {
+  const { t } = useI18n();
+  // Remounting the iframe (new key) is the only retry available: a cross-document
+  // iframe cannot report an HTTP error, so the frame is treated as best effort.
+  const [frame, setFrame] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+
+  function reload() {
+    setLoaded(false);
+    setFrame((value) => value + 1);
+  }
+
+  return (
+    <section className="overflow-hidden rounded-panel border border-line bg-panel">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
+        <p className="text-sm text-ink-2">{t("docsFrameHint")}</p>
+        <Button variant="ghost" size="sm" icon="refresh" onClick={reload}>
+          {t("retry")}
+        </Button>
+      </div>
+      <div className="relative">
+        {!loaded && (
+          <div
+            role="status"
+            className="absolute inset-0 z-10 flex flex-col gap-3 bg-panel p-6 text-ink-2"
+          >
+            <span className="skeleton h-5 w-1/3" aria-hidden="true" />
+            <span className="skeleton h-4 w-2/3" aria-hidden="true" />
+            <span className="skeleton h-4 w-1/2" aria-hidden="true" />
+            <span className="sr-only">{t("loading")}</span>
+          </div>
+        )}
+        <iframe
+          key={frame}
+          src="/docs"
+          title={t("docsTitle")}
+          onLoad={() => setLoaded(true)}
+          className={cx(
+            "block h-[calc(100dvh-17rem)] min-h-[28rem] w-full bg-panel max-md:h-[calc(100dvh-15rem)]",
+            !loaded && "invisible",
+          )}
+        />
+      </div>
+    </section>
+  );
+}
 
 export default function Page() {
   const { t } = useI18n();
@@ -16,20 +65,14 @@ export default function Page() {
           actions={
             <a
               href="/openapi.yaml"
-              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              className="inline-flex min-h-9 items-center gap-2 whitespace-nowrap rounded-ctl border border-line-strong bg-panel px-3.5 text-sm font-medium text-ink hover:border-ink-3 hover:bg-sunk max-md:min-h-11"
             >
+              <Icon name="external" size={16} />
               {t("docsOpenApi")}
             </a>
           }
         />
-        <p className="mb-3 text-sm text-zinc-500">{t("docsFrameHint")}</p>
-        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
-          <iframe
-            src="/docs"
-            title={t("docsTitle")}
-            className="h-[calc(100vh-14rem)] w-full"
-          />
-        </div>
+        <DocsFrame />
       </AppShell>
     </RequireAuth>
   );

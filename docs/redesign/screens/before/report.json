@@ -1,0 +1,853 @@
+{
+  "label": "before",
+  "baseUrl": "http://127.0.0.1:4501",
+  "scenario": "default",
+  "generatedAt": "2026-11-11T08:02:10.566Z",
+  "summary": {
+    "routes": 10,
+    "screenshots": 40,
+    "routes_with_console_errors": 8,
+    "routes_with_failed_requests": 0,
+    "routes_with_horizontal_overflow": 0,
+    "auth_redirects": 0,
+    "loading_placeholders": 0
+  },
+  "entries": [
+    {
+      "route": "login",
+      "path": "/login",
+      "viewport": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/login-1440.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/login",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ],
+      "failed_requests": [],
+      "expected_401": [
+        {
+          "url": "http://127.0.0.1:4501/api/v1/admin/session",
+          "status": 401
+        }
+      ],
+      "horizontal_overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "overflow": false
+      }
+    },
+    {
+      "route": "login",
+      "path": "/login",
+      "viewport": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/login-1280.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/login",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ],
+      "failed_requests": [],
+      "expected_401": [
+        {
+          "url": "http://127.0.0.1:4501/api/v1/admin/session",
+          "status": 401
+        }
+      ],
+      "horizontal_overflow": {
+        "scrollWidth": 1280,
+        "innerWidth": 1280,
+        "overflow": false
+      }
+    },
+    {
+      "route": "login",
+      "path": "/login",
+      "viewport": 768,
+      "height": 1024,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/login-768.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/login",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ],
+      "failed_requests": [],
+      "expected_401": [
+        {
+          "url": "http://127.0.0.1:4501/api/v1/admin/session",
+          "status": 401
+        }
+      ],
+      "horizontal_overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "overflow": false
+      }
+    },
+    {
+      "route": "login",
+      "path": "/login",
+      "viewport": 390,
+      "height": 844,
+      "deviceScaleFactor": 2,
+      "screenshot": "docs/redesign/screens/before/login-390.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/login",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ],
+      "failed_requests": [],
+      "expected_401": [
+        {
+          "url": "http://127.0.0.1:4501/api/v1/admin/session",
+          "status": 401
+        }
+      ],
+      "horizontal_overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "overflow": false
+      }
+    },
+    {
+      "route": "factory",
+      "path": "/factory",
+      "viewport": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/factory-1440.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/factory",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "overflow": false
+      }
+    },
+    {
+      "route": "factory",
+      "path": "/factory",
+      "viewport": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/factory-1280.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/factory",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1280,
+        "innerWidth": 1280,
+        "overflow": false
+      }
+    },
+    {
+      "route": "factory",
+      "path": "/factory",
+      "viewport": 768,
+      "height": 1024,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/factory-768.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/factory",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "overflow": false
+      }
+    },
+    {
+      "route": "factory",
+      "path": "/factory",
+      "viewport": 390,
+      "height": 844,
+      "deviceScaleFactor": 2,
+      "screenshot": "docs/redesign/screens/before/factory-390.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/factory",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "overflow": false
+      }
+    },
+    {
+      "route": "library",
+      "path": "/library",
+      "viewport": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/library-1440.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/library",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "overflow": false
+      }
+    },
+    {
+      "route": "library",
+      "path": "/library",
+      "viewport": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/library-1280.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/library",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1280,
+        "innerWidth": 1280,
+        "overflow": false
+      }
+    },
+    {
+      "route": "library",
+      "path": "/library",
+      "viewport": 768,
+      "height": 1024,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/library-768.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/library",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "overflow": false
+      }
+    },
+    {
+      "route": "library",
+      "path": "/library",
+      "viewport": 390,
+      "height": 844,
+      "deviceScaleFactor": 2,
+      "screenshot": "docs/redesign/screens/before/library-390.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/library",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "overflow": false
+      }
+    },
+    {
+      "route": "characters",
+      "path": "/characters",
+      "viewport": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/characters-1440.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/characters",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "overflow": false
+      }
+    },
+    {
+      "route": "characters",
+      "path": "/characters",
+      "viewport": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/characters-1280.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/characters",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1280,
+        "innerWidth": 1280,
+        "overflow": false
+      }
+    },
+    {
+      "route": "characters",
+      "path": "/characters",
+      "viewport": 768,
+      "height": 1024,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/characters-768.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/characters",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "overflow": false
+      }
+    },
+    {
+      "route": "characters",
+      "path": "/characters",
+      "viewport": 390,
+      "height": 844,
+      "deviceScaleFactor": 2,
+      "screenshot": "docs/redesign/screens/before/characters-390.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/characters",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs",
+      "path": "/packs",
+      "viewport": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/packs-1440.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs",
+      "path": "/packs",
+      "viewport": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/packs-1280.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1280,
+        "innerWidth": 1280,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs",
+      "path": "/packs",
+      "viewport": 768,
+      "height": 1024,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/packs-768.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs",
+      "path": "/packs",
+      "viewport": 390,
+      "height": 844,
+      "deviceScaleFactor": 2,
+      "screenshot": "docs/redesign/screens/before/packs-390.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs-new",
+      "path": "/packs/new",
+      "viewport": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/packs-new-1440.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs/new",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs-new",
+      "path": "/packs/new",
+      "viewport": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/packs-new-1280.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs/new",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1280,
+        "innerWidth": 1280,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs-new",
+      "path": "/packs/new",
+      "viewport": 768,
+      "height": 1024,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/packs-new-768.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs/new",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs-new",
+      "path": "/packs/new",
+      "viewport": 390,
+      "height": 844,
+      "deviceScaleFactor": 2,
+      "screenshot": "docs/redesign/screens/before/packs-new-390.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs/new",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs-detail",
+      "path": "/packs/detail?id=pk-draft-1",
+      "viewport": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/packs-detail-1440.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs/detail?id=pk-draft-1",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs-detail",
+      "path": "/packs/detail?id=pk-draft-1",
+      "viewport": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/packs-detail-1280.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs/detail?id=pk-draft-1",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1280,
+        "innerWidth": 1280,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs-detail",
+      "path": "/packs/detail?id=pk-draft-1",
+      "viewport": 768,
+      "height": 1024,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/packs-detail-768.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs/detail?id=pk-draft-1",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "overflow": false
+      }
+    },
+    {
+      "route": "packs-detail",
+      "path": "/packs/detail?id=pk-draft-1",
+      "viewport": 390,
+      "height": 844,
+      "deviceScaleFactor": 2,
+      "screenshot": "docs/redesign/screens/before/packs-detail-390.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/packs/detail?id=pk-draft-1",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "overflow": false
+      }
+    },
+    {
+      "route": "keys",
+      "path": "/keys",
+      "viewport": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/keys-1440.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/keys",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "overflow": false
+      }
+    },
+    {
+      "route": "keys",
+      "path": "/keys",
+      "viewport": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/keys-1280.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/keys",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1280,
+        "innerWidth": 1280,
+        "overflow": false
+      }
+    },
+    {
+      "route": "keys",
+      "path": "/keys",
+      "viewport": 768,
+      "height": 1024,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/keys-768.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/keys",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "overflow": false
+      }
+    },
+    {
+      "route": "keys",
+      "path": "/keys",
+      "viewport": 390,
+      "height": 844,
+      "deviceScaleFactor": 2,
+      "screenshot": "docs/redesign/screens/before/keys-390.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/keys",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "overflow": false
+      }
+    },
+    {
+      "route": "api-docs",
+      "path": "/api-docs",
+      "viewport": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/api-docs-1440.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/api-docs",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "overflow": false
+      }
+    },
+    {
+      "route": "api-docs",
+      "path": "/api-docs",
+      "viewport": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/api-docs-1280.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/api-docs",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1280,
+        "innerWidth": 1280,
+        "overflow": false
+      }
+    },
+    {
+      "route": "api-docs",
+      "path": "/api-docs",
+      "viewport": 768,
+      "height": 1024,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/api-docs-768.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/api-docs",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "overflow": false
+      }
+    },
+    {
+      "route": "api-docs",
+      "path": "/api-docs",
+      "viewport": 390,
+      "height": 844,
+      "deviceScaleFactor": 2,
+      "screenshot": "docs/redesign/screens/before/api-docs-390.png",
+      "document_status": 200,
+      "final_url": "http://127.0.0.1:4501/api-docs",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "overflow": false
+      }
+    },
+    {
+      "route": "not-found",
+      "path": "/this-route-does-not-exist",
+      "viewport": 1440,
+      "height": 900,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/not-found-1440.png",
+      "document_status": 404,
+      "final_url": "http://127.0.0.1:4501/this-route-does-not-exist",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "overflow": false
+      }
+    },
+    {
+      "route": "not-found",
+      "path": "/this-route-does-not-exist",
+      "viewport": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/not-found-1280.png",
+      "document_status": 404,
+      "final_url": "http://127.0.0.1:4501/this-route-does-not-exist",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 1280,
+        "innerWidth": 1280,
+        "overflow": false
+      }
+    },
+    {
+      "route": "not-found",
+      "path": "/this-route-does-not-exist",
+      "viewport": 768,
+      "height": 1024,
+      "deviceScaleFactor": 1,
+      "screenshot": "docs/redesign/screens/before/not-found-768.png",
+      "document_status": 404,
+      "final_url": "http://127.0.0.1:4501/this-route-does-not-exist",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 768,
+        "innerWidth": 768,
+        "overflow": false
+      }
+    },
+    {
+      "route": "not-found",
+      "path": "/this-route-does-not-exist",
+      "viewport": 390,
+      "height": 844,
+      "deviceScaleFactor": 2,
+      "screenshot": "docs/redesign/screens/before/not-found-390.png",
+      "document_status": 404,
+      "final_url": "http://127.0.0.1:4501/this-route-does-not-exist",
+      "authed_redirected_to_login": false,
+      "loading_placeholder_visible": false,
+      "console_errors": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "failed_requests": [],
+      "expected_401": [],
+      "horizontal_overflow": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "overflow": false
+      }
+    }
+  ]
+}

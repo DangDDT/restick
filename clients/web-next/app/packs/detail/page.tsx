@@ -6,15 +6,23 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
+import { Icon } from "@/components/icons";
 import {
+  ArtFrame,
   Button,
+  ConfirmDialog,
   EmptyState,
   ErrorBanner,
   Field,
+  JobTag,
   PageHeader,
+  Section,
+  SkeletonRows,
   Spinner,
+  Stamp,
   StatusPill,
   SuccessBanner,
+  cx,
   inputClass,
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
@@ -67,7 +75,7 @@ function CatalogForm({ pack, onDone }: { pack: AdminPackDetail; onDone: (message
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4">
+    <form onSubmit={submit} className="space-y-3" aria-busy={busy || undefined}>
       {error && <ErrorBanner message={error} />}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t("packName")}>
@@ -78,25 +86,89 @@ function CatalogForm({ pack, onDone }: { pack: AdminPackDetail; onDone: (message
         </Field>
       </div>
       <Field label={t("packDescription")}>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={2}
-          className={inputClass}
-        />
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={inputClass} />
       </Field>
       <Field label={t("packTags")}>
         <input value={tags} onChange={(e) => setTags(e.target.value)} className={inputClass} />
       </Field>
-      <p className="text-xs text-zinc-500">{t("catalogHint")}</p>
+      <p className="text-xs text-ink-2">{t("catalogHint")}</p>
       <div className="flex justify-end">
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy} loading={busy}>
           {busy ? t("saving") : t("saveCatalog")}
         </Button>
       </div>
     </form>
   );
 }
+
+/** Station flow: Sheet -> Cắt -> Sẵn sàng. Derived only from data already on the page. */
+function StationFlow({
+  sourceName,
+  hasSource,
+  jobStatus,
+  packStatus,
+}: {
+  sourceName?: string;
+  hasSource: boolean;
+  jobStatus?: JobStatus;
+  packStatus: string;
+}) {
+  const { t } = useI18n();
+  const jobActive = jobStatus === "queued" || jobStatus === "running";
+  const current = !hasSource ? 0 : jobActive || packStatus === "draft" ? 1 : 2;
+
+  const stations = [
+    {
+      key: "sheet",
+      label: t("stationSheet"),
+      body: hasSource ? (
+        <span className="mono flex min-w-0 items-center gap-1.5 text-xs text-ok">
+          <Icon name="check" size={14} className="shrink-0" />
+          <span className="truncate">{sourceName}</span>
+        </span>
+      ) : (
+        <span className="text-xs text-ink-2">{t("noSource")}</span>
+      ),
+    },
+    {
+      key: "cut",
+      label: t("stationCut"),
+      body: jobStatus ? <StatusPill status={jobStatus} /> : <Stamp tone="neutral">{t("none")}</Stamp>,
+    },
+    {
+      key: "ready",
+      label: t("statusReady"),
+      body: <StatusPill status={packStatus} />,
+    },
+  ];
+
+  return (
+    <ol aria-label={t("pkStationFlow")} className="grid grid-cols-3 border-y border-line">
+      {stations.map((station, index) => {
+        const active = index === current;
+        const done = index < current;
+        return (
+          <li
+            key={station.key}
+            aria-current={active ? "step" : undefined}
+            className={cx(
+              "flex min-w-0 flex-col gap-2 border-t-2 px-3 py-3 first:pl-0 last:pr-0 sm:px-4",
+              active ? "border-cut" : done ? "border-ok/60" : "border-transparent",
+            )}
+          >
+            <span className={cx("flex items-center gap-1.5 text-sm font-medium", active ? "text-cut-ink" : "text-ink-2")}>
+              <span className="num text-xs text-ink-3">{index + 1}</span>
+              {station.label}
+            </span>
+            <div className="min-w-0">{station.body}</div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+type Confirm = "revoke" | "delete";
 
 function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string | null }) {
   const { t } = useI18n();
@@ -111,6 +183,9 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
   const [pollExpired, setPollExpired] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const pack = useQuery({
     queryKey: ["admin-pack", id],
@@ -123,7 +198,7 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
     queryKey: ["job", jobId],
     queryFn: () => api<Job>(`/api/v1/admin/jobs/${jobId}`),
     enabled: Boolean(jobId),
-    initialData: () => pack.data?.latest_job?.id === jobId ? pack.data.latest_job : undefined,
+    initialData: () => (pack.data?.latest_job?.id === jobId ? pack.data.latest_job : undefined),
     refetchInterval: (query) => {
       const data = query.state.data;
       if (data && isTerminal(data.status)) return false;
@@ -188,42 +263,47 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
     }
   }
 
-  async function revoke() {
-    if (!window.confirm(t("revokeConfirm"))) return;
-    setError(null);
-    setMessage(null);
+  async function runConfirm() {
+    if (!confirm) return;
+    setConfirmBusy(true);
+    setConfirmError(null);
     try {
-      await api<AdminPack>(`/api/v1/admin/packs/${id}/revoke`, { method: "POST" });
-      setMessage(t("revokedDone"));
-      qc.invalidateQueries({ queryKey: ["admin-pack", id] });
-      qc.invalidateQueries({ queryKey: ["admin-packs"] });
+      if (confirm === "revoke") {
+        await api<AdminPack>(`/api/v1/admin/packs/${id}/revoke`, { method: "POST" });
+        setConfirm(null);
+        setMessage(t("revokedDone"));
+        qc.invalidateQueries({ queryKey: ["admin-pack", id] });
+        qc.invalidateQueries({ queryKey: ["admin-packs"] });
+      } else {
+        await api<void>(`/api/v1/admin/packs/${id}`, { method: "DELETE" });
+        qc.invalidateQueries({ queryKey: ["admin-packs"] });
+        setConfirm(null);
+        router.replace("/packs");
+      }
     } catch (err) {
-      setError(errorText(err));
+      setConfirmError(errorText(err));
+    } finally {
+      setConfirmBusy(false);
     }
   }
 
-  async function deletePack() {
-    if (!window.confirm(t("deletePackConfirm"))) return;
-    setError(null);
-    try {
-      await api<void>(`/api/v1/admin/packs/${id}`, { method: "DELETE" });
-      qc.invalidateQueries({ queryKey: ["admin-packs"] });
-      router.replace("/packs");
-    } catch (err) {
-      setError(errorText(err));
-    }
+  if (pack.isLoading) {
+    return (
+      <div className="space-y-5">
+        <SkeletonRows rows={2} />
+        <SkeletonRows rows={5} />
+      </div>
+    );
   }
-
-  if (pack.isLoading) return <Spinner />;
   if (pack.isError || !pack.data) {
     return (
       <>
-        <PageHeader title={t("detailTitle")} />
-        <ErrorBanner message={pack.error ? errorText(pack.error) : t("loadFailed")} />
-        <div className="mt-4">
-          <Link href="/packs" className="text-sm font-medium text-indigo-600 hover:underline">
-            {t("openPackList")}
-          </Link>
+        <PageHeader title={t("detailTitle")} back={{ href: "/packs", label: t("openPackList") }} />
+        <div className="space-y-3">
+          <ErrorBanner message={pack.error ? errorText(pack.error) : t("loadFailed")} />
+          <Button variant="secondary" icon="refresh" onClick={() => void pack.refetch()}>
+            {t("retry")}
+          </Button>
         </div>
       </>
     );
@@ -238,181 +318,208 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
       <PageHeader
         title={data.name}
         subtitle={`${data.slug} · ${data.author} · ${t("currentVersion")} ${data.current_version}`}
+        back={{ href: "/packs", label: t("openPackList") }}
         actions={
           <>
+            <JobTag id={data.id} />
             <StatusPill status={data.status} />
-            <Link
-              href="/packs"
-              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              {t("openPackList")}
-            </Link>
           </>
         }
       />
 
       {message && (
-        <div className="mb-4">
-          <SuccessBanner message={message} />
+        <div className="mb-5">
+          <SuccessBanner message={message} onDismiss={() => setMessage(null)} />
         </div>
       )}
       {error && (
-        <div className="mb-4">
-          <ErrorBanner message={error} />
+        <div className="mb-5">
+          <ErrorBanner message={error} onDismiss={() => setError(null)} />
         </div>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <section className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4">
-          <div className="flex items-start justify-between gap-2">
-            <h2 className="text-sm font-semibold text-zinc-700">{t("editCatalog")}</h2>
-            <Button variant="secondary" onClick={() => setEditing((value) => !value)}>
-              {editing ? t("cancel") : t("editCatalog")}
-            </Button>
-          </div>
-          {editing ? (
-            <CatalogForm pack={data} onDone={(next) => { setEditing(false); setMessage(next); }} />
-          ) : (
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-              <dt className="text-zinc-500">{t("packDescription")}</dt>
-              <dd className="text-zinc-800">{data.description || t("none")}</dd>
-              <dt className="text-zinc-500">{t("packTags")}</dt>
-              <dd className="text-zinc-800">{(data.tags ?? []).length ? (data.tags ?? []).join(", ") : t("none")}</dd>
-              <dt className="text-zinc-500">{t("designLabel")}</dt>
-              <dd className="break-all text-zinc-800">{data.design_id || t("none")}</dd>
-              <dt className="text-zinc-500">{t("createdAt")}</dt>
-              <dd className="text-zinc-800">{formatDate(data.created_at)}</dd>
-              <dt className="text-zinc-500">{t("updatedAt")}</dt>
-              <dd className="text-zinc-800">{formatDate(data.updated_at)}</dd>
-              <dt className="text-zinc-500">{t("checksum")}</dt>
-              <dd className="break-all text-xs text-zinc-600">{data.checksum_sha256 || t("none")}</dd>
-            </dl>
-          )}
-        </section>
+      <div className="py-5">
+        <StationFlow
+          hasSource={Boolean(data.source)}
+          sourceName={data.source?.filename}
+          jobStatus={job.data?.status}
+          packStatus={data.status}
+        />
+      </div>
 
-        <section className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-zinc-700">{t("sourceLabel")}</h2>
-          {data.source ? (
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-              <dt className="text-zinc-500">{t("sourceLabel")}</dt>
-              <dd className="break-all text-zinc-800">{data.source.filename}</dd>
-              <dt className="text-zinc-500">{t("dimensions")}</dt>
-              <dd className="text-zinc-800">
-                {data.source.width}×{data.source.height} · {formatBytes(data.source.byte_size)}
-              </dd>
-              <dt className="text-zinc-500">{t("checksum")}</dt>
-              <dd className="break-all text-xs text-zinc-600">{data.source.checksum_sha256}</dd>
-            </dl>
-          ) : (
-            <p className="text-sm text-zinc-500">{t("noSource")}</p>
-          )}
-          <Field label={t("uploadSource")} hint={t("uploadSourceHint")}>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
-            />
-          </Field>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => void uploadSource()} disabled={!file || uploading}>
-              {uploading ? t("uploading") : t("uploadSource")}
-            </Button>
+      <div className="grid gap-x-8 lg:grid-cols-2">
+        <Section
+          title={t("sourceLabel")}
+          actions={
             <Button
               onClick={() => void startProcessing()}
               disabled={starting || jobRunning || !data.source || data.status === "revoked"}
+              loading={starting}
+              icon="scissors"
+              size="sm"
             >
               {starting ? t("processing") : t("process")}
             </Button>
+          }
+        >
+          {data.source ? (
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+              <dt className="text-ink-3">{t("sourceLabel")}</dt>
+              <dd className="mono break-all text-xs text-ink">{data.source.filename}</dd>
+              <dt className="text-ink-3">{t("dimensions")}</dt>
+              <dd className="num text-ink">
+                {data.source.width}×{data.source.height} · {formatBytes(data.source.byte_size)}
+              </dd>
+              <dt className="text-ink-3">{t("checksum")}</dt>
+              <dd className="mono break-all text-[11px] text-ink-2">{data.source.checksum_sha256}</dd>
+            </dl>
+          ) : (
+            <p className="text-sm text-ink-2">{t("noSource")}</p>
+          )}
+
+          <div className="mt-4 space-y-3">
+            <Field label={t("uploadSource")} hint={t("uploadSourceHint")}>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                className="block w-full text-sm text-ink-2 file:mr-3 file:min-h-9 file:cursor-pointer file:rounded-ctl file:border file:border-line-strong file:bg-panel file:px-3 file:text-sm file:font-medium file:text-ink hover:file:bg-sunk max-md:file:min-h-11"
+              />
+            </Field>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" icon="upload" onClick={() => void uploadSource()} disabled={!file || uploading} loading={uploading}>
+                {uploading ? t("uploading") : t("uploadSource")}
+              </Button>
+            </div>
+            <p className="text-xs text-ink-2">{t("processHint")}</p>
+            {data.status === "revoked" && <p className="text-xs text-ink-2">{t("revokedHint")}</p>}
           </div>
-          <p className="text-xs text-zinc-500">{t("processHint")}</p>
-          {data.status === "revoked" && <p className="text-xs text-zinc-500">{t("revokedHint")}</p>}
-        </section>
+        </Section>
+
+        <Section
+          title={t("pkCatalogSection")}
+          actions={
+            <Button variant="secondary" size="sm" icon={editing ? "close" : "edit"} onClick={() => setEditing((value) => !value)}>
+              {editing ? t("cancel") : t("editCatalog")}
+            </Button>
+          }
+        >
+          {editing ? (
+            <CatalogForm
+              pack={data}
+              onDone={(next) => {
+                setEditing(false);
+                setMessage(next);
+              }}
+            />
+          ) : (
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+              <dt className="text-ink-3">{t("packAuthor")}</dt>
+              <dd className="text-ink">{data.author || t("none")}</dd>
+              <dt className="text-ink-3">{t("packDescription")}</dt>
+              <dd className="text-ink">{data.description || t("none")}</dd>
+              <dt className="text-ink-3">{t("packTags")}</dt>
+              <dd className="text-ink">{(data.tags ?? []).length ? (data.tags ?? []).join(", ") : t("none")}</dd>
+              <dt className="text-ink-3">{t("designLabel")}</dt>
+              <dd className="mono break-all text-xs text-ink-2">{data.design_id || t("none")}</dd>
+              <dt className="text-ink-3">{t("createdAt")}</dt>
+              <dd className="num text-ink-2">{formatDate(data.created_at)}</dd>
+              <dt className="text-ink-3">{t("updatedAt")}</dt>
+              <dd className="num text-ink-2">{formatDate(data.updated_at)}</dd>
+              <dt className="text-ink-3">{t("checksum")}</dt>
+              <dd className="mono break-all text-[11px] text-ink-2">{data.checksum_sha256 || t("none")}</dd>
+            </dl>
+          )}
+        </Section>
       </div>
 
-      {jobId && (
-        <section className="mt-5 rounded-xl border border-zinc-200 bg-white p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-semibold text-zinc-700">{t("jobLabel")}</h2>
-            {job.data && <StatusPill status={job.data.status} />}
-            {job.data && (
-              <span className="text-xs text-zinc-500">
+      <Section title={t("jobLabel")} actions={job.data && <StatusPill status={job.data.status} />}>
+        {/* Live region: job status changes are announced without moving focus. */}
+        <div aria-live="polite" className="space-y-2 text-sm">
+          {!jobId && <p className="text-ink-2">{t("pkNoJob")}</p>}
+          {jobId && job.isLoading && <SkeletonRows rows={2} />}
+          {jobId && job.isError && <ErrorBanner message={errorText(job.error)} />}
+          {jobId && job.data && (
+            <>
+              <p className="num text-xs text-ink-2">
                 {t("jobVersion")} {job.data.version} · {formatDate(job.data.created_at)}
-              </span>
-            )}
-          </div>
-          {job.isLoading && <Spinner />}
-          {job.isError && <ErrorBanner message={errorText(job.error)} />}
-          {job.data && (
-            <div className="mt-2 space-y-1 text-sm">
-              {job.data.status === "queued" || job.data.status === "running" ? (
-                <p className="text-zinc-600">{t("jobNoProgress")}</p>
-              ) : null}
+              </p>
+              {job.data.status === "running" && (
+                <p className="flex items-center gap-2 text-ink-2">
+                  <Spinner inline />
+                  {t("jobNoProgress")}
+                </p>
+              )}
+              {job.data.status === "queued" && <p className="text-ink-2">{t("jobNoProgress")}</p>}
               {job.data.error_code && (
-                <p className="text-red-700">
-                  {t("jobError")}: <code>{job.data.error_code}</code>
+                <p className="text-danger">
+                  {t("jobError")}: <code className="mono">{job.data.error_code}</code>
                   {job.data.error_message ? ` — ${job.data.error_message}` : ""}
                 </p>
               )}
               {job.data.diagnostics && (
                 <div>
-                  <p className="text-xs font-medium text-zinc-600">{t("jobDiagnostics")}</p>
-                  <pre className="mt-1 max-h-40 overflow-auto rounded bg-zinc-50 p-2 text-xs text-zinc-700">
+                  <p className="text-xs font-medium text-ink-2">{t("jobDiagnostics")}</p>
+                  <pre className="mono mt-1 max-h-40 overflow-auto rounded-ctl bg-sunk p-2.5 text-xs text-ink-2">
                     {job.data.diagnostics}
                   </pre>
                 </div>
               )}
-            </div>
+            </>
           )}
-          {pollStopped && <p className="mt-2 text-xs text-amber-700">{t("jobPollingStopped")}</p>}
-        </section>
-      )}
+          {pollStopped && <p className="text-xs text-warn">{t("jobPollingStopped")}</p>}
+        </div>
+      </Section>
 
-      <section className="mt-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-zinc-700">{t("stickersTitle")}</h2>
-          {data.bundle_url && (
+      <Section
+        title={t("stickersTitle")}
+        actions={
+          data.bundle_url ? (
             <a
               href={data.bundle_url}
-              className="text-sm font-medium text-indigo-600 hover:underline"
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-ctl px-2 text-sm font-medium text-cut-ink hover:bg-cut-soft max-md:min-h-11"
             >
+              <Icon name="download" size={15} />
               {t("downloadBundle")}
             </a>
-          )}
-        </div>
+          ) : undefined
+        }
+      >
         {data.stickers.length === 0 ? (
-          <EmptyState title={t("noStickers")} />
+          <EmptyState title={t("noStickers")} icon="image" />
         ) : (
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
-            {data.stickers.map((sticker) => (
+          <ul className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+            {data.stickers.map((sticker, index) => (
               <li
                 key={sticker.filename}
-                className="overflow-hidden rounded-xl border border-zinc-200 bg-white"
+                className="peel flex min-w-0 flex-col gap-2 bg-panel p-2"
+                style={{ "--i": index } as React.CSSProperties}
               >
                 <a href={sticker.object_url} className="block">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={sticker.thumb_url || sticker.object_url}
-                    alt={sticker.filename}
-                    loading="lazy"
-                    className="aspect-square w-full bg-zinc-50 object-contain"
-                  />
+                  <ArtFrame className="aspect-square w-full rounded-[4px]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={sticker.thumb_url || sticker.object_url}
+                      alt={sticker.filename}
+                      loading="lazy"
+                      className="size-full object-contain p-1"
+                    />
+                  </ArtFrame>
                 </a>
-                <div className="space-y-0.5 p-2 text-xs text-zinc-600">
-                  <p className="truncate font-medium text-zinc-800">{sticker.filename}</p>
-                  <p>
+                <div className="min-w-0 space-y-0.5 text-xs text-ink-2">
+                  <p className="mono truncate text-ink">{sticker.filename}</p>
+                  <p className="num">
                     {sticker.width}×{sticker.height}
                   </p>
                   {sticker.emoji_hint && <p className="truncate">{sticker.emoji_hint}</p>}
-                  {(sticker.keywords ?? []).length > 0 && (
-                    <p className="truncate text-zinc-400">{(sticker.keywords ?? []).join(", ")}</p>
-                  )}
+                  {(sticker.keywords ?? []).length > 0 && <p className="truncate text-ink-3">{(sticker.keywords ?? []).join(", ")}</p>}
                   <a
                     href={sticker.object_url}
                     download
-                    className="inline-block font-medium text-indigo-600 hover:underline"
+                    className="inline-flex min-h-8 items-center gap-1 font-medium text-cut-ink hover:underline max-md:min-h-11"
                   >
+                    <Icon name="download" size={13} />
                     {t("downloadFile")}
                   </a>
                 </div>
@@ -420,20 +527,38 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
             ))}
           </ul>
         )}
-      </section>
+      </Section>
 
-      <div className="mt-6 flex flex-wrap gap-2 border-t border-zinc-200 pt-5">
-        {data.status === "draft" && (
-          <Button variant="danger" onClick={() => void deletePack()}>
-            {t("deletePack")}
-          </Button>
-        )}
-        {data.status === "ready" && (
-          <Button variant="danger" onClick={() => void revoke()}>
-            {t("revoke")}
-          </Button>
-        )}
-      </div>
+      {(data.status === "draft" || data.status === "ready") && (
+        <div className="mt-6 flex flex-wrap gap-2 border-t border-line pt-5">
+          {data.status === "draft" && (
+            <Button variant="danger" icon="trash" onClick={() => setConfirm("delete")}>
+              {t("deletePack")}
+            </Button>
+          )}
+          {data.status === "ready" && (
+            <Button variant="danger" icon="lock" onClick={() => setConfirm("revoke")}>
+              {t("revoke")}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {confirm && (
+        <ConfirmDialog
+          title={t(confirm === "revoke" ? "pkRevokeTitle" : "pkDeleteTitle")}
+          body={t(confirm === "revoke" ? "revokeConfirm" : "deletePackConfirm")}
+          confirmLabel={t(confirm === "revoke" ? "revoke" : "deletePack")}
+          onConfirm={() => void runConfirm()}
+          onClose={() => {
+            if (confirmBusy) return;
+            setConfirm(null);
+            setConfirmError(null);
+          }}
+          busy={confirmBusy}
+          error={confirmError}
+        />
+      )}
     </>
   );
 }
@@ -451,8 +576,12 @@ function DetailPage() {
           <PackDetailView key={id} id={id} initialJobId={jobId} />
         ) : (
           <>
-            <PageHeader title={t("detailTitle")} />
-            <EmptyState title={t("detailMissingId")} />
+            <PageHeader title={t("detailTitle")} back={{ href: "/packs", label: t("openPackList") }} />
+            <EmptyState title={t("detailMissingId")} icon="pack">
+              <Link href="/packs" className="inline-flex min-h-9 items-center text-sm font-medium text-cut-ink hover:underline">
+                {t("openPackList")}
+              </Link>
+            </EmptyState>
           </>
         )}
       </AppShell>

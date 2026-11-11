@@ -6,6 +6,7 @@ import { errorText } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { Button, ErrorBanner, Field, inputClass } from "@/components/ui";
+import { Icon } from "@/components/icons";
 
 export default function LoginPage() {
   const { t } = useI18n();
@@ -30,39 +31,41 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
-      <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white">
-            <span className="text-lg leading-none">▦</span>
-          </div>
-          <span className="text-sm font-bold tracking-widest text-zinc-900">{t("appName")}</span>
+    <div className="flex min-h-dvh items-center justify-center bg-paper px-4 py-10">
+      <main className="w-full max-w-sm rounded-panel border border-line bg-panel p-7">
+        <div className="flex items-center gap-2.5 border-b border-line pb-5">
+          <span className="flex size-8 items-center justify-center rounded-[6px] bg-ink text-paper" aria-hidden="true">
+            <Icon name="scissors" size={16} />
+          </span>
+          <span className="font-display text-[0.9375rem] font-semibold tracking-tight text-ink">{t("appName")}</span>
         </div>
-        <h1 className="text-lg font-bold text-zinc-900">{t("signIn")}</h1>
-        <p className="mb-6 mt-1 text-sm text-zinc-500">{t("signInSubtitle")}</p>
+        <h1 className="mt-6 font-display text-[1.375rem] font-semibold leading-7 text-ink">{t("signIn")}</h1>
+        <p className="mt-1 text-sm text-ink-2">{t("signInSubtitle")}</p>
 
         {error && (
-          <div className="mb-4">
+          <div className="mt-5">
             <ErrorBanner message={error} />
           </div>
         )}
 
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={onSubmit} className="mt-6 space-y-4" aria-busy={busy || undefined}>
           <Field label={t("password")}>
             <input
               type="password"
               required
+              autoFocus
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className={inputClass}
+              aria-invalid={Boolean(error) || undefined}
             />
           </Field>
-          <Button type="submit" disabled={busy} className="w-full">
+          <Button type="submit" disabled={busy} loading={busy} className="w-full">
             {busy ? t("signingIn") : t("signIn")}
           </Button>
         </form>
-      </div>
+      </main>
     </div>
   );
 }

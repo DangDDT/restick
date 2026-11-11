@@ -1,18 +1,26 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
 import {
   Button,
+  ConfirmDialog,
+  Dialog,
   EmptyState,
   ErrorBanner,
   Field,
+  JobTag,
   PageHeader,
   Pager,
-  Spinner,
+  Section,
+  SkeletonRows,
+  Stamp,
+  Tabs,
+  checkClass,
   inputClass,
+  selectClass,
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
@@ -30,6 +38,7 @@ import type {
 
 const SCOPES: Scope[] = ["identity", "pack", "sticker"];
 const PAGE_SIZE = 20;
+const HEX = /^#[0-9A-Fa-f]{6}$/;
 const EMPTY_COLORS: Colors = {
   primary: "#FFFFFF",
   secondary: "#FFFFFF",
@@ -37,148 +46,170 @@ const EMPTY_COLORS: Colors = {
   line: "#000000",
 };
 
+const ROLES = [
+  ["primary", "rolePrimary"],
+  ["secondary", "roleSecondary"],
+  ["accent", "roleAccent"],
+  ["line", "roleLine"],
+] as const;
+
 const SCOPE_LABEL: Record<Scope, "scopeIdentity" | "scopePack" | "scopeSticker"> = {
   identity: "scopeIdentity",
   pack: "scopePack",
   sticker: "scopeSticker",
 };
 
-function GroupSection() {
+type FragmentErrors = { group?: string; name?: string; prompt?: string; colors?: string };
+
+function ErrorRetry({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="space-y-3">
+      <ErrorBanner message={message} />
+      <Button variant="secondary" icon="refresh" onClick={onRetry}>
+        {t("retry")}
+      </Button>
+    </div>
+  );
+}
+
+/* ---------- Groups ---------- */
+
+function GroupForm({ group, onClose }: { group: Group | null; onClose: () => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [sortOrder, setSortOrder] = useState("0");
+  const formRef = useRef<HTMLFormElement>(null);
+  const [name, setName] = useState(group?.name ?? "");
+  const [description, setDescription] = useState(group?.description ?? "");
+  const [sortOrder, setSortOrder] = useState(group ? String(group.sort_order) : "0");
+  const [nameError, setNameError] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
 
-  const groups = useQuery({
-    queryKey: ["groups"],
-    queryFn: () => api<GroupList>("/api/v1/admin/fragment-groups"),
-  });
-
-  const saveGroup = useMutation({
+  const save = useMutation({
     mutationFn: (body: GroupDraft) =>
-      editingId
-        ? api<Group>(`/api/v1/admin/fragment-groups/${editingId}`, { method: "PUT", json: body })
+      group
+        ? api<Group>(`/api/v1/admin/fragment-groups/${group.id}`, { method: "PUT", json: body })
         : api<Group>("/api/v1/admin/fragment-groups", { method: "POST", json: body }),
     onSuccess: () => {
-      setError(null);
-      setFormOpen(false);
-      setEditingId(null);
       qc.invalidateQueries({ queryKey: ["groups"] });
       qc.invalidateQueries({ queryKey: ["fragments"] });
+      onClose();
     },
     onError: (err) => setError(errorText(err)),
   });
 
-  const deleteGroup = useMutation({
-    mutationFn: (id: string) =>
-      api<void>(`/api/v1/admin/fragment-groups/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      setError(null);
-      qc.invalidateQueries({ queryKey: ["groups"] });
-    },
-    onError: (err) => setError(errorText(err)),
-  });
-
-  function startCreate() {
-    setEditingId(null);
-    setName("");
-    setDescription("");
-    setSortOrder("0");
-    setFormOpen(true);
-  }
-
-  function startEdit(group: Group) {
-    setEditingId(group.id);
-    setName(group.name);
-    setDescription(group.description);
-    setSortOrder(String(group.sort_order));
-    setFormOpen(true);
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!name.trim()) {
+      setNameError(t("nameRequired"));
+      return;
+    }
+    setNameError(undefined);
+    setError(null);
+    save.mutate({
+      name: name.trim(),
+      description: description.trim(),
+      sort_order: Number(sortOrder) || 0,
+    });
   }
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-zinc-700">{t("tabGroups")}</h2>
-        <Button onClick={startCreate}>{t("newGroup")}</Button>
-      </div>
+    <Dialog
+      title={group ? t("edit") : t("newGroup")}
+      onClose={onClose}
+      variant="drawer"
+    >
+      <form ref={formRef} onSubmit={submit} className="space-y-4" noValidate>
+        {error && <ErrorBanner message={error} />}
+        <Field label={t("groupName")} error={nameError}>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-invalid={Boolean(nameError) || undefined}
+            className={inputClass}
+          />
+        </Field>
+        <Field label={t("groupDescription")}>
+          <input value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
+        </Field>
+        <Field label={t("groupSortOrder")}>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value)}
+            className={inputClass}
+          />
+        </Field>
+        <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
+          <Button variant="secondary" onClick={onClose} disabled={save.isPending}>
+            {t("cancel")}
+          </Button>
+          <Button type="submit" loading={save.isPending}>
+            {save.isPending ? t("saving") : t("save")}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
 
-      {error && <ErrorBanner message={error} />}
+function GroupSection({ groups }: { groups: Group[] }) {
+  const { t } = useI18n();
+  const qc = useQueryClient();
+  const [form, setForm] = useState<{ open: boolean; group: Group | null }>({ open: false, group: null });
+  const [deleteTarget, setDeleteTarget] = useState<Group | null>(null);
+  const deleteGroup = useMutation({
+    mutationFn: (id: string) => api<void>(`/api/v1/admin/fragment-groups/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setDeleteTarget(null);
+      qc.invalidateQueries({ queryKey: ["groups"] });
+    },
+  });
 
-      {formOpen && (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!name.trim()) {
-              setError(t("nameRequired"));
-              return;
-            }
-            saveGroup.mutate({
-              name: name.trim(),
-              description: description.trim(),
-              sort_order: Number(sortOrder) || 0,
-            });
-          }}
-          className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4"
-        >
-          <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
-            <Field label={t("groupName")}>
-              <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-            </Field>
-            <Field label={t("groupSortOrder")}>
-              <input
-                type="number"
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value)}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-          <Field label={t("groupDescription")}>
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className={inputClass}
-            />
-          </Field>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setFormOpen(false)}>
-              {t("cancel")}
-            </Button>
-            <Button type="submit" disabled={saveGroup.isPending}>
-              {saveGroup.isPending ? t("saving") : t("save")}
-            </Button>
-          </div>
-        </form>
+  function closeDelete() {
+    deleteGroup.reset();
+    setDeleteTarget(null);
+  }
+
+  return (
+    <Section
+      title={t("tabGroups")}
+      actions={
+        <Button icon="plus" onClick={() => setForm({ open: true, group: null })}>
+          {t("newGroup")}
+        </Button>
+      }
+    >
+      {form.open && (
+        <GroupForm
+          key={form.group?.id ?? "create-group"}
+          group={form.group}
+          onClose={() => setForm({ open: false, group: null })}
+        />
       )}
 
-      {groups.isLoading ? (
-        <Spinner />
-      ) : groups.isError ? (
-        <ErrorBanner message={errorText(groups.error)} />
-      ) : groups.data && groups.data.items.length > 0 ? (
-        <ul className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200 bg-white">
-          {groups.data.items.map((group) => (
-            <li key={group.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+      {groups.length > 0 ? (
+        <ul aria-label={t("tabGroups")} className="divide-y divide-line border-y border-line">
+          {groups.map((group) => (
+            <li key={group.id} className="flex flex-col gap-3 py-3.5 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-zinc-900">{group.name}</p>
-                <p className="truncate text-xs text-zinc-500">
-                  {group.description || t("none")} · {t("groupSortOrder")} {group.sort_order}
+                <h3 className="break-words text-sm font-semibold text-ink">{group.name}</h3>
+                <p className="mt-0.5 break-words text-xs text-ink-2">
+                  {group.description || t("none")} · {t("groupSortOrder")} <span className="mono">{group.sort_order}</span>
                 </p>
               </div>
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => startEdit(group)}>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button variant="secondary" icon="edit" onClick={() => setForm({ open: true, group })}>
                   {t("edit")}
                 </Button>
                 <Button
                   variant="danger"
+                  icon="trash"
                   onClick={() => {
-                    if (window.confirm(t("groupDeleteConfirm"))) deleteGroup.mutate(group.id);
+                    deleteGroup.reset();
+                    setDeleteTarget(group);
                   }}
-                  disabled={deleteGroup.isPending}
                 >
                   {t("delete")}
                 </Button>
@@ -187,11 +218,29 @@ function GroupSection() {
           ))}
         </ul>
       ) : (
-        <EmptyState title={t("noGroups")} />
+        <EmptyState title={t("noGroups")} icon="library">
+          <Button icon="plus" onClick={() => setForm({ open: true, group: null })}>
+            {t("newGroup")}
+          </Button>
+        </EmptyState>
       )}
-    </section>
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title={t("delete")}
+          body={t("groupDeleteConfirm")}
+          confirmLabel={t("delete")}
+          busy={deleteGroup.isPending}
+          error={deleteGroup.isError ? errorText(deleteGroup.error) : null}
+          onConfirm={() => deleteGroup.mutate(deleteTarget.id)}
+          onClose={closeDelete}
+        />
+      )}
+    </Section>
   );
 }
+
+/* ---------- Fragments ---------- */
 
 function FragmentForm({
   groups,
@@ -204,6 +253,7 @@ function FragmentForm({
 }) {
   const { t } = useI18n();
   const qc = useQueryClient();
+  const formRef = useRef<HTMLFormElement>(null);
   const [groupId, setGroupId] = useState(fragment?.group_id ?? groups[0]?.id ?? "");
   const [name, setName] = useState(fragment?.name ?? "");
   const [nameEn, setNameEn] = useState(fragment?.name_en ?? "");
@@ -213,6 +263,7 @@ function FragmentForm({
   const [scope, setScope] = useState<Scope>(fragment?.scope ?? "pack");
   const [isPalette, setIsPalette] = useState(Boolean(fragment?.colors));
   const [colors, setColors] = useState<Colors>(fragment?.colors ?? EMPTY_COLORS);
+  const [fieldErrors, setFieldErrors] = useState<FragmentErrors>({});
   const [error, setError] = useState<string | null>(null);
 
   const save = useMutation({
@@ -229,12 +280,15 @@ function FragmentForm({
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!groupId) return setError(t("groupRequired"));
-    if (!name.trim()) return setError(t("nameRequired"));
-    if (!prompt.trim()) return setError(t("promptRequired"));
-    if (isPalette && !Object.values(colors).every((value) => /^#[0-9A-Fa-f]{6}$/.test(value))) {
-      return setError(t("colorsRequired"));
+    const next: FragmentErrors = {};
+    if (!groupId) next.group = t("groupRequired");
+    if (!name.trim()) next.name = t("nameRequired");
+    if (!prompt.trim()) next.prompt = t("promptRequired");
+    if (isPalette && !Object.values(colors).every((value) => HEX.test(value))) {
+      next.colors = t("colorsRequired");
     }
+    setFieldErrors(next);
+    if (Object.keys(next).length > 0) return;
     setError(null);
     save.mutate({
       group_id: groupId,
@@ -249,14 +303,17 @@ function FragmentForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4">
-      <h3 className="text-sm font-semibold text-zinc-700">
-        {fragment ? t("edit") : t("newFragment")}
-      </h3>
-      {error && <ErrorBanner message={error} />}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={t("filterGroup")}>
-          <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className={inputClass}>
+    <Dialog title={fragment ? t("edit") : t("newFragment")} onClose={onClose} variant="drawer">
+      <form ref={formRef} onSubmit={submit} className="space-y-4" noValidate>
+        {error && <ErrorBanner message={error} />}
+
+        <Field label={t("filterGroup")} error={fieldErrors.group}>
+          <select
+            value={groupId}
+            onChange={(e) => setGroupId(e.target.value)}
+            aria-invalid={Boolean(fieldErrors.group) || undefined}
+            className={selectClass}
+          >
             <option value="">{t("chooseFragment")}</option>
             {groups.map((group) => (
               <option key={group.id} value={group.id}>
@@ -266,11 +323,7 @@ function FragmentForm({
           </select>
         </Field>
         <Field label={t("fragmentScope")}>
-          <select
-            value={scope}
-            onChange={(e) => setScope(e.target.value as Scope)}
-            className={inputClass}
-          >
+          <select value={scope} onChange={(e) => setScope(e.target.value as Scope)} className={selectClass}>
             {SCOPES.map((value) => (
               <option key={value} value={value}>
                 {t(SCOPE_LABEL[value])}
@@ -278,80 +331,85 @@ function FragmentForm({
             ))}
           </select>
         </Field>
-        <Field label={t("fragmentName")}>
-          <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+        <Field label={t("fragmentName")} error={fieldErrors.name}>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-invalid={Boolean(fieldErrors.name) || undefined}
+            className={inputClass}
+          />
         </Field>
         <Field label={t("fragmentNameEn")}>
           <input value={nameEn} onChange={(e) => setNameEn(e.target.value)} className={inputClass} />
         </Field>
-      </div>
-      <Field label={t("fragmentPrompt")}>
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          rows={3}
-          className={inputClass}
-        />
-      </Field>
-      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={t("fragmentPrompt")} error={fieldErrors.prompt}>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={4}
+            aria-invalid={Boolean(fieldErrors.prompt) || undefined}
+            className={inputClass}
+          />
+        </Field>
         <Field label={t("fragmentNotes")}>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={inputClass} />
         </Field>
         <Field label={t("fragmentSource")}>
           <input value={source} onChange={(e) => setSource(e.target.value)} className={inputClass} />
         </Field>
-      </div>
 
-      <label className="flex items-center gap-2 text-sm text-zinc-700">
-        <input
-          type="checkbox"
-          checked={isPalette}
-          onChange={(e) => setIsPalette(e.target.checked)}
-          className="h-4 w-4 rounded border-zinc-300"
-        />
-        {t("paletteToggle")}
-      </label>
-      <p className="text-xs text-zinc-500">{t("paletteToggleHint")}</p>
-      {isPalette && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {(
-            [
-              ["primary", "rolePrimary"],
-              ["secondary", "roleSecondary"],
-              ["accent", "roleAccent"],
-              ["line", "roleLine"],
-            ] as const
-          ).map(([role, label]) => (
-            <Field key={role} label={t(label)}>
-              <div className="flex items-center gap-2">
-                <span
-                  aria-hidden="true"
-                  className="h-6 w-6 shrink-0 rounded border border-zinc-200"
-                  style={{ backgroundColor: colors[role] }}
-                />
-                <input
-                  type="color"
-                  value={colors[role]}
-                  onChange={(e) => setColors({ ...colors, [role]: e.target.value.toUpperCase() })}
-                  aria-label={t(label)}
-                  className="h-9 w-12 rounded border border-zinc-300 bg-white"
-                />
-                <code className="text-xs text-zinc-600">{colors[role]}</code>
-              </div>
-            </Field>
-          ))}
+        <div className="space-y-2 border-t border-line pt-4">
+          <label className="inline-flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={isPalette}
+              onChange={(e) => setIsPalette(e.target.checked)}
+              className={checkClass}
+            />
+            {t("paletteToggle")}
+          </label>
+          <p className="text-xs text-ink-2">{t("paletteToggleHint")}</p>
+          {isPalette && (
+            <div className="grid grid-cols-2 gap-3 pt-1 sm:grid-cols-4">
+              {ROLES.map(([role, label]) => (
+                <div key={role} className="space-y-2 rounded-panel border border-line p-2.5">
+                  <span
+                    aria-hidden="true"
+                    className="block h-12 w-full rounded-[4px] border border-line-strong"
+                    style={{ backgroundColor: colors[role] }}
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-medium text-ink">{t(label)}</span>
+                    <input
+                      type="color"
+                      value={colors[role]}
+                      onChange={(e) => setColors({ ...colors, [role]: e.target.value.toUpperCase() })}
+                      aria-label={t(label)}
+                      className="h-9 w-10 cursor-pointer rounded-ctl border border-line-strong bg-panel p-0.5"
+                    />
+                  </div>
+                  <p className="mono text-xs text-ink-2">{colors[role]}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {fieldErrors.colors && (
+            <p role="alert" className="text-xs text-danger">
+              {fieldErrors.colors}
+            </p>
+          )}
         </div>
-      )}
 
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={onClose}>
-          {t("cancel")}
-        </Button>
-        <Button type="submit" disabled={save.isPending}>
-          {save.isPending ? t("saving") : t("save")}
-        </Button>
-      </div>
-    </form>
+        <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
+          <Button variant="secondary" onClick={onClose} disabled={save.isPending}>
+            {t("cancel")}
+          </Button>
+          <Button type="submit" loading={save.isPending}>
+            {save.isPending ? t("saving") : t("save")}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
@@ -367,8 +425,7 @@ function FragmentSection({ groups }: { groups: Group[] }) {
     open: false,
     fragment: null,
   });
-  const [error, setError] = useState<string | null>(null);
-
+  const [archiveTarget, setArchiveTarget] = useState<Fragment | null>(null);
   const params = new URLSearchParams();
   if (applied.query) params.set("q", applied.query);
   if (applied.group) params.set("group_id", applied.group);
@@ -385,10 +442,9 @@ function FragmentSection({ groups }: { groups: Group[] }) {
   const archive = useMutation({
     mutationFn: (id: string) => api<void>(`/api/v1/admin/fragments/${id}`, { method: "DELETE" }),
     onSuccess: () => {
-      setError(null);
+      setArchiveTarget(null);
       qc.invalidateQueries({ queryKey: ["fragments"] });
     },
-    onError: (err) => setError(errorText(err)),
   });
 
   const groupsById = new Map(groups.map((group) => [group.id, group.name]));
@@ -398,15 +454,20 @@ function FragmentSection({ groups }: { groups: Group[] }) {
     setApplied({ query: query.trim(), group: groupFilter, scope: scopeFilter, page: 1 });
   }
 
+  function closeArchive() {
+    archive.reset();
+    setArchiveTarget(null);
+  }
+
   return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-zinc-700">{t("tabFragments")}</h2>
-        <Button onClick={() => setForm({ open: true, fragment: null })}>{t("newFragment")}</Button>
-      </div>
-
-      {error && <ErrorBanner message={error} />}
-
+    <Section
+      title={t("tabFragments")}
+      actions={
+        <Button icon="plus" onClick={() => setForm({ open: true, fragment: null })}>
+          {t("newFragment")}
+        </Button>
+      }
+    >
       {form.open && (
         <FragmentForm
           key={form.fragment?.id ?? "create-fragment"}
@@ -418,132 +479,121 @@ function FragmentSection({ groups }: { groups: Group[] }) {
 
       <form
         onSubmit={runSearch}
-        className="grid gap-3 rounded-xl border border-zinc-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5"
+        role="search"
+        aria-label={t("search")}
+        className="space-y-3 pb-4"
       >
         <Field label={t("search")}>
           <input
+            type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("searchPlaceholder")}
             className={inputClass}
           />
         </Field>
-        <Field label={t("filterGroup")}>
-          <select
-            value={groupFilter}
-            onChange={(e) => setGroupFilter(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">{t("allGroups")}</option>
-            {groups.map((group) => (
-              <option key={group.id} value={group.id}>
-                {group.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t("filterScope")}>
-          <select
-            value={scopeFilter}
-            onChange={(e) => setScopeFilter(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">{t("allScopes")}</option>
-            {SCOPES.map((scope) => (
-              <option key={scope} value={scope}>
-                {t(SCOPE_LABEL[scope])}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <label className="flex items-end gap-2 pb-2 text-sm text-zinc-700">
-          <input
-            type="checkbox"
-            checked={includeArchived}
-            onChange={(e) => setIncludeArchived(e.target.checked)}
-            className="h-4 w-4 rounded border-zinc-300"
-          />
-          {t("includeArchived")}
-        </label>
-        <div className="flex items-end">
-          <Button type="submit">{t("search")}</Button>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end">
+          <Field label={t("filterGroup")}>
+            <select
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+              className={`${selectClass} sm:w-44`}
+            >
+              <option value="">{t("allGroups")}</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label={t("filterScope")}>
+            <select
+              value={scopeFilter}
+              onChange={(e) => setScopeFilter(e.target.value)}
+              className={`${selectClass} sm:w-40`}
+            >
+              <option value="">{t("allScopes")}</option>
+              {SCOPES.map((scope) => (
+                <option key={scope} value={scope}>
+                  {t(SCOPE_LABEL[scope])}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <label className="col-span-2 inline-flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-ink sm:col-span-1 sm:min-h-9">
+            <input
+              type="checkbox"
+              checked={includeArchived}
+              onChange={(e) => setIncludeArchived(e.target.checked)}
+              className={checkClass}
+            />
+            {t("includeArchived")}
+          </label>
+          <Button type="submit" icon="search" className="col-span-2 sm:col-span-1">
+            {t("search")}
+          </Button>
         </div>
       </form>
 
       {fragments.isLoading ? (
-        <Spinner />
+        <SkeletonRows rows={6} />
       ) : fragments.isError ? (
-        <ErrorBanner message={errorText(fragments.error)} />
+        <ErrorRetry message={errorText(fragments.error)} onRetry={() => fragments.refetch()} />
       ) : fragments.data && fragments.data.items.length > 0 ? (
         <>
-          <ul className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200 bg-white">
+          <ul aria-label={t("tabFragments")} className="divide-y divide-line border-y border-line">
             {fragments.data.items.map((fragment) => (
-              <li key={fragment.id} className="px-4 py-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-zinc-900">
-                      {fragment.name}
-                      {fragment.name_en && (
-                        <span className="ml-2 text-xs font-normal text-zinc-500">
-                          {fragment.name_en}
-                        </span>
-                      )}
-                      {fragment.archived && (
-                        <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-zinc-500">
-                          {t("archived")}
-                        </span>
-                      )}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-zinc-500">
-                      {groupsById.get(fragment.group_id) ?? t("none")} · {t(SCOPE_LABEL[fragment.scope])}
-                      {fragment.source ? ` · ${fragment.source}` : ""} · {formatDate(fragment.updated_at)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() => setForm({ open: true, fragment })}
-                    >
-                      {t("edit")}
-                    </Button>
-                    {!fragment.archived && (
-                      <Button
-                        variant="danger"
-                        onClick={() => {
-                          if (window.confirm(t("archiveConfirm"))) archive.mutate(fragment.id);
-                        }}
-                        disabled={archive.isPending}
-                      >
-                        {t("archive")}
-                      </Button>
+              <li key={fragment.id} className="flex min-w-0 flex-col gap-3 py-3.5 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <h3 className="min-w-0 break-words text-sm font-semibold text-ink">{fragment.name}</h3>
+                    {fragment.name_en && (
+                      <span className="min-w-0 break-words text-sm text-ink-2">{fragment.name_en}</span>
                     )}
+                    <Stamp>{t(SCOPE_LABEL[fragment.scope])}</Stamp>
+                    {fragment.archived && <Stamp>{t("archived")}</Stamp>}
                   </div>
+                  <p className="line-clamp-1 break-words text-xs text-ink-2">{fragment.prompt}</p>
+                  <p className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-ink-3">
+                    <JobTag id={fragment.id} />
+                    <span className="break-words">{groupsById.get(fragment.group_id) ?? t("none")}</span>
+                    {fragment.source && <span className="break-words">· {fragment.source}</span>}
+                    <span className="mono">{formatDate(fragment.updated_at)}</span>
+                  </p>
+                  {fragment.notes && <p className="break-words text-xs text-ink-3">{fragment.notes}</p>}
+                  {fragment.colors && (
+                    <ul aria-label={t("paletteToggle")} className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
+                      {ROLES.map(([role, label]) => (
+                        <li key={role} className="inline-flex items-center gap-1.5 text-[11px] text-ink-2">
+                          <span
+                            aria-hidden="true"
+                            className="size-3.5 rounded-[3px] border border-line-strong"
+                            style={{ backgroundColor: fragment.colors?.[role] }}
+                          />
+                          <span>{t(label)}</span>
+                          <span className="mono">{fragment.colors?.[role]}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                <p className="mt-1 line-clamp-2 text-xs text-zinc-600">{fragment.prompt}</p>
-                {fragment.notes && (
-                  <p className="mt-1 text-xs text-zinc-400">{fragment.notes}</p>
-                )}
-                {fragment.colors && (
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-zinc-600">
-                    {(
-                      [
-                        ["primary", "rolePrimary"],
-                        ["secondary", "roleSecondary"],
-                        ["accent", "roleAccent"],
-                        ["line", "roleLine"],
-                      ] as const
-                    ).map(([role, label]) => (
-                      <span key={role} className="inline-flex items-center gap-1">
-                        <span
-                          aria-hidden="true"
-                          className="h-4 w-4 rounded border border-zinc-200"
-                          style={{ backgroundColor: fragment.colors?.[role] }}
-                        />
-                        {t(label)} {fragment.colors?.[role]}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Button variant="secondary" icon="edit" onClick={() => setForm({ open: true, fragment })}>
+                    {t("edit")}
+                  </Button>
+                  {!fragment.archived && (
+                    <Button
+                      variant="danger"
+                      onClick={() => {
+                        archive.reset();
+                        setArchiveTarget(fragment);
+                      }}
+                    >
+                      {t("archive")}
+                    </Button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -555,11 +605,29 @@ function FragmentSection({ groups }: { groups: Group[] }) {
           />
         </>
       ) : (
-        <EmptyState title={t("noFragments")} />
+        <EmptyState title={t("noFragments")} icon="library">
+          <Button icon="plus" onClick={() => setForm({ open: true, fragment: null })}>
+            {t("newFragment")}
+          </Button>
+        </EmptyState>
       )}
-    </section>
+
+      {archiveTarget && (
+        <ConfirmDialog
+          title={t("archive")}
+          body={t("archiveConfirm")}
+          confirmLabel={t("archive")}
+          busy={archive.isPending}
+          error={archive.isError ? errorText(archive.error) : null}
+          onConfirm={() => archive.mutate(archiveTarget.id)}
+          onClose={closeArchive}
+        />
+      )}
+    </Section>
   );
 }
+
+/* ---------- Page ---------- */
 
 function Library() {
   const { t } = useI18n();
@@ -572,37 +640,33 @@ function Library() {
   return (
     <>
       <PageHeader title={t("libraryTitle")} subtitle={t("librarySubtitle")} />
-      <div className="mb-5 flex gap-2" role="tablist" aria-label={t("libraryTitle")}>
-        {(
-          [
-            ["fragments", "tabFragments"],
-            ["groups", "tabGroups"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            role="tab"
-            aria-selected={tab === value}
-            onClick={() => setTab(value)}
-            className={`rounded-lg px-4 py-2 text-sm font-medium ${
-              tab === value
-                ? "bg-indigo-600 text-white"
-                : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
-            }`}
-          >
-            {t(label)}
-          </button>
-        ))}
+      <div className="mb-2">
+        <Tabs<"groups" | "fragments">
+          variant="segmented"
+          label={t("libraryTitle")}
+          value={tab}
+          onChange={setTab}
+          items={[
+            { id: "fragments", label: t("tabFragments") },
+            { id: "groups", label: t("tabGroups") },
+          ]}
+        />
       </div>
 
-      {groups.isError && <ErrorBanner message={errorText(groups.error)} />}
-      {groups.data &&
+      {groups.isLoading ? (
+        <SkeletonRows rows={4} className="mt-5" />
+      ) : groups.isError ? (
+        <div className="mt-5">
+          <ErrorRetry message={errorText(groups.error)} onRetry={() => groups.refetch()} />
+        </div>
+      ) : (
+        groups.data &&
         (tab === "groups" ? (
-          <GroupSection />
+          <GroupSection groups={groups.data.items} />
         ) : (
           <FragmentSection groups={groups.data.items} />
-        ))}
-      {groups.isLoading && <Spinner />}
+        ))
+      )}
     </>
   );
 }
