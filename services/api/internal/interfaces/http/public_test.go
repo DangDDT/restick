@@ -80,7 +80,7 @@ func newPublicFixture(t *testing.T) *publicFixture {
 // so the handlers run against actual SQLite and disk.
 func (f *publicFixture) publish(slug string, stickerCount int, tags ...string) testPack {
 	f.t.Helper()
-	p, err := f.catalog.Create(context.Background(), packs.PackDraft{Slug: slug, Name: "Pack " + slug, Author: "Tester", Tags: tags})
+	p, err := f.catalog.Create(context.Background(), seedSheetDraft(f.t, f.db, f.files, slug, "Pack "+slug, tags))
 	if err != nil {
 		f.t.Fatalf("packs.Create: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestPublicCatalogVisibilityAndPagination(t *testing.T) {
 	alpha := f.publish("alpha", 2, "animals", "cute")
 	second := f.publish("beta", 1, "animals")
 	gamma := f.publish("gamma", 1, "space")
-	draft, err := f.catalog.Create(context.Background(), packs.PackDraft{Slug: "draft-pack", Name: "Draft", Author: "Tester"})
+	draft, err := f.catalog.Create(context.Background(), seedSheetDraft(t, f.db, f.files, "draft-pack", "Draft", nil))
 	if err != nil {
 		t.Fatal(err)
 	}

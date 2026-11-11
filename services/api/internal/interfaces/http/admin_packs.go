@@ -3,7 +3,6 @@ package httpx
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,13 +15,15 @@ import (
 // admin_packs.go serves pack CRUD, source upload, processing, revoke and job
 // inspection. Mutations return the affected domain object.
 
-type adminPackSource struct {
+type adminPackSheet struct {
 	ID             string `json:"id"`
+	Provider       string `json:"provider"`
 	Filename       string `json:"filename"`
-	ChecksumSHA256 string `json:"checksum_sha256"`
 	Width          int    `json:"width"`
 	Height         int    `json:"height"`
 	ByteSize       int64  `json:"byte_size"`
+	ChecksumSHA256 string `json:"checksum_sha256"`
+	ImageURL       string `json:"image_url"`
 }
 
 type adminPackSticker struct {
@@ -38,25 +39,38 @@ type adminPackSticker struct {
 }
 
 type adminPack struct {
-	ID             string           `json:"id"`
-	Slug           string           `json:"slug"`
-	Name           string           `json:"name"`
-	Author         string           `json:"author"`
-	Description    string           `json:"description"`
-	Tags           []string         `json:"tags"`
-	DesignID       string           `json:"design_id,omitempty"`
-	Status         packs.Status     `json:"status"`
-	CurrentVersion int              `json:"current_version"`
-	StickerCount   int              `json:"sticker_count"`
-	ChecksumSHA256 string           `json:"checksum_sha256"`
-	ThumbnailURL   string           `json:"thumbnail_url"`
-	Source         *adminPackSource `json:"source"`
-	CreatedAt      string           `json:"created_at"`
-	UpdatedAt      string           `json:"updated_at"`
+	ID             string          `json:"id"`
+	Slug           string          `json:"slug"`
+	Name           string          `json:"name"`
+	Author         string          `json:"author"`
+	Description    string          `json:"description"`
+	Tags           []string        `json:"tags"`
+	DesignID       string          `json:"design_id,omitempty"`
+	Status         packs.Status    `json:"status"`
+	CurrentVersion int             `json:"current_version"`
+	StickerCount   int             `json:"sticker_count"`
+	ChecksumSHA256 string          `json:"checksum_sha256"`
+	ThumbnailURL   string          `json:"thumbnail_url"`
+	SheetID        string          `json:"sheet_id"`
+	Sheet          *adminPackSheet `json:"sheet"`
+	CreatedAt      string          `json:"created_at"`
+	UpdatedAt      string          `json:"updated_at"`
+}
+
+type adminPackDesign struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Rows           int    `json:"rows"`
+	Columns        int    `json:"columns"`
+	OutlineWidth   int    `json:"outline_width"`
+	OutlineColor   string `json:"outline_color"`
+	CharacterID    string `json:"character_id,omitempty"`
+	CompiledPrompt string `json:"compiled_prompt"`
 }
 
 type adminPackDetail struct {
 	adminPack
+	Design    *adminPackDesign   `json:"design,omitempty"`
 	Stickers  []adminPackSticker `json:"stickers"`
 	BundleURL string             `json:"bundle_url"`
 	LatestJob *adminJob          `json:"latest_job,omitempty"`
@@ -74,10 +88,13 @@ func (a *admin) pack(p packs.Pack) adminPack {
 		ThumbnailURL: a.assetURL(p.ThumbnailPath),
 		CreatedAt:    formatSeconds(p.CreatedAt), UpdatedAt: formatSeconds(p.UpdatedAt),
 	}
-	if p.Source != nil {
-		out.Source = &adminPackSource{
-			ID: p.Source.ID, Filename: p.Source.Filename, ChecksumSHA256: p.Source.ChecksumSHA256,
-			Width: p.Source.Width, Height: p.Source.Height, ByteSize: p.Source.ByteSize,
+	out.SheetID = p.SheetID
+	if p.Sheet != nil {
+		out.Sheet = &adminPackSheet{
+			ID: p.Sheet.ID, Provider: p.Sheet.Provider, Filename: p.Sheet.Filename,
+			Width: p.Sheet.Width, Height: p.Sheet.Height, ByteSize: p.Sheet.ByteSize,
+			ChecksumSHA256: p.Sheet.ChecksumSHA256,
+			ImageURL:       a.sheetImageURL(p.DesignID, p.Sheet.ID),
 		}
 	}
 	return out
@@ -138,13 +155,14 @@ func (a *admin) createPack(w http.ResponseWriter, r *http.Request) {
 		Description string   `json:"description"`
 		Tags        []string `json:"tags"`
 		DesignID    string   `json:"design_id"`
+		SheetID     string   `json:"sheet_id"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
 	}
 	pack, err := a.packs.Create(r.Context(), packs.PackDraft{
 		Slug: body.Slug, Name: body.Name, Author: body.Author,
-		Description: body.Description, Tags: body.Tags, DesignID: body.DesignID,
+		Description: body.Description, Tags: body.Tags, DesignID: body.DesignID, SheetID: body.SheetID,
 	})
 	if err != nil {
 		writePackError(w, err)
@@ -162,6 +180,18 @@ func (a *admin) getPack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	detail := adminPackDetail{adminPack: a.pack(pack), Stickers: []adminPackSticker{}}
+	if pack.DesignID != "" {
+		design, err := a.studio.GetDesign(r.Context(), pack.DesignID)
+		if err != nil {
+			writeStudioError(w, err)
+			return
+		}
+		detail.Design = &adminPackDesign{
+			ID: design.ID, Name: design.Name, Rows: design.Rows, Columns: design.Columns,
+			OutlineWidth: design.OutlineWidth, OutlineColor: design.OutlineColor,
+			CharacterID: design.CharacterID, CompiledPrompt: design.Prompt,
+		}
+	}
 	latest, err := a.jobs.LatestForPack(r.Context(), pack.ID)
 	if err != nil {
 		writePackError(w, err)
@@ -201,13 +231,14 @@ func (a *admin) updatePack(w http.ResponseWriter, r *http.Request) {
 		Description string   `json:"description"`
 		Tags        []string `json:"tags"`
 		DesignID    string   `json:"design_id"`
+		SheetID     string   `json:"sheet_id"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
 	}
 	pack, err := a.packs.UpdateCatalog(r.Context(), r.PathValue("id"), packs.Metadata{
 		Name: body.Name, Author: body.Author, Description: body.Description,
-		Tags: body.Tags, DesignID: body.DesignID,
+		Tags: body.Tags, DesignID: body.DesignID, SheetID: body.SheetID,
 	})
 	if err != nil {
 		writePackError(w, err)
@@ -223,21 +254,6 @@ func (a *admin) deletePack(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (a *admin) uploadPackSource(w http.ResponseWriter, r *http.Request) {
-	packID := r.PathValue("id")
-	a.upload(w, r, http.StatusOK, func(reader io.Reader, filename string) (any, error) {
-		source, err := a.assets.SaveSource(r.Context(), reader, filename)
-		if err != nil {
-			return nil, err
-		}
-		pack, err := a.packs.SetSource(r.Context(), packID, source)
-		if err != nil {
-			return nil, err
-		}
-		return a.pack(pack), nil
-	}, writeUploadDomainError)
 }
 
 func (a *admin) processPack(w http.ResponseWriter, r *http.Request) {
@@ -295,17 +311,5 @@ func jobJSON(job jobs.Job) adminJob {
 		ErrorCode: job.ErrorCode, ErrorMessage: job.ErrorMessage, Diagnostics: job.Diagnostics,
 		CreatedAt: formatSeconds(job.CreatedAt),
 		StartedAt: optionalSeconds(job.StartedAt), FinishedAt: optionalSeconds(job.FinishedAt),
-	}
-}
-
-// writeUploadDomainError keeps pack errors (revoked, active job) distinct from
-// image validation errors on the source upload route.
-func writeUploadDomainError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, packs.ErrNotFound), errors.Is(err, packs.ErrRevoked),
-		errors.Is(err, packs.ErrJobActive), errors.Is(err, packs.ErrInvalid):
-		writePackError(w, err)
-	default:
-		writeUploadError(w, err)
 	}
 }

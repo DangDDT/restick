@@ -80,13 +80,16 @@ func (a *admin) mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/designs/{id}", a.sessionOnly(a.getDesign))
 	mux.HandleFunc("PUT /api/v1/admin/designs/{id}", a.ownerOnly(a.updateDesign))
 	mux.HandleFunc("DELETE /api/v1/admin/designs/{id}", a.ownerOnly(a.deleteDesign))
+	mux.HandleFunc("GET /api/v1/admin/designs/{id}/sheets", a.sessionOnly(a.listSheets))
+	mux.HandleFunc("POST /api/v1/admin/designs/{id}/sheets", a.ownerOnly(a.uploadSheet))
+	mux.HandleFunc("GET /api/v1/admin/designs/{id}/sheets/{sheetId}/image", a.sessionOnly(a.getSheetImage))
+	mux.HandleFunc("DELETE /api/v1/admin/designs/{id}/sheets/{sheetId}", a.ownerOnly(a.deleteSheet))
 
 	mux.HandleFunc("GET /api/v1/admin/packs", a.sessionOnly(a.listPacks))
 	mux.HandleFunc("POST /api/v1/admin/packs", a.ownerOnly(a.createPack))
 	mux.HandleFunc("GET /api/v1/admin/packs/{id}", a.sessionOnly(a.getPack))
 	mux.HandleFunc("PUT /api/v1/admin/packs/{id}", a.ownerOnly(a.updatePack))
 	mux.HandleFunc("DELETE /api/v1/admin/packs/{id}", a.ownerOnly(a.deletePack))
-	mux.HandleFunc("POST /api/v1/admin/packs/{id}/source", a.ownerOnly(a.uploadPackSource))
 	mux.HandleFunc("POST /api/v1/admin/packs/{id}/process", a.ownerOnly(a.processPack))
 	mux.HandleFunc("POST /api/v1/admin/packs/{id}/revoke", a.ownerOnly(a.revokePack))
 	mux.HandleFunc("GET /api/v1/admin/jobs/{id}", a.sessionOnly(a.getJob))
@@ -237,13 +240,15 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return true
 }
 
-// upload streams the single "file" part of a bounded multipart body into save.
-// The handler writes the response because the part must be consumed first.
+// upload streams the single "file" part of a bounded multipart body into save,
+// which also receives every other text form field (read from the whole body, so
+// field order does not matter). save may return its own status; 0 keeps the
+// default. The handler writes the response because the part must be consumed first.
 // upload accepts one image upload. The complete request body is spooled to a
 // temp file under the total 8 MiB + 64 KiB bound and validated end to end before
 // save runs, so trailing junk or a truncated tail can never mutate domain state.
 func (a *admin) upload(w http.ResponseWriter, r *http.Request, status int,
-	save func(io.Reader, string) (any, error), onError func(http.ResponseWriter, error)) {
+	save func(r io.Reader, filename string, fields map[string]string) (any, int, error), onError func(http.ResponseWriter, error)) {
 	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	boundary := params["boundary"]
 	if err != nil || mediaType != "multipart/form-data" || boundary == "" {
@@ -269,7 +274,7 @@ func (a *admin) upload(w http.ResponseWriter, r *http.Request, status int,
 		return
 	}
 
-	filename, err := inspectUpload(spool, boundary)
+	filename, fields, err := inspectUpload(spool, boundary)
 	switch {
 	case errors.Is(err, errUploadTooLarge):
 		publicError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "image exceeds 8 MiB")
@@ -300,11 +305,14 @@ func (a *admin) upload(w http.ResponseWriter, r *http.Request, status int,
 			_ = part.Close()
 			continue
 		}
-		payload, err := save(io.LimitReader(part, maxUploadFile+1), filename)
+		payload, saved, err := save(io.LimitReader(part, maxUploadFile+1), filename, fields)
 		_ = part.Close()
 		if err != nil {
 			onError(w, err)
 			return
+		}
+		if saved != 0 {
+			status = saved
 		}
 		publicJSON(w, status, payload)
 		return
@@ -317,40 +325,59 @@ var (
 	errUploadMissingFile = errors.New("httpx: upload has no file part")
 )
 
+// maxUploadField bounds one text form field kept by inspectUpload.
+const maxUploadField = 4 << 10
+
 // inspectUpload drains the whole spooled body once, bounding the file part and
-// rejecting malformed tails, without writing any domain state.
-func inspectUpload(spool *os.File, boundary string) (string, error) {
+// rejecting malformed tails, without writing any domain state. It returns the
+// file name and the text fields (each truncated to maxUploadField).
+func inspectUpload(spool *os.File, boundary string) (string, map[string]string, error) {
 	if _, err := spool.Seek(0, io.SeekStart); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	reader := multipart.NewReader(spool, boundary)
 	filename, found := "", false
+	fields := map[string]string{}
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		formName, name := part.FormName(), part.FileName()
+		if formName != "file" && name == "" {
+			value, err := io.ReadAll(io.LimitReader(part, maxUploadField))
+			if err == nil {
+				_, err = io.Copy(io.Discard, part)
+			}
+			_ = part.Close()
+			if err != nil {
+				return "", nil, err
+			}
+			if _, dup := fields[formName]; !dup {
+				fields[formName] = string(value)
+			}
+			continue
+		}
 		size, err := io.Copy(io.Discard, part)
 		_ = part.Close()
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		if formName != "file" || found {
 			continue
 		}
 		if size > maxUploadFile {
-			return "", errUploadTooLarge
+			return "", nil, errUploadTooLarge
 		}
 		filename, found = name, true
 	}
 	if !found {
-		return "", errUploadMissingFile
+		return "", nil, errUploadMissingFile
 	}
-	return filename, nil
+	return filename, fields, nil
 }
 
 func tooLarge(err error) bool {
@@ -381,6 +408,12 @@ func writeStudioError(w http.ResponseWriter, err error) {
 		publicError(w, http.StatusNotFound, "not_found", "not found")
 	case errors.Is(err, studio.ErrGroupNotEmpty):
 		publicError(w, http.StatusConflict, "group_not_empty", "group still has fragments")
+	case errors.Is(err, studio.ErrSheetLimit):
+		publicError(w, http.StatusConflict, "sheet_limit", "design already has the maximum number of sheets")
+	case errors.Is(err, studio.ErrSheetInUse):
+		publicError(w, http.StatusConflict, "sheet_in_use", "sheet is used by a pack")
+	case errors.Is(err, studio.ErrDesignHasSheets):
+		publicError(w, http.StatusConflict, "design_has_sheets", "delete the design's sheets first")
 	case errors.Is(err, studio.ErrInvalid):
 		publicError(w, http.StatusUnprocessableEntity, "unprocessable", "invalid request")
 	default:
@@ -401,7 +434,7 @@ func writePackError(w http.ResponseWriter, err error) {
 	case errors.Is(err, packs.ErrRevoked), errors.Is(err, jobs.ErrPackRevoked):
 		publicError(w, http.StatusGone, "pack_revoked", "pack is revoked")
 	case errors.Is(err, jobs.ErrNoSource):
-		publicError(w, http.StatusUnprocessableEntity, "source_missing", "pack has no uploaded sheet")
+		publicError(w, http.StatusUnprocessableEntity, "source_missing", "pack has no design sheet selected")
 	case errors.Is(err, packs.ErrInvalid), errors.Is(err, jobs.ErrInvalid):
 		publicError(w, http.StatusUnprocessableEntity, "unprocessable", "invalid request")
 	case errors.Is(err, jobs.ErrNotFound):

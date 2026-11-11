@@ -175,8 +175,9 @@ func (a *admin) archiveCharacter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *admin) uploadReferenceAsset(w http.ResponseWriter, r *http.Request) {
-	a.upload(w, r, http.StatusCreated, func(reader io.Reader, filename string) (any, error) {
-		return a.studio.SaveReferenceAsset(r.Context(), reader, filename)
+	a.upload(w, r, http.StatusCreated, func(reader io.Reader, filename string, _ map[string]string) (any, int, error) {
+		asset, err := a.studio.SaveReferenceAsset(r.Context(), reader, filename)
+		return asset, 0, err
 	}, writeUploadError)
 }
 

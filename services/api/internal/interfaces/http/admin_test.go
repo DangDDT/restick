@@ -178,6 +178,32 @@ func (f *adminFixture) upload(target, field, filename string, data []byte) *http
 	return f.request(http.MethodPost, target, body, headers)
 }
 
+// uploadFields posts a file part plus text form fields (after the file, like a
+// browser FormData that appends them last).
+func (f *adminFixture) uploadFields(target, filename string, data []byte, fields map[string]string) *httptest.ResponseRecorder {
+	f.t.Helper()
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	if _, err := part.Write(data); err != nil {
+		f.t.Fatal(err)
+	}
+	for name, value := range fields {
+		if err := writer.WriteField(name, value); err != nil {
+			f.t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		f.t.Fatal(err)
+	}
+	headers := f.adminHeaders()
+	headers["Content-Type"] = writer.FormDataContentType()
+	return f.request(http.MethodPost, target, buf.Bytes(), headers)
+}
+
 func multipartBody(t *testing.T, field, filename string, data []byte) ([]byte, string) {
 	t.Helper()
 	var buf bytes.Buffer
@@ -240,7 +266,7 @@ func (f *adminFixture) tableCounts() map[string]int {
 	f.t.Helper()
 	tables := []string{
 		"fragment_groups", "fragments", "characters", "designs", "packs",
-		"api_keys", "admin_sessions", "reference_assets", "pack_tombstones", "processing_jobs",
+		"api_keys", "admin_sessions", "reference_assets", "design_sheets", "pack_tombstones", "processing_jobs",
 	}
 	counts := map[string]int{}
 	for _, table := range tables {
@@ -253,11 +279,30 @@ func (f *adminFixture) tableCounts() map[string]int {
 	return counts
 }
 
+// seedSheetDraft creates a design with one uploaded sheet and returns a pack
+// draft bound to both, since packs now require them.
+func seedSheetDraft(t *testing.T, db *sql.DB, files *assets.Store, slug, name string, tags []string) packs.PackDraft {
+	t.Helper()
+	svc := studio.NewService(db, files)
+	design, err := svc.SaveDesign(context.Background(), studio.Draft{
+		Name: "Design " + slug, Rows: 1, Columns: 1, OutlineWidth: studio.DefaultOutlineWidth,
+		Cells: []studio.Cell{{Action: "wave"}},
+	})
+	if err != nil {
+		t.Fatalf("SaveDesign: %v", err)
+	}
+	sheet, err := svc.SaveSheet(context.Background(), design.ID, bytes.NewReader(testPNG(t, 8, 8)), "sheet.png", "chatgpt", "")
+	if err != nil {
+		t.Fatalf("SaveSheet: %v", err)
+	}
+	return packs.PackDraft{Slug: slug, Name: name, Author: "Tester", Tags: tags, DesignID: design.ID, SheetID: sheet.ID}
+}
+
 // readyPack writes a committed v1 row so revoke has a real version to end.
 func (f *adminFixture) readyPack(slug string) packs.Pack {
 	f.t.Helper()
 	ctx := context.Background()
-	pack, err := f.packs.Create(ctx, packs.PackDraft{Slug: slug, Name: "Pack " + slug, Author: "Tester", Tags: []string{"demo"}})
+	pack, err := f.packs.Create(ctx, seedSheetDraft(f.t, f.db, f.files, slug, "Pack "+slug, []string{"demo"}))
 	if err != nil {
 		f.t.Fatalf("packs.Create: %v", err)
 	}
@@ -297,6 +342,7 @@ const testResourceID = "00000000-0000-0000-0000-000000000000"
 func adminUnsafeRoutes(t *testing.T) []adminRouteCase {
 	t.Helper()
 	imageBody, imageType := multipartBody(t, "file", "sheet.png", testPNG(t, 2, 2))
+	sheetBody, sheetType := multipartBody(t, "file", "sheet.png", testPNG(t, 2, 2))
 	id := testResourceID
 	jsonBody := func(payload string) []byte { return []byte(payload) }
 	return []adminRouteCase{
@@ -318,7 +364,8 @@ func adminUnsafeRoutes(t *testing.T) []adminRouteCase {
 		{http.MethodPost, "/api/v1/admin/packs", jsonBody(`{"slug":"stolen","name":"Stolen","author":"x"}`), jsonContentType},
 		{http.MethodPut, "/api/v1/admin/packs/" + id, jsonBody(`{"name":"Stolen","author":"x","tags":[]}`), jsonContentType},
 		{http.MethodDelete, "/api/v1/admin/packs/" + id, nil, ""},
-		{http.MethodPost, "/api/v1/admin/packs/" + id + "/source", imageBody, imageType},
+		{http.MethodPost, "/api/v1/admin/designs/" + id + "/sheets", sheetBody, sheetType},
+		{http.MethodDelete, "/api/v1/admin/designs/" + id + "/sheets/" + id, nil, ""},
 		{http.MethodPost, "/api/v1/admin/packs/" + id + "/process", nil, ""},
 		{http.MethodPost, "/api/v1/admin/packs/" + id + "/revoke", nil, ""},
 		{http.MethodPost, "/api/v1/admin/api-keys", jsonBody(`{"name":"stolen"}`), jsonContentType},
@@ -339,6 +386,8 @@ func adminReadRoutes() []adminRouteCase {
 		{http.MethodGet, "/api/v1/admin/reference-assets/" + id, nil, ""},
 		{http.MethodGet, "/api/v1/admin/designs", nil, ""},
 		{http.MethodGet, "/api/v1/admin/designs/" + id, nil, ""},
+		{http.MethodGet, "/api/v1/admin/designs/" + id + "/sheets", nil, ""},
+		{http.MethodGet, "/api/v1/admin/designs/" + id + "/sheets/" + id + "/image", nil, ""},
 		{http.MethodGet, "/api/v1/admin/packs", nil, ""},
 		{http.MethodGet, "/api/v1/admin/packs/" + id, nil, ""},
 		{http.MethodGet, "/api/v1/admin/jobs/" + id, nil, ""},
@@ -681,21 +730,19 @@ func TestJSONAndMultipartLimits(t *testing.T) {
 	if rec := sendUnknownLength("/api/v1/admin/reference-assets", tailType, tail.Bytes()); rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("reference upload with 9 MiB tail = %d, want 413 (%s)", rec.Code, rec.Body.String())
 	}
-	pack, err := f.packs.Create(ctx, packs.PackDraft{Slug: "slot", Name: "Slot", Author: "Tester"})
+	slotDesign, err := f.studio.SaveDesign(ctx, studio.Draft{
+		Name: "Slot", Rows: 1, Columns: 1, OutlineWidth: studio.DefaultOutlineWidth, Cells: []studio.Cell{{Action: "wave"}},
+	})
 	if err != nil {
-		t.Fatalf("packs.Create: %v", err)
+		t.Fatalf("SaveDesign: %v", err)
 	}
-	if rec := sendUnknownLength("/api/v1/admin/packs/"+pack.ID+"/source", tailType, tail.Bytes()); rec.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("pack source with 9 MiB tail = %d, want 413 (%s)", rec.Code, rec.Body.String())
-	}
-	reloaded, err := f.packs.Get(ctx, pack.ID)
-	if err != nil {
-		t.Fatalf("packs.Get: %v", err)
-	}
-	if reloaded.Source != nil {
-		t.Fatalf("pack source changed after a rejected upload: %+v", reloaded.Source)
+	if rec := sendUnknownLength("/api/v1/admin/designs/"+slotDesign.ID+"/sheets", tailType, tail.Bytes()); rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("design sheet with 9 MiB tail = %d, want 413 (%s)", rec.Code, rec.Body.String())
 	}
 	after := f.tableCounts()
+	if after["design_sheets"] != before["design_sheets"] {
+		t.Fatalf("design_sheets grew from %d to %d after a rejected upload", before["design_sheets"], after["design_sheets"])
+	}
 	if after["reference_assets"] != before["reference_assets"] {
 		t.Fatalf("reference_assets grew from %d to %d after a rejected upload",
 			before["reference_assets"], after["reference_assets"])
@@ -863,9 +910,7 @@ func TestAdminPackDetailDiscoversLatestJob(t *testing.T) {
 			pack = f.readyPack("detail-ready")
 		} else {
 			var err error
-			pack, err = f.packs.Create(context.Background(), packs.PackDraft{
-				Slug: "detail-draft", Name: "Detail draft", Author: "Tester",
-			})
+			pack, err = f.packs.Create(context.Background(), seedSheetDraft(t, f.db, f.files, "detail-draft", "Detail draft", nil))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1055,9 +1100,16 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 		t.Fatalf("suggested fragments = %v", suggested.FragmentIDs)
 	}
 
-	// Packs: create draft, list with status filter, upload source, enqueue job.
+	// Packs: create draft from a design sheet, list with status filter, enqueue job.
+	rec = f.uploadFields("/api/v1/admin/designs/"+design.ID+"/sheets", "sheet.png", testPNG(t, 64, 64), map[string]string{"provider": "chatgpt"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("upload sheet = %d: %s", rec.Code, rec.Body.String())
+	}
+	var sheet studio.Sheet
+	decodeInto(t, rec, &sheet)
 	rec = f.mutate(http.MethodPost, "/api/v1/admin/packs", map[string]any{
-		"slug": "meo-mun", "name": "Mèo Mun", "author": "Operator", "tags": []string{"cat"}, "design_id": design.ID,
+		"slug": "meo-mun", "name": "Mèo Mun", "author": "Operator", "tags": []string{"cat"},
+		"design_id": design.ID, "sheet_id": sheet.ID,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create pack = %d: %s", rec.Code, rec.Body.String())
@@ -1067,8 +1119,8 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 	if pack.Status != packs.StatusDraft || pack.Slug != "meo-mun" {
 		t.Fatalf("created pack = %+v", pack)
 	}
-	if pack.Source != nil {
-		t.Fatalf("new pack source = %+v, want null", pack.Source)
+	if pack.SheetID != sheet.ID || pack.Sheet == nil || pack.Sheet.Width != 64 || pack.Sheet.Provider != "chatgpt" {
+		t.Fatalf("pack sheet = %q %+v", pack.SheetID, pack.Sheet)
 	}
 
 	rec = f.get("/api/v1/admin/packs?status=draft&q=meo&page=1&page_size=10")
@@ -1084,16 +1136,6 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 	decodeInto(t, rec, &packPage)
 	if packPage.Total != 1 || len(packPage.Items) != 1 || packPage.Items[0].ID != pack.ID {
 		t.Fatalf("draft page = %+v", packPage)
-	}
-
-	rec = f.upload("/api/v1/admin/packs/"+pack.ID+"/source", "file", "sheet.png", testPNG(t, 64, 64))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("upload source = %d: %s", rec.Code, rec.Body.String())
-	}
-	var sourced adminPack
-	decodeInto(t, rec, &sourced)
-	if sourced.Source == nil || sourced.Source.Width != 64 {
-		t.Fatalf("pack source = %+v", sourced.Source)
 	}
 
 	rec = f.get("/api/v1/admin/packs/" + pack.ID)
@@ -1136,7 +1178,9 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 	} else if code := errorCode(t, rec); code != "job_active" {
 		t.Fatalf("delete busy draft code = %q", code)
 	}
-	rec = f.mutate(http.MethodPost, "/api/v1/admin/packs", map[string]any{"slug": "throwaway", "name": "Throwaway", "author": "Tester"})
+	rec = f.mutate(http.MethodPost, "/api/v1/admin/packs", map[string]any{
+		"slug": "throwaway", "name": "Throwaway", "author": "Tester", "design_id": design.ID, "sheet_id": sheet.ID,
+	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create throwaway = %d", rec.Code)
 	}
@@ -1254,5 +1298,177 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 		if item.ID == rotated.ID && item.Active {
 			t.Fatalf("disabled key still active: %+v", item)
 		}
+	}
+}
+
+func (f *adminFixture) newDesign(name string) studio.Design {
+	f.t.Helper()
+	design, err := f.studio.SaveDesign(context.Background(), studio.Draft{
+		Name: name, Rows: 1, Columns: 1, OutlineWidth: studio.DefaultOutlineWidth, Cells: []studio.Cell{{Action: "wave"}},
+	})
+	if err != nil {
+		f.t.Fatalf("SaveDesign: %v", err)
+	}
+	return design
+}
+
+func TestAdminDesignSheets(t *testing.T) {
+	f := newAdminFixture(t)
+	f.login()
+	design := f.newDesign("Sheets")
+	base := "/api/v1/admin/designs/" + design.ID + "/sheets"
+	pngBytes := testPNG(t, 16, 12)
+
+	rec := f.uploadFields(base, "one.png", pngBytes, map[string]string{"provider": "chatgpt", "note": "first try"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("upload sheet = %d: %s", rec.Code, rec.Body.String())
+	}
+	var sheet studio.Sheet
+	decodeInto(t, rec, &sheet)
+	if sheet.Provider != "chatgpt" || sheet.Note != "first try" || sheet.DesignID != design.ID || sheet.PromptSnapshot == "" {
+		t.Fatalf("sheet = %+v", sheet)
+	}
+
+	rec = f.uploadFields(base, "again.png", pngBytes, map[string]string{"provider": "gemini"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("duplicate upload = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var again studio.Sheet
+	decodeInto(t, rec, &again)
+	if again.ID != sheet.ID {
+		t.Fatalf("duplicate id = %q, want %q", again.ID, sheet.ID)
+	}
+
+	if rec := f.uploadFields(base, "bad.png", testPNG(t, 4, 4), map[string]string{"provider": "Not Valid!"}); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("bad provider = %d, want 422", rec.Code)
+	} else if code := errorCode(t, rec); code != "unprocessable" {
+		t.Fatalf("bad provider code = %q", code)
+	}
+	if rec := f.uploadFields(base, "none.png", testPNG(t, 5, 5), nil); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("missing provider = %d, want 422", rec.Code)
+	}
+	if rec := f.uploadFields("/api/v1/admin/designs/"+testResourceID+"/sheets", "x.png", testPNG(t, 6, 6), map[string]string{"provider": "chatgpt"}); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown design upload = %d, want 404", rec.Code)
+	}
+
+	rec = f.get(base)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list sheets = %d", rec.Code)
+	}
+	var listed struct {
+		Items []studio.Sheet `json:"items"`
+	}
+	decodeInto(t, rec, &listed)
+	if len(listed.Items) != 1 || listed.Items[0].ID != sheet.ID {
+		t.Fatalf("sheet list = %+v", listed.Items)
+	}
+
+	rec = f.get(base + "/" + sheet.ID + "/image")
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "image/png" ||
+		rec.Header().Get("Cache-Control") != "no-store" || !bytes.Equal(rec.Body.Bytes(), pngBytes) {
+		t.Fatalf("sheet image = %d %q %q", rec.Code, rec.Header().Get("Content-Type"), rec.Header().Get("Cache-Control"))
+	}
+	if rec := f.get(base + "/" + testResourceID + "/image"); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown sheet image = %d, want 404", rec.Code)
+	}
+
+	// A sheet used by a pack cannot be deleted, and the design keeps its sheets.
+	rec = f.mutate(http.MethodPost, "/api/v1/admin/packs", map[string]any{
+		"slug": "uses-sheet", "name": "Uses", "author": "Tester", "design_id": design.ID, "sheet_id": sheet.ID,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create pack = %d: %s", rec.Code, rec.Body.String())
+	}
+	var pack adminPack
+	decodeInto(t, rec, &pack)
+	if rec := f.mutate(http.MethodDelete, base+"/"+sheet.ID, nil); rec.Code != http.StatusConflict || errorCode(t, rec) != "sheet_in_use" {
+		t.Fatalf("delete used sheet = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := f.mutate(http.MethodDelete, "/api/v1/admin/designs/"+design.ID, nil); rec.Code != http.StatusConflict || errorCode(t, rec) != "design_has_sheets" {
+		t.Fatalf("delete design with sheets = %d %s", rec.Code, rec.Body.String())
+	}
+
+	// Pack JSON carries the sheet and an image route that serves it.
+	rec = f.get("/api/v1/admin/packs/" + pack.ID)
+	detail := decodeMap(t, rec)
+	sheetJSON, _ := detail["sheet"].(map[string]any)
+	if detail["sheet_id"] != sheet.ID || sheetJSON["provider"] != "chatgpt" ||
+		sheetJSON["image_url"] != adminBaseURL+"/api/v1/admin/designs/"+design.ID+"/sheets/"+sheet.ID+"/image" {
+		t.Fatalf("pack sheet json = %v / %v", detail["sheet_id"], sheetJSON)
+	}
+	if _, has := detail["source"]; has {
+		t.Fatal("pack JSON still has source")
+	}
+	designJSON, _ := detail["design"].(map[string]any)
+	if designJSON["id"] != design.ID || designJSON["compiled_prompt"] != design.Prompt || designJSON["compiled_prompt"] == "" {
+		t.Fatalf("pack detail design = %v", designJSON)
+	}
+
+	// Free the sheet, then delete it and the design.
+	if rec := f.mutate(http.MethodDelete, "/api/v1/admin/packs/"+pack.ID, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete pack = %d", rec.Code)
+	}
+	if rec := f.mutate(http.MethodDelete, base+"/"+sheet.ID, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete sheet = %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := f.mutate(http.MethodDelete, "/api/v1/admin/designs/"+design.ID, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete design = %d", rec.Code)
+	}
+}
+
+func TestAdminSheetLimit(t *testing.T) {
+	f := newAdminFixture(t)
+	f.login()
+	design := f.newDesign("Limit")
+	base := "/api/v1/admin/designs/" + design.ID + "/sheets"
+	for i := range studio.MaxSheetsPerDesign {
+		if rec := f.uploadFields(base, "s.png", testPNG(t, 2+i, 2), map[string]string{"provider": "chatgpt"}); rec.Code != http.StatusCreated {
+			t.Fatalf("upload %d = %d: %s", i, rec.Code, rec.Body.String())
+		}
+	}
+	rec := f.uploadFields(base, "s.png", testPNG(t, 99, 2), map[string]string{"provider": "chatgpt"})
+	if rec.Code != http.StatusConflict || errorCode(t, rec) != "sheet_limit" {
+		t.Fatalf("over limit = %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAdminPackRequiresMatchingSheet(t *testing.T) {
+	f := newAdminFixture(t)
+	f.login()
+	draft := seedSheetDraft(t, f.db, f.files, "base", "Base", nil)
+	other := seedSheetDraft(t, f.db, f.files, "other", "Other", nil)
+	body := func(slug, designID, sheetID string) map[string]any {
+		return map[string]any{"slug": slug, "name": "N", "author": "A", "design_id": designID, "sheet_id": sheetID}
+	}
+
+	if rec := f.mutate(http.MethodPost, "/api/v1/admin/packs", map[string]any{"slug": "no-sheet", "name": "N", "author": "A"}); rec.Code != http.StatusUnprocessableEntity || errorCode(t, rec) != "unprocessable" {
+		t.Fatalf("create without sheet = %d %s", rec.Code, rec.Body.String())
+	}
+	rec := f.mutate(http.MethodPost, "/api/v1/admin/packs", body("good", draft.DesignID, draft.SheetID))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d: %s", rec.Code, rec.Body.String())
+	}
+	var pack adminPack
+	decodeInto(t, rec, &pack)
+	if pack.Sheet == nil || pack.Sheet.Provider != "chatgpt" {
+		t.Fatalf("created pack sheet = %+v", pack.Sheet)
+	}
+
+	for name, put := range map[string]map[string]any{
+		"sheet of another design": {"name": "N", "author": "A", "design_id": draft.DesignID, "sheet_id": other.SheetID},
+		"unknown sheet":           {"name": "N", "author": "A", "design_id": draft.DesignID, "sheet_id": testResourceID},
+	} {
+		if rec := f.mutate(http.MethodPut, "/api/v1/admin/packs/"+pack.ID, put); rec.Code != http.StatusUnprocessableEntity || errorCode(t, rec) != "unprocessable" {
+			t.Fatalf("PUT %s = %d %s, want 422 unprocessable", name, rec.Code, rec.Body.String())
+		}
+	}
+	if rec := f.mutate(http.MethodPut, "/api/v1/admin/packs/"+pack.ID, map[string]any{
+		"name": "Renamed", "author": "A", "design_id": draft.DesignID, "sheet_id": draft.SheetID,
+	}); rec.Code != http.StatusOK {
+		t.Fatalf("valid PUT = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	if rec := f.mutate(http.MethodPost, "/api/v1/admin/packs/"+pack.ID+"/source", nil); rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("removed /source route = %d, want 404/405", rec.Code)
 	}
 }
