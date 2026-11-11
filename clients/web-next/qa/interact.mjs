@@ -12,6 +12,11 @@ const results = [];
 const log = (name, ok, note = "") => { results.push({ name, ok, note }); console.log(`${ok ? "PASS" : "FAIL"} ${name} ${note}`); };
 const step = async (name, fn) => { try { const note = await fn(); log(name, true, note ?? ""); } catch (e) { log(name, false, String(e.message).split("\n")[0].slice(0, 160)); } };
 const scenario = (name) => fetch(`${BASE}/__mock/scenario`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) });
+// 1x1 PNG: enough for the mock's image checks, and Playwright sets the file from memory.
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
 
 const browser = await chromium.launch();
 async function ctx(w, h, scheme = "light") {
@@ -48,6 +53,135 @@ await scenario("default");
   await step("packs/new: submitting empty form shows validation", async () => { await p.goto(`${BASE}/packs/new`); await p.waitForLoadState("networkidle"); await p.locator("main form button[type=submit]").first().click(); await p.waitForTimeout(400); await p.screenshot({ path: join(OUT, "pack-new-validation-1440.png") }); });
   await step("pack detail: delete asks confirmation", async () => { await p.goto(`${BASE}/packs/detail?id=pk-draft-1`); await p.waitForLoadState("networkidle"); await p.locator("main button:has-text('Xóa')").first().click(); await p.waitForSelector("dialog[open]"); await p.keyboard.press("Escape"); });
   await step("pack detail ready/revoked render", async () => { for (const id of ["pk-ready-1", "pk-revoked-1"]) { await p.goto(`${BASE}/packs/detail?id=${id}`); await p.waitForLoadState("networkidle"); await p.screenshot({ path: join(OUT, `${id}-1440.png`) }); if (await p.locator("main h1").count() === 0) throw new Error(id + " no heading"); } });
+  await c.close(); }
+
+// 3b. design sheets, sheet-based pack creation, per-key grants
+{ const { c, p } = await ctx(1440, 900); await login(p);
+  await step("factory: upload a design sheet with provider and prompt snapshot", async () => {
+    await p.goto(`${BASE}/factory`); await p.waitForLoadState("networkidle");
+    await p.getByRole("button", { name: /Mèo Mi – chào buổi sáng/ }).first().click();
+    const sheets = p.locator("[data-qa=design-sheets]");
+    await sheets.waitFor();
+    await sheets.locator("[data-qa=sheet-file]").setInputFiles({ name: "qa-sheet.png", mimeType: "image/png", buffer: PNG });
+    await sheets.locator("[data-qa=sheet-provider]").selectOption("gemini");
+    await sheets.locator("[data-qa=sheet-note]").fill("QA lần 1");
+    await sheets.getByRole("button", { name: "Tải sheet lên" }).click();
+    const tile = sheets.locator("[data-qa=sheet-tile][data-provider=gemini]").filter({ hasText: "qa-sheet.png" });
+    await tile.waitFor({ timeout: 5000 });
+    if (!(await tile.innerText()).includes("Gemini")) throw new Error("provider badge missing");
+    await tile.locator("summary").click();
+    if (!(await tile.locator("pre").innerText()).trim()) throw new Error("prompt snapshot empty");
+    await p.screenshot({ path: join(OUT, "factory-sheets-1440.png") });
+  });
+  await step("factory: sheet delete asks confirmation, then removes it", async () => {
+    const tile = p.locator("[data-qa=sheet-tile]").filter({ hasText: "qa-sheet.png" });
+    await tile.getByRole("button", { name: /Xóa qa-sheet\.png/ }).click();
+    await p.waitForSelector("dialog[open]");
+    await p.locator("dialog[open] button:has-text('Hủy')").first().click();
+    await p.waitForSelector("dialog[open]", { state: "detached" });
+    if ((await tile.count()) !== 1) throw new Error("sheet vanished on cancel");
+    await tile.getByRole("button", { name: /Xóa qa-sheet\.png/ }).click();
+    await p.waitForSelector("dialog[open]");
+    await p.locator("dialog[open]").getByRole("button", { name: "Xóa", exact: true }).click();
+    await tile.waitFor({ state: "detached", timeout: 5000 });
+  });
+  await step("packs/new: design panel, required sheet, empty-design hint", async () => {
+    await p.goto(`${BASE}/packs/new`); await p.waitForLoadState("networkidle");
+    const form = p.locator("main form").first();
+    const designSelect = form.getByLabel("Thiết kế đã lưu");
+    await designSelect.selectOption("design-2");
+    const panel = p.locator("[data-qa=design-panel]");
+    await panel.waitFor();
+    const panelText = await panel.innerText();
+    if (!panelText.includes("Gấu Bông ngày Tết")) throw new Error("design name missing");
+    if (!panelText.includes("Nhân vật:")) throw new Error("compiled prompt missing");
+    if ((await p.locator("[data-qa=sheet-option]").count()) < 2) throw new Error("sheet gallery missing");
+    await form.getByLabel("Tên pack").fill("QA sheet pack");
+    await form.getByLabel("Slug").fill("qa-sheet-pack");
+    await form.locator("button[type=submit]").click();
+    const sheetAlert = p.locator("form [role=alert]");
+    await sheetAlert.waitFor();
+    if (!(await sheetAlert.first().innerText()).includes("Chọn một sheet")) throw new Error("no sheet validation");
+    await designSelect.selectOption("design-3");
+    const empty = p.locator("[data-qa=sheet-empty]");
+    await empty.waitFor();
+    if (!(await empty.innerText()).includes("Thiết kế chưa có sheet")) throw new Error("empty-design hint missing");
+    if ((await empty.locator("a[href='/factory']").count()) === 0) throw new Error("design link missing");
+    await designSelect.selectOption("design-2");
+    await p.locator("[data-qa=sheet-option]").first().waitFor();
+    if ((await p.locator("[data-qa=sheet-option][aria-pressed=true]").count()) !== 0) throw new Error("selection not reset on design switch");
+    await p.locator("[data-qa=sheet-option]").first().click();
+    if ((await p.locator("[data-qa=sheet-option][aria-pressed=true]").count()) !== 1) throw new Error("sheet not selected");
+    await form.locator("button[type=submit]").click();
+    await p.waitForURL("**/packs/detail?id=**");
+    await p.waitForLoadState("networkidle");
+    if ((await p.locator("[data-qa=pack-sheet-image]").count()) === 0) throw new Error("pack sheet image missing");
+    if ((await p.locator("[data-qa=design-panel]").count()) === 0) throw new Error("pack design panel missing");
+  });
+  await step("pack detail: change the sheet through PUT", async () => {
+    const before = await p.locator("[data-qa=pack-sheet-image]").getAttribute("src");
+    await p.getByRole("button", { name: "Đổi sheet" }).click();
+    await p.waitForSelector("dialog[open] [data-qa=sheet-picker]");
+    await p.locator("dialog[open] [data-qa=sheet-option][aria-pressed=false]").first().click();
+    await p.locator("dialog[open] button:has-text('Lưu')").click();
+    await p.waitForSelector("dialog[open]", { state: "detached" });
+    await p.waitForTimeout(400);
+    const after = await p.locator("[data-qa=pack-sheet-image]").getAttribute("src");
+    if (after === before) throw new Error("sheet unchanged");
+  });
+  await step("pack detail: sheet change reports a running job", async () => {
+    await p.goto(`${BASE}/packs/detail?id=pk-draft-1`); await p.waitForLoadState("networkidle");
+    await p.getByRole("button", { name: "Đổi sheet" }).click();
+    await p.waitForSelector("dialog[open] [data-qa=sheet-picker]");
+    await p.locator("dialog[open] [data-qa=sheet-option][aria-pressed=false]").first().click();
+    await p.locator("dialog[open] button:has-text('Lưu')").click();
+    const alert = p.locator("dialog[open] [role=alert]");
+    await alert.waitFor();
+    if (!(await alert.first().innerText()).includes("job")) throw new Error("job_active message: " + (await alert.first().innerText()));
+    await p.keyboard.press("Escape");
+  });
+  await step("keys: new key grants packs, reload keeps them, count updates", async () => {
+    await p.goto(`${BASE}/keys`); await p.waitForLoadState("networkidle");
+    await p.getByLabel("Tên khóa").fill("QA grant key");
+    await p.getByRole("button", { name: "Tạo khóa" }).click();
+    let dialog = p.locator("dialog[open]");
+    await dialog.locator("[data-qa=key-pack-access]").waitFor();
+    const options = dialog.locator("[data-qa=key-pack-option]");
+    if ((await options.count()) < 3) throw new Error("packs missing");
+    await options.nth(0).check();
+    await dialog.getByText("Số pack: 1").waitFor();
+    await options.nth(1).check();
+    await dialog.getByText("Số pack: 2").waitFor();
+    await p.screenshot({ path: join(OUT, "keys-access-1440.png") });
+    await p.keyboard.press("Escape");
+    await p.waitForSelector("dialog[open]", { state: "detached" });
+    await p.reload(); await p.waitForLoadState("networkidle");
+    const row = p.locator("tbody tr", { hasText: "QA grant key" }).first();
+    await row.getByRole("button", { name: "Quyền pack" }).click();
+    dialog = p.locator("dialog[open]");
+    await dialog.locator("[data-qa=key-pack-option]:checked").first().waitFor();
+    if ((await dialog.locator("[data-qa=key-pack-option]:checked").count()) !== 2) throw new Error("grants not persisted");
+    await dialog.locator("[data-qa=key-pack-option]:checked").first().uncheck();
+    await dialog.getByText("Số pack: 1").waitFor();
+    await p.keyboard.press("Escape");
+    await p.waitForSelector("dialog[open]", { state: "detached" });
+    await p.waitForTimeout(400);
+    const count = await p.locator("tbody tr", { hasText: "QA grant key" }).first().locator("[data-qa=key-pack-count]").innerText();
+    if (count.trim() !== "1") throw new Error("pack_count=" + count);
+  });
+  await step("keys: rotation carries the granted packs", async () => {
+    await p.locator("tbody tr").first().getByRole("button", { name: "Xoay khóa" }).click();
+    await p.waitForSelector("dialog[open]");
+    await p.locator("dialog[open]").getByRole("button", { name: "Xoay khóa", exact: true }).click();
+    const dialog = p.locator("dialog[open]");
+    await dialog.locator("[data-qa=key-pack-access]").waitFor();
+    await dialog.getByText("Số pack: 1").waitFor();
+    await p.keyboard.press("Escape");
+    await p.waitForSelector("dialog[open]", { state: "detached" });
+    await p.waitForTimeout(400);
+    const count = await p.locator("tbody tr").first().locator("[data-qa=key-pack-count]").innerText();
+    if (count.trim() !== "1") throw new Error("rotated pack_count=" + count);
+  });
   await c.close(); }
 
 // 4. mobile viewport shots (fixed bars) + dark shots

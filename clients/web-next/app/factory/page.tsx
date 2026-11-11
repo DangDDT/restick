@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
 import { AiProviderLinks } from "@/components/ai-provider-links";
+import { DesignSheets } from "@/components/design-sheets";
 import { Icon } from "@/components/icons";
 import {
   Button,
@@ -874,6 +875,12 @@ function Factory() {
                 )}
               </div>
             </Section>
+
+            {state.id && (
+              <Section title={t("sheetsTitle")} hint={t("sheetsHint")}>
+                <DesignSheets designId={state.id} />
+              </Section>
+            )}
           </div>
 
           {/* Desktop: prompt output pinned beside the composition. */}

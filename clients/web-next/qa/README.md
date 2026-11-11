@@ -15,3 +15,10 @@ Test-only: a mock of the admin API + static export, and a screenshot sweep. Not 
 
 ## Interaction / a11y sweep
 `node qa/interact.mjs [baseUrl]` (mock running): login error, ⌘K palette, theme persistence, skip link, key create/confirm, library drawer, validation, pack states, dark + mobile viewport shots, empty/error/slow scenarios, axe-core WCAG 2.x AA on 8 routes x light/dark x 1440/390. Shots go to `docs/redesign/screens/states/`.
+
+Sheets and grants flows in the same sweep:
+- Factory: open a saved design, upload a PNG sheet with provider `gemini` and a note, check the provider badge and the prompt snapshot, cancel then confirm the delete.
+- New pack: pick a design (design panel + sheet gallery), submit is blocked until a sheet is chosen, a design with no sheets shows the upload hint, switching designs drops the selection, then create the pack and check the sheet image and design panel on the detail page.
+- Pack detail: change the sheet through `PUT` and confirm the image changes; a running job reports the `job_active` error.
+- Keys: grant two packs from the one-time created-key dialog, reload and confirm the grants, untick one and confirm `pack_count` in the row, rotate the key and confirm the replacement keeps the grant.
+

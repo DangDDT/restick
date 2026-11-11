@@ -14,3 +14,17 @@ export const AI_PROVIDERS: readonly AiProvider[] = [
   { id: "kling", name: "Kling", url: "https://kling.ai/app", hint: "Thiên về video, có tạo ảnh" },
   { id: "runway", name: "Runway", url: "https://app.runwayml.com", hint: "Thiên về video, có tạo ảnh" },
 ];
+
+const PROVIDER_OTHER = "other";
+
+/** Display label for a stored provider id; unknown ids (e.g. a removed tool) stay raw. */
+export function providerName(id: string): string {
+  if (id === PROVIDER_OTHER) return "Khác";
+  return AI_PROVIDERS.find((provider) => provider.id === id)?.name ?? id;
+}
+
+/** Options for the sheet provider select: the known tools plus the catch-all. */
+export const PROVIDER_OPTIONS: readonly AiProvider[] = [
+  ...AI_PROVIDERS,
+  { id: PROVIDER_OTHER, name: "Khác", url: "", hint: "Công cụ khác" },
+];

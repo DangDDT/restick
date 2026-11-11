@@ -202,13 +202,49 @@ export interface CompiledDesign {
   snapshot: Snapshot;
 }
 
-export interface AdminPackSource {
+// A design sheet is an image generated outside Restick for one design. Immutable:
+// add or delete only. `image_url` is intentionally absent: the list route does
+// not return it and the web builds the admin image route from the two ids.
+export interface Sheet {
   id: string;
+  design_id: string;
+  provider: string;
+  note: string;
+  prompt_snapshot: string;
   filename: string;
+  media_type: string;
+  byte_size: number;
+  width: number;
+  height: number;
   checksum_sha256: string;
+  created_at: string;
+}
+
+export interface SheetList {
+  items: Sheet[];
+}
+
+export interface AdminPackSheet {
+  id: string;
+  provider: string;
+  filename: string;
   width: number;
   height: number;
   byte_size: number;
+  checksum_sha256: string;
+  image_url: string;
+}
+
+// The admin pack detail's design summary: enough to show what the pack is of.
+export interface DesignSummary {
+  id: string;
+  name: string;
+  rows: number;
+  columns: number;
+  outline_width: number;
+  outline_color: string;
+  character_id?: string;
+  compiled_prompt: string;
 }
 
 export type PackStatus = "draft" | "ready" | "revoked";
@@ -227,7 +263,8 @@ export interface AdminPack {
   sticker_count: number;
   checksum_sha256: string;
   thumbnail_url: string;
-  source: AdminPackSource | null;
+  sheet_id: string;
+  sheet: AdminPackSheet | null;
   created_at: string;
   updated_at: string;
 }
@@ -245,6 +282,7 @@ export interface AdminPackSticker {
 }
 
 export interface AdminPackDetail extends AdminPack {
+  design?: DesignSummary;
   stickers: AdminPackSticker[];
   bundle_url: string;
   latest_job?: Job;
@@ -264,6 +302,7 @@ export interface PackCreate {
   description: string;
   tags: string[];
   design_id?: string;
+  sheet_id: string;
 }
 
 export interface PackUpdate {
@@ -272,6 +311,7 @@ export interface PackUpdate {
   description: string;
   tags: string[];
   design_id?: string;
+  sheet_id: string;
 }
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "interrupted";
@@ -299,10 +339,15 @@ export interface Key {
   created_at: string;
   expires_at: string | null;
   disabled_at: string | null;
+  pack_count: number;
 }
 
 export interface KeyList {
   items: Key[];
+}
+
+export interface KeyPacks {
+  pack_ids: string[];
 }
 
 export interface CreatedKey {

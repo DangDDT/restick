@@ -324,12 +324,48 @@ function stickerList(slug, count, names) {
   });
 }
 
+function buildSheets(designs) {
+  const mk = (designId, provider, note, filename, seed, minute) => {
+    const design = designs.find((d) => d.id === designId);
+    const svg = stickerSvg(`${designId}-${seed}`, { bg: true });
+    return {
+      id: `sheet-${seed}`, design_id: designId, provider, note,
+      prompt_snapshot: design?.compiled_prompt ?? "", filename, media_type: "image/svg+xml",
+      byte_size: Buffer.byteLength(svg), width: 512, height: 512,
+      checksum_sha256: sha(svg), created_at: ts(minute), data: Buffer.from(svg),
+    };
+  };
+  return [
+    mk("design-1", "chatgpt", "Bản đầu", "meo-mi-sheet-1.svg", "mi-1", 5),
+    mk("design-1", "gemini", "Nét dày hơn", "meo-mi-sheet-2.svg", "mi-2", 10),
+    mk("design-2", "ideogram", "", "gau-bong-sheet-1.svg", "bong-1", 65),
+    mk("design-2", "gemini", "Đỏ đậm hơn", "gau-bong-sheet-2.svg", "bong-2", 70),
+  ];
+}
+
+function sheetView(sheet) {
+  const { data, ...view } = sheet;
+  return view;
+}
+
+function packSheetView(sheets, id) {
+  const sheet = sheets.find((s) => s.id === id);
+  if (!sheet) return null;
+  return {
+    id: sheet.id, provider: sheet.provider, filename: sheet.filename,
+    width: sheet.width, height: sheet.height, byte_size: sheet.byte_size,
+    checksum_sha256: sheet.checksum_sha256,
+    image_url: `/api/v1/admin/designs/${sheet.design_id}/sheets/${sheet.id}/image`,
+  };
+}
+
 function buildStore() {
   const groups = buildGroups();
   const fragments = buildFragments();
   const characters = buildCharacters();
   const assets = buildAssets();
   const designs = buildDesigns(fragments, groups, characters);
+  const sheets = buildSheets(designs);
 
   const jobs = new Map();
   const mkJob = (o) => {
@@ -341,16 +377,13 @@ function buildStore() {
   mkJob({ id: "job-ok-0", pack_id: "pk-revoked-1", version: 1, status: "succeeded", created_at: ts(300), started_at: ts(300), finished_at: ts(305), result: { stickers: 9 } });
   mkJob({ id: "job-fail-2", pack_id: "pk-revoked-1", version: 2, status: "failed", created_at: ts(700), started_at: ts(700), finished_at: ts(701), error_code: "internal", error_message: "Máy chủ gặp lỗi. Thử lại sau.", diagnostics: "decoder: unexpected EOF" });
 
-  const sourceFor = (filename, seed) => ({
-    id: `src-${seed}`, filename, checksum_sha256: sha(filename), width: 2048, height: 1536, byte_size: 1843200,
-  });
   const packs = [
     {
       id: "pk-draft-1", slug: "meo-mi-vui", name: "Mèo Mi vui nhộn", author: "Restick Studio",
       description: "Bộ sticker Mèo Mi cho các tình huống hằng ngày.", tags: ["mèo", "hằng ngày"],
       design_id: "design-1", status: "draft", current_version: 0, sticker_count: 10,
       checksum_sha256: sha("pk-draft-1"), thumbnail_url: "/mock-assets/packs/meo-mi-vui/thumb.svg",
-      source: sourceFor("sheet-mi.png", "draft"), created_at: ts(0), updated_at: ts(900),
+      sheet_id: "sheet-mi-1", sheet: packSheetView(sheets, "sheet-mi-1"), created_at: ts(0), updated_at: ts(900),
       stickers: stickerList("meo-mi-vui", 10, ["vui", "buồn", "giận", "ngạc-nhiên", "ngại", "yêu", "ngủ", "khóc", "vẫy", "cảm-ơn"]),
     },
     {
@@ -358,7 +391,7 @@ function buildStore() {
       description: "Lời chúc Tết dễ thương với Gấu Bông.", tags: ["tết", "lễ hội", "gấu"],
       design_id: "design-2", status: "ready", current_version: 2, sticker_count: 12,
       checksum_sha256: sha("pk-ready-1"), thumbnail_url: "/mock-assets/packs/gau-bong-tet/thumb.svg",
-      source: sourceFor("sheet-bong.png", "ready"), created_at: ts(100), updated_at: ts(406),
+      sheet_id: "sheet-bong-1", sheet: packSheetView(sheets, "sheet-bong-1"), created_at: ts(100), updated_at: ts(406),
       stickers: stickerList("gau-bong-tet", 12, ["chúc-tết", "lì-xì", "cảm-ơn", "vui", "nhảy", "ôm", "ngủ", "yêu", "bánh-chưng", "pháo", "hoa-mai", "ngạc-nhiên"]),
     },
     {
@@ -366,7 +399,7 @@ function buildStore() {
       description: "Bộ đã thu hồi vì chờ xác nhận quyền.", tags: null,
       design_id: "design-3", status: "revoked", current_version: 1, sticker_count: 9,
       checksum_sha256: sha("pk-revoked-1"), thumbnail_url: "/mock-assets/packs/cun-bo-hoc-duong/thumb.svg",
-      source: sourceFor("sheet-bo.png", "revoked"), created_at: ts(50), updated_at: ts(705),
+      sheet_id: "", sheet: null, created_at: ts(50), updated_at: ts(705),
       stickers: stickerList("cun-bo-hoc-duong", 9, ["đi-học", "chạy", "chỉ", "ngủ", "buồn", "giận", "vui", "bút-chì", "cặp-sách"]),
     },
   ];
@@ -377,7 +410,10 @@ function buildStore() {
     { id: "key-3", name: "Đối tác Zalo", prefix: "rsk_c04e77", active: false, created_at: ts(-2000), expires_at: null, disabled_at: ts(-100) },
   ];
 
-  return { groups, fragments, characters, assets, designs, packs, jobs, keys, sessions: new Set() };
+  return {
+    groups, fragments, characters, assets, designs, sheets, packs, jobs, keys, sessions: new Set(),
+    keyPacks: new Map([["key-1", new Set(["pk-ready-1"])]]),
+  };
 }
 
 // ---------- state ----------
@@ -500,13 +536,26 @@ function packView(p) {
 function packDetail(p) {
   const jobs = [...store.jobs.values()].filter((j) => j.pack_id === p.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const latest = jobs[0];
+  const design = store.designs.find((d) => d.id === p.design_id);
   return {
     ...packView(p),
+    ...(design
+      ? {
+          design: {
+            id: design.id, name: design.name, rows: design.rows, columns: design.columns,
+            outline_width: design.outline_width, outline_color: design.outline_color,
+            character_id: design.character_id, compiled_prompt: design.compiled_prompt,
+          },
+        }
+      : {}),
     stickers: p.stickers,
     bundle_url: p.status === "ready" ? `/mock-assets/packs/${p.slug}/bundle.zip` : "",
     ...(latest ? { latest_job: jobView(latest) } : {}),
   };
 }
+
+// Full grant set for a key, sorted like auth.KeyPacks.
+const grantIds = (keyId) => [...(store.keyPacks.get(keyId) ?? new Set())].sort();
 
 // ---------- API ----------
 
@@ -693,7 +742,68 @@ async function handleApi(req, res, url) {
       return send(res, 200, d);
     }
     if (method === "DELETE") {
+      if (store.sheets.some((s) => s.design_id === d.id)) {
+        return fail(res, 409, "design_has_sheets", "Thiết kế còn sheet nên không xóa được.");
+      }
       store.designs = store.designs.filter((x) => x.id !== d.id);
+      return send(res, 204);
+    }
+  }
+
+  // ----- design sheets -----
+  m = /^\/api\/v1\/admin\/designs\/([^/]+)\/sheets$/.exec(p);
+  if (m) {
+    const design = store.designs.find((x) => x.id === m[1]);
+    if (!design || hidden()) return notFound();
+    if (method === "GET") {
+      const items = store.sheets
+        .filter((s) => s.design_id === design.id)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
+      return send(res, 200, { items: items.map(sheetView) });
+    }
+    if (method === "POST") {
+      const parts = parseMultipart(raw, ct);
+      const file = parts?.file;
+      if (!file) return fail(res, 400, "bad_request", "Thiếu tệp.");
+      const provider = parts.provider?.data.toString("utf8") ?? "";
+      if (!/^[a-z0-9_-]{1,32}$/.test(provider)) return fail(res, 422, "unprocessable", "Provider không hợp lệ.");
+      const type = file.type || "application/octet-stream";
+      if (!["image/png", "image/jpeg", "image/webp"].includes(type)) {
+        return fail(res, 422, "invalid_image", "Ảnh không hợp lệ: chỉ nhận PNG/JPEG/WebP, không animation, tối đa 8 MiB và 4096 px mỗi cạnh.");
+      }
+      const checksum = sha(file.data);
+      const duplicate = store.sheets.find((s) => s.design_id === design.id && s.checksum_sha256 === checksum);
+      if (duplicate) return send(res, 200, sheetView(duplicate));
+      if (store.sheets.filter((s) => s.design_id === design.id).length >= 20) {
+        return fail(res, 409, "sheet_limit", "Thiết kế đã đủ 20 sheet.");
+      }
+      const [width, height] = pngSize(file.data);
+      const sheet = {
+        id: nextId("sheet"), design_id: design.id, provider,
+        note: (parts.note?.data.toString("utf8") ?? "").slice(0, 500),
+        prompt_snapshot: design.compiled_prompt, filename: file.filename || "sheet",
+        media_type: type, byte_size: file.data.length, width, height,
+        checksum_sha256: checksum, created_at: nowIso(), data: file.data,
+      };
+      store.sheets.push(sheet);
+      return send(res, 201, sheetView(sheet));
+    }
+  }
+  m = /^\/api\/v1\/admin\/designs\/([^/]+)\/sheets\/([^/]+)\/image$/.exec(p);
+  if (m && method === "GET") {
+    const sheet = store.sheets.find((s) => s.id === m[2] && s.design_id === m[1]);
+    if (!sheet || hidden()) return notFound();
+    return send(res, 200, sheet.data, { "Content-Type": sheet.media_type });
+  }
+  m = /^\/api\/v1\/admin\/designs\/([^/]+)\/sheets\/([^/]+)$/.exec(p);
+  if (m) {
+    const sheet = store.sheets.find((s) => s.id === m[2] && s.design_id === m[1]);
+    if (!sheet || hidden()) return notFound();
+    if (method === "DELETE") {
+      if (store.packs.some((pk) => pk.sheet_id === sheet.id)) {
+        return fail(res, 409, "sheet_in_use", "Sheet đang được một pack dùng nên không xóa được.");
+      }
+      store.sheets = store.sheets.filter((x) => x.id !== sheet.id);
       return send(res, 204);
     }
   }
@@ -711,8 +821,10 @@ async function handleApi(req, res, url) {
     }
     if (method === "POST") {
       if (!json?.slug || !json?.name) return fail(res, 422, "unprocessable", "Thiếu slug hoặc tên.");
+      const sheet = store.sheets.find((s) => s.id === json.sheet_id && s.design_id === json.design_id);
+      if (!json.design_id || !sheet) return fail(res, 422, "unprocessable", "Sheet phải thuộc thiết kế đã chọn.");
       if (store.packs.some((x) => x.slug === json.slug)) return fail(res, 409, "slug_taken", "Slug này đã được dùng. Chọn slug khác.");
-      const pk = { id: nextId("pk"), slug: json.slug, name: json.name, author: json.author ?? "", description: json.description ?? "", tags: json.tags?.length ? json.tags : null, design_id: json.design_id || undefined, status: "draft", current_version: 0, sticker_count: 0, checksum_sha256: sha(json.slug), thumbnail_url: `/mock-assets/packs/${json.slug}/thumb.svg`, source: null, created_at: nowIso(), updated_at: nowIso(), stickers: [] };
+      const pk = { id: nextId("pk"), slug: json.slug, name: json.name, author: json.author ?? "", description: json.description ?? "", tags: json.tags?.length ? json.tags : null, design_id: json.design_id, status: "draft", current_version: 0, sticker_count: 0, checksum_sha256: sha(json.slug), thumbnail_url: `/mock-assets/packs/${json.slug}/thumb.svg`, sheet_id: sheet.id, sheet: packSheetView(store.sheets, sheet.id), created_at: nowIso(), updated_at: nowIso(), stickers: [] };
       store.packs.unshift(pk);
       return send(res, 201, packView(pk));
     }
@@ -725,7 +837,13 @@ async function handleApi(req, res, url) {
     if (!action) {
       if (method === "GET") return send(res, 200, packDetail(pk));
       if (method === "PUT") {
-        Object.assign(pk, { name: json.name ?? pk.name, author: json.author ?? pk.author, description: json.description ?? "", tags: json.tags?.length ? json.tags : null, design_id: json.design_id || undefined, updated_at: nowIso() });
+        if (pk.status === "revoked") return fail(res, 410, "pack_revoked", "Pack đã bị thu hồi; thao tác này không còn hiệu lực.");
+        const designId = json.design_id ?? pk.design_id;
+        const sheet = store.sheets.find((s) => s.id === json.sheet_id && s.design_id === designId);
+        if (!designId || !sheet) return fail(res, 422, "unprocessable", "Sheet phải thuộc thiết kế đã chọn.");
+        const active = [...store.jobs.values()].some((j) => j.pack_id === pk.id && (j.status === "queued" || j.status === "running"));
+        if (sheet.id !== pk.sheet_id && active) return fail(res, 409, "job_active", "Pack đang có job chạy. Chờ job kết thúc rồi thử lại.");
+        Object.assign(pk, { name: json.name ?? pk.name, author: json.author ?? pk.author, description: json.description ?? "", tags: json.tags?.length ? json.tags : null, design_id: designId, sheet_id: sheet.id, sheet: packSheetView(store.sheets, sheet.id), updated_at: nowIso() });
         return send(res, 200, packView(pk));
       }
       if (method === "DELETE") {
@@ -734,21 +852,12 @@ async function handleApi(req, res, url) {
         return send(res, 204);
       }
     }
-    if (action === "/source" && method === "POST") {
-      const parts = parseMultipart(raw, ct);
-      const file = parts?.file;
-      if (!file) return fail(res, 400, "bad_request", "Thiếu tệp.");
-      const [width, height] = pngSize(file.data);
-      pk.source = { id: nextId("src"), filename: file.filename || "sheet.png", checksum_sha256: sha(file.data), width, height, byte_size: file.data.length };
-      pk.updated_at = nowIso();
-      return send(res, 200, packView(pk));
-    }
     if (action === "/process" && method === "POST") {
       if (pk.status === "revoked") return fail(res, 409, "pack_revoked", "Pack đã bị thu hồi; thao tác này không còn hiệu lực.");
-      if (!pk.source) return fail(res, 409, "source_missing", "Pack chưa có ảnh nguồn. Hãy tải sheet lên trước khi xử lý.");
+      if (!pk.sheet) return fail(res, 422, "source_missing", "Pack chưa có sheet. Chọn sheet cho pack trước khi xử lý.");
       const active = [...store.jobs.values()].some((j) => j.pack_id === pk.id && (j.status === "queued" || j.status === "running"));
       if (active) return fail(res, 409, "job_active", "Pack đang có job chạy. Chờ job kết thúc rồi thử lại.");
-      const job = { id: nextId("job"), pack_id: pk.id, version: pk.current_version + 1, status: "queued", request: { source: pk.source.filename }, result: null, created_at: nowIso(), started_at: null, finished_at: null, static: false };
+      const job = { id: nextId("job"), pack_id: pk.id, version: pk.current_version + 1, status: "queued", request: { source: pk.sheet.filename }, result: null, created_at: nowIso(), started_at: null, finished_at: null, static: false };
       store.jobs.set(job.id, job);
       return send(res, 202, jobView(job));
     }
@@ -774,7 +883,21 @@ async function handleApi(req, res, url) {
       if (!json?.name?.trim()) return fail(res, 422, "unprocessable", "Thiếu tên khóa.");
       const created = newKey(json.name.trim(), json.expires_at ?? null);
       store.keys.unshift(created.key);
+      store.keyPacks.set(created.key.id, new Set());
       return send(res, 201, { id: created.key.id, name: created.key.name, prefix: created.key.prefix, raw: created.raw });
+    }
+  }
+  m = /^\/api\/v1\/admin\/api-keys\/([^/]+)\/packs$/.exec(p);
+  if (m) {
+    const k = store.keys.find((x) => x.id === m[1]);
+    if (!k || hidden()) return notFound();
+    if (method === "GET") return send(res, 200, { pack_ids: grantIds(k.id) });
+    if (method === "PUT") {
+      const ids = Array.isArray(json?.pack_ids) ? [...new Set(json.pack_ids.map(String))] : null;
+      if (!ids) return fail(res, 422, "unprocessable", "pack_ids phải là mảng.");
+      if (ids.some((id) => !store.packs.some((pk) => pk.id === id))) return fail(res, 422, "unprocessable", "Pack không tồn tại.");
+      store.keyPacks.set(k.id, new Set(ids));
+      return send(res, 200, { pack_ids: grantIds(k.id) });
     }
   }
   m = /^\/api\/v1\/admin\/api-keys\/([^/]+)(\/rotate)?$/.exec(p);
@@ -782,9 +905,14 @@ async function handleApi(req, res, url) {
     const k = store.keys.find((x) => x.id === m[1]);
     if (!k || hidden()) return notFound();
     if (m[2] && method === "POST") {
+      // Rotation disables the old row and creates a replacement carrying the grants.
       const fresh = newKey(k.name, k.expires_at);
-      Object.assign(k, { prefix: fresh.key.prefix, active: true, disabled_at: null, created_at: nowIso() });
-      return send(res, 200, { id: k.id, name: k.name, prefix: k.prefix, raw: fresh.raw });
+      const grants = new Set(store.keyPacks.get(k.id) ?? []);
+      k.active = false;
+      k.disabled_at = nowIso();
+      store.keyPacks.set(fresh.key.id, grants);
+      store.keys.unshift(fresh.key);
+      return send(res, 201, { id: fresh.key.id, name: fresh.key.name, prefix: fresh.key.prefix, raw: fresh.raw });
     }
     if (!m[2] && method === "DELETE") {
       k.active = false;
@@ -797,7 +925,7 @@ async function handleApi(req, res, url) {
 }
 
 function keyView(k) {
-  return { id: k.id, name: k.name, prefix: k.prefix, active: k.active, created_at: k.created_at, expires_at: k.expires_at, disabled_at: k.disabled_at };
+  return { id: k.id, name: k.name, prefix: k.prefix, active: k.active, created_at: k.created_at, expires_at: k.expires_at, disabled_at: k.disabled_at, pack_count: (store.keyPacks.get(k.id) ?? new Set()).size };
 }
 
 function newKey(name, expiresAt) {
