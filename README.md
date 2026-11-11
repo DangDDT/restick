@@ -267,9 +267,21 @@ claim that hosted CI ran successfully.
 
 Final integration checks: affected Go module `go test -race -count=1 ./...`
 (11 packages), Python35 tests, Flutter config/downloader13 tests all passed.
-Web lint/static export passed; the unchanged export was served by the actual
-container for browser checks. Dart tests used the CLI fallback after the Dart
-MCP environment reported a standalone-SDK configuration failure.
+Web lint/static export passed. After the final correction wave, the affected
+jobs/HTTP/maintenance/integration race gate and a focused parent run of the new
+revoke-cancellation, latest-job and incompatible-backup regressions passed.
+Dart tests used the CLI fallback after the Dart MCP environment reported a
+standalone-SDK configuration failure.
+
+The corrected image was rebuilt and ran healthy on the owned test mount.
+Focused real-browser checks proved fragment/character A→B and Edit→Create
+isolation, blocked design switching during a delayed save, removal of hidden
+pins, visible logout errors on network/500 failures, explicit401 handling,
+persisted English common labels with Vietnamese fallback, and Vietnamese
+default after clearing the locale preference. Reopening a pack without a job
+query showed its actual processor failure; another tab discovered the next
+attempt while running, then its failure diagnostics. No new application
+JavaScript errors or mobile document overflow were observed in that run.
 
 Recovery fixture: SDK checksum
 `3065839d21c56d9de53358bf26c869a9b1753045bac18dfe3bfca77857a386f2`;
@@ -282,3 +294,26 @@ benchmarks, public-domain TLS or a VPS deployment. The four-shape fixture does
 not substitute for the owner's required real-AI-image acceptance run. Local
 browser checks trusted only the generated test certificate. SwaggerUI loads
 its assets from `unpkg.com` and needs that host reachable in the browser.
+
+### Known nonblocking limits after review
+
+- Pack detail prioritizes the latest persisted attempt over an older `?job=`
+  link. Historical job records remain readable through the owner-only
+  `GET /api/v1/admin/jobs/{id}` API; the studio is not a job-history browser.
+- One source-upload helper sentence still describes the former cross-tab
+  discovery limitation. The actual page now discovers the latest job on entry,
+  including a job started in another tab and its terminal failure diagnostics.
+- The two remaining artistic phrases `c-WEA-01` / `c-TIM-03` mention shadows
+  without explicitly placing them outside the subject. The compiler forbids
+  background shadows, but owner AI-image acceptance must check interpretation.
+  Seed updates never overwrite existing edited fragments or saved snapshots.
+- The legacy standalone image CLI does not have the machine-job endpoint's
+  predecode dimension guard; use trusted local inputs. The HTTP/machine-job
+  processing path is bounded before decode.
+- Nonblocking test/documentation gaps accepted during review: defensive
+  concurrent calls to the single-worker loop and individual SQLite integrity
+  guards lack isolated mutation-discriminating tests; the ZIP rejection helper
+  does not separately inspect newly created directories inside the destination;
+  malformed key-list timestamps and private-reference conditional/range
+  response documentation remain minor limitations. These are not claims of
+  failures observed in the supported workflow.
