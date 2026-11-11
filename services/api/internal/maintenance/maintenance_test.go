@@ -110,10 +110,16 @@ func buildFixture(t *testing.T) fixture {
 		t.Fatalf("RotateKey: %v", err)
 	}
 
-	execSQL(t, db, `INSERT INTO packs (id, slug, name, author, status, current_version,
-		source_id, source_filename, source_checksum_sha256, source_width, source_height, source_byte_size)
-		VALUES (?, 'maintenance-pack', 'Maintenance Pack', 'Tester', 'ready', 1, ?, ?, ?, ?, ?, ?)`,
-		fixturePackID, source.ID, source.Filename, source.ChecksumSHA256, source.Width, source.Height, source.ByteSize)
+	execSQL(t, db, `INSERT INTO designs (id, name, rows, columns, outline_width, outline_color, draft_json, snapshot_json)
+		VALUES ('design-maintenance', 'Maintenance Design', 1, 1, 4, '#ffffff', '{}', '{"schema_version":1}')`)
+	execSQL(t, db, `INSERT INTO design_sheets (id, design_id, provider, prompt_snapshot, filename, media_type,
+		byte_size, width, height, checksum_sha256) VALUES (?, 'design-maintenance', 'gemini', 'prompt', ?, ?, ?, ?, ?, ?)`,
+		source.ID, source.Filename, source.MediaType, source.ByteSize, source.Width, source.Height, source.ChecksumSHA256)
+	execSQL(t, db, `INSERT INTO packs (id, slug, name, author, status, current_version, design_id, sheet_id)
+		VALUES (?, 'maintenance-pack', 'Maintenance Pack', 'Tester', 'ready', 1, 'design-maintenance', ?)`,
+		fixturePackID, source.ID)
+	execSQL(t, db, `INSERT INTO api_key_packs (key_id, pack_id) VALUES (?, ?)`, active.ID, fixturePackID)
+	execSQL(t, db, `INSERT INTO api_key_pack_removals (key_id, pack_id) VALUES (?, ?)`, first.ID, fixturePackID)
 
 	output := filepath.Join(mustWorkDir(t, store), "output")
 	if err := os.MkdirAll(output, 0o755); err != nil {
@@ -511,7 +517,7 @@ func TestRestoreRejectsIncompatibleBackups(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				execSQL(t, db, `INSERT INTO schema_migrations (version, name) VALUES (2, 'future_schema')`)
+				execSQL(t, db, `INSERT INTO schema_migrations (version, name) VALUES (99, 'future_schema')`)
 				if err := db.Close(); err != nil {
 					t.Fatal(err)
 				}
@@ -601,13 +607,13 @@ func TestRestoredFilesMatchDatabase(t *testing.T) {
 		t.Fatalf("sticker row = %s/%s/%s, want %s/%s/%s", objectPath, thumbPath, checksum, f.objectPath, f.thumbPath, f.objectChecksum)
 	}
 
-	var sourceID, sourceChecksum string
-	if err := db.QueryRow(`SELECT source_id, source_checksum_sha256 FROM packs WHERE id = ?`, fixturePackID).
-		Scan(&sourceID, &sourceChecksum); err != nil {
-		t.Fatalf("read pack source: %v", err)
+	var sheetChecksum string
+	if err := db.QueryRow(`SELECT s.checksum_sha256 FROM packs p JOIN design_sheets s ON s.id = p.sheet_id WHERE p.id = ?`, fixturePackID).
+		Scan(&sheetChecksum); err != nil {
+		t.Fatalf("read pack sheet: %v", err)
 	}
-	if sourceChecksum != f.sourceChecksum {
-		t.Fatalf("source checksum = %s, want %s", sourceChecksum, f.sourceChecksum)
+	if sheetChecksum != f.sourceChecksum {
+		t.Fatalf("sheet checksum = %s, want %s", sheetChecksum, f.sourceChecksum)
 	}
 
 	restoredBundle, err := os.ReadFile(filepath.Join(target, filepath.FromSlash(f.bundlePath)))
@@ -685,6 +691,42 @@ func TestRestoreInvalidatesCredentials(t *testing.T) {
 	}
 	if err := service.ValidateSession(ctx, session, now); err != nil {
 		t.Fatalf("new session invalid: %v", err)
+	}
+}
+
+func TestRestoreRejectsMissingSheetFile(t *testing.T) {
+	f := buildFixture(t)
+	out := backupFixture(t, f)
+	if err := os.Remove(filepath.Join(out, filepath.FromSlash(f.sourceRel))); err != nil {
+		t.Fatalf("remove sheet file: %v", err)
+	}
+	editManifest(t, out, func(m *backupManifest) { removeEntry(m, f.sourceRel) })
+	err := Restore(context.Background(), out, filepath.Join(t.TempDir(), "data"), writePassword(t, newPassword))
+	if !errors.Is(err, ErrBackupInvalid) || !strings.Contains(err.Error(), "missing sheet") {
+		t.Fatalf("Restore error = %v, want ErrBackupInvalid for a missing sheet", err)
+	}
+}
+
+func TestRoundTripKeepsGrants(t *testing.T) {
+	ctx := context.Background()
+	f := buildFixture(t)
+	out := backupFixture(t, f)
+	target := filepath.Join(t.TempDir(), "data")
+	if err := Restore(ctx, out, target, writePassword(t, newPassword)); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	db, err := storage.Open(ctx, target)
+	if err != nil {
+		t.Fatalf("open restored database: %v", err)
+	}
+	defer db.Close()
+	var grants, removals, active int
+	if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM api_key_packs), (SELECT COUNT(*) FROM api_key_pack_removals),
+		(SELECT COUNT(*) FROM api_keys WHERE active = 1)`).Scan(&grants, &removals, &active); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if grants != 1 || removals != 1 || active != 0 {
+		t.Fatalf("grants/removals/active keys = %d/%d/%d, want 1/1/0", grants, removals, active)
 	}
 }
 

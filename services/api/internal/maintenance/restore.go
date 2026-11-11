@@ -230,6 +230,7 @@ var requiredTables = []string{
 	"owner", "admin_sessions", "fragment_groups", "fragments", "reference_assets",
 	"characters", "designs", "packs", "pack_tags", "pack_versions", "stickers",
 	"processing_jobs", "api_keys", "pack_tombstones", "seed_versions", "schema_migrations",
+	"design_sheets", "api_key_packs", "api_key_pack_removals",
 }
 
 func validateDatabase(ctx context.Context, db *sql.DB, files map[string]manifestFile) error {
@@ -304,7 +305,7 @@ func checkReferencedFiles(ctx context.Context, db *sql.DB, files map[string]mani
 	if err != nil {
 		return err
 	}
-	if err := checkPackSources(ctx, db, sources); err != nil {
+	if err := checkDesignSheets(ctx, db, sources); err != nil {
 		return err
 	}
 	if err := checkReferenceAssets(ctx, db, sources); err != nil {
@@ -336,33 +337,35 @@ func sourceIndex(files map[string]manifestFile) (map[string]manifestFile, error)
 	return bySource, nil
 }
 
-func checkPackSources(ctx context.Context, db *sql.DB, sources map[string]manifestFile) error {
-	rows, err := db.QueryContext(ctx, `SELECT id, source_id, source_checksum_sha256, source_byte_size FROM packs WHERE source_id IS NOT NULL`)
+// checkDesignSheets validates every uploaded design sheet against
+// sources/<sheet-id>/original.<ext>.
+func checkDesignSheets(ctx context.Context, db *sql.DB, sources map[string]manifestFile) error {
+	rows, err := db.QueryContext(ctx, `SELECT id, checksum_sha256, byte_size FROM design_sheets`)
 	if err != nil {
-		return fmt.Errorf("%w: read pack sources: %v", ErrBackupInvalid, err)
+		return fmt.Errorf("%w: read design sheets: %v", ErrBackupInvalid, err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var (
-			packID, sourceID, checksum string
-			byteSize                   int64
+			sheetID, checksum string
+			byteSize          int64
 		)
-		if err := rows.Scan(&packID, &sourceID, &checksum, &byteSize); err != nil {
-			return fmt.Errorf("%w: read pack sources: %v", ErrBackupInvalid, err)
+		if err := rows.Scan(&sheetID, &checksum, &byteSize); err != nil {
+			return fmt.Errorf("%w: read design sheets: %v", ErrBackupInvalid, err)
 		}
-		entry, ok := sources[sourceID]
+		entry, ok := sources[sheetID]
 		if !ok {
-			return fmt.Errorf("%w: pack %s references missing source %s", ErrBackupInvalid, packID, sourceID)
+			return fmt.Errorf("%w: design sheet %s has missing sheet file", ErrBackupInvalid, sheetID)
 		}
-		if checksum != "" && entry.SHA256 != checksum {
-			return fmt.Errorf("%w: source %s does not match its recorded checksum", ErrBackupInvalid, sourceID)
+		if entry.SHA256 != checksum {
+			return fmt.Errorf("%w: sheet %s does not match its recorded checksum", ErrBackupInvalid, sheetID)
 		}
-		if byteSize > 0 && entry.ByteSize != byteSize {
-			return fmt.Errorf("%w: source %s does not match its recorded size", ErrBackupInvalid, sourceID)
+		if entry.ByteSize != byteSize {
+			return fmt.Errorf("%w: sheet %s does not match its recorded size", ErrBackupInvalid, sheetID)
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("%w: read pack sources: %v", ErrBackupInvalid, err)
+		return fmt.Errorf("%w: read design sheets: %v", ErrBackupInvalid, err)
 	}
 	return nil
 }
