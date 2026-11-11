@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -337,4 +338,45 @@ func TestTimestampTextRejectsOffsetsAndFractions(t *testing.T) {
 	}
 	execSQL(t, db, `INSERT INTO api_keys (id, name, prefix, key_hash) VALUES ('key-null', 'k', 'rsk_', x'01')`)
 	execSQL(t, db, `INSERT INTO api_keys (id, name, prefix, key_hash, expires_at) VALUES ('key-ok', 'k', 'rsk_', x'02', '2026-12-01T00:00:00Z')`)
+}
+
+func TestMigration0002Schema(t *testing.T) {
+	db, _ := openTemp(t)
+
+	for _, table := range []string{"design_sheets", "api_key_packs", "api_key_pack_removals"} {
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&n); err != nil || n != 1 {
+			t.Errorf("table %s missing (n=%d err=%v)", table, n, err)
+		}
+	}
+	has := func(col string) bool {
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('packs') WHERE name = ?`, col).Scan(&n); err != nil {
+			t.Fatalf("table_info: %v", err)
+		}
+		return n == 1
+	}
+	if !has("sheet_id") {
+		t.Error("packs.sheet_id missing")
+	}
+	for _, col := range []string{"source_id", "source_filename", "source_checksum_sha256", "source_width", "source_height", "source_byte_size"} {
+		if has(col) {
+			t.Errorf("packs.%s still present", col)
+		}
+	}
+
+	execSQL(t, db, `INSERT INTO designs (id, name, rows, columns, outline_width, outline_color, draft_json, snapshot_json) VALUES ('d1', 'D', 2, 2, 4, '#FFFFFF', '{}', '{"schema_version":1}')`)
+	const ins = `INSERT INTO design_sheets (id, design_id, provider, prompt_snapshot, filename, media_type, byte_size, width, height, checksum_sha256) VALUES (?, 'd1', ?, 'p', 's.png', 'image/png', 10, 64, 64, ?)`
+	execSQL(t, db, ins, "s1", "chatgpt", checksum)
+	if _, err := db.Exec(ins, "s2", "gemini", checksum); err == nil {
+		t.Error("duplicate (design_id, checksum) accepted")
+	}
+	for _, bad := range []string{"", "Bad", "has space", "0123456789012345678901234567890123"} {
+		if _, err := db.Exec(ins, "s-bad", bad, strings.Repeat("a", 64)); err == nil {
+			t.Errorf("provider %q accepted", bad)
+		}
+	}
+	if _, err := db.Exec(`DELETE FROM designs WHERE id = 'd1'`); err == nil {
+		t.Error("deleting a design with a sheet succeeded")
+	}
 }
