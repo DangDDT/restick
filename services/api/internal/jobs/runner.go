@@ -488,7 +488,7 @@ func (r *Runner) cancelPack(packID string) {
 type enqueueSnapshot struct {
 	status         string
 	designID       sql.NullString
-	sourceID       sql.NullString
+	sourceID       sql.NullString // the pack's design sheet id, which is also its source directory id
 	sourceFilename string
 	sourceChecksum string
 	sourceWidth    int
@@ -515,15 +515,18 @@ func loadEnqueueSnapshot(ctx context.Context, tx *sql.Tx, packID string) (enqueu
 		sourceByteSize sql.NullInt64
 		designID       sql.NullString
 		sourceID       sql.NullString
+		sourceFilename sql.NullString
+		sourceChecksum sql.NullString
 	)
-	err := tx.QueryRowContext(ctx, `SELECT p.status, p.design_id, p.source_id, p.source_filename,
-			p.source_checksum_sha256, p.source_width, p.source_height, p.source_byte_size,
+	err := tx.QueryRowContext(ctx, `SELECT p.status, p.design_id, p.sheet_id, s.filename,
+			s.checksum_sha256, s.width, s.height, s.byte_size,
 			p.slug, p.name, p.author, p.description,
 			d.rows, d.columns, d.outline_width, d.outline_color, d.snapshot_json
 		FROM packs p LEFT JOIN designs d ON d.id = p.design_id
+		LEFT JOIN design_sheets s ON s.id = p.sheet_id
 		WHERE p.id = ?`, packID).Scan(
-		&snapshot.status, &designID, &sourceID, &snapshot.sourceFilename,
-		&snapshot.sourceChecksum, &sourceWidth, &sourceHeight, &sourceByteSize,
+		&snapshot.status, &designID, &sourceID, &sourceFilename,
+		&sourceChecksum, &sourceWidth, &sourceHeight, &sourceByteSize,
 		&snapshot.catalog.Slug, &snapshot.catalog.Name, &snapshot.catalog.Author, &snapshot.catalog.Description,
 		&rows, &columns, &outlineWidth, &outlineColor, &snapshotJSON)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -534,6 +537,8 @@ func loadEnqueueSnapshot(ctx context.Context, tx *sql.Tx, packID string) (enqueu
 	}
 	snapshot.designID = designID
 	snapshot.sourceID = sourceID
+	snapshot.sourceFilename = sourceFilename.String
+	snapshot.sourceChecksum = sourceChecksum.String
 	snapshot.sourceWidth = int(sourceWidth.Int64)
 	snapshot.sourceHeight = int(sourceHeight.Int64)
 	snapshot.sourceByteSize = sourceByteSize.Int64

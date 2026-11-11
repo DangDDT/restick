@@ -84,24 +84,23 @@ func (h *harness) newPack(slug string) (packID, designID, sourceID string) {
 		designID, "Design "+slug, string(snapshotJSON)); err != nil {
 		h.t.Fatalf("insert design: %v", err)
 	}
+	sheet, err := studio.NewService(h.db, h.store).SaveSheet(ctx, designID,
+		bytes.NewReader(encodePNG(h.t, 64, 64)), "sheet.png", "gemini", "")
+	if err != nil {
+		h.t.Fatalf("save sheet: %v", err)
+	}
 	pack, err := h.catalog.Create(ctx, packs.PackDraft{
 		Slug:     slug,
 		Name:     "Pack " + slug,
 		Author:   "Tester",
 		DesignID: designID,
+		SheetID:  sheet.ID,
 		Tags:     []string{"demo"},
 	})
 	if err != nil {
 		h.t.Fatalf("create pack: %v", err)
 	}
-	source, err := h.store.SaveSource(ctx, bytes.NewReader(encodePNG(h.t, 64, 64)), "sheet.png")
-	if err != nil {
-		h.t.Fatalf("save source: %v", err)
-	}
-	if _, err := h.catalog.SetSource(ctx, pack.ID, source); err != nil {
-		h.t.Fatalf("set source: %v", err)
-	}
-	return pack.ID, designID, source.ID
+	return pack.ID, designID, sheet.ID
 }
 
 func encodePNG(t *testing.T, width, height int) []byte {
@@ -235,6 +234,45 @@ func terminal(status Status) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func TestEnqueueUsesSheetSource(t *testing.T) {
+	h := newHarness(t)
+	packID, designID, sheetID := h.newPack("sheet-src")
+	var checksum string
+	if err := h.db.QueryRow(`SELECT checksum_sha256 FROM design_sheets WHERE id = ?`, sheetID).Scan(&checksum); err != nil {
+		t.Fatalf("read sheet: %v", err)
+	}
+	job, err := NewRunner(h.db, h.store, nil, time.Second).Enqueue(context.Background(), packID, sheetID, designID)
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	var raw string
+	if err := h.db.QueryRow(`SELECT request_json FROM processing_jobs WHERE id = ?`, job.ID).Scan(&raw); err != nil {
+		t.Fatalf("read request_json: %v", err)
+	}
+	var request JobRequest
+	if err := json.Unmarshal([]byte(raw), &request); err != nil {
+		t.Fatalf("decode request_json: %v", err)
+	}
+	if request.Source.ID != sheetID || request.Source.ChecksumSHA256 != checksum {
+		t.Fatalf("source = %+v, want id %s checksum %s", request.Source, sheetID, checksum)
+	}
+	if _, err := NewRunner(h.db, h.store, nil, time.Second).Enqueue(context.Background(), packID, uuid.NewString(), designID); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("foreign source err = %v, want ErrInvalid", err)
+	}
+}
+
+func TestEnqueueWithoutSheetReturnsErrNoSource(t *testing.T) {
+	h := newHarness(t)
+	packID, designID, _ := h.newPack("no-sheet")
+	if _, err := h.db.Exec(`UPDATE packs SET sheet_id = NULL WHERE id = ?`, packID); err != nil {
+		t.Fatalf("clear sheet: %v", err)
+	}
+	_, err := NewRunner(h.db, h.store, nil, time.Second).Enqueue(context.Background(), packID, "", designID)
+	if !errors.Is(err, ErrNoSource) {
+		t.Fatalf("err = %v, want ErrNoSource", err)
 	}
 }
 
