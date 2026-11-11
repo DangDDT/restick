@@ -35,6 +35,7 @@ type Metadata struct {
 	Description string
 	Tags        []string
 	DesignID    string
+	SheetID     string
 }
 
 // PackDraft creates a new pack. Slug is permanent and case-insensitively
@@ -46,12 +47,14 @@ type PackDraft struct {
 	Description string
 	Tags        []string
 	DesignID    string
+	SheetID     string
 }
 
-// PackSource is the persisted upload currently attached to a pack. The ID is
-// the assets source directory id, never a client supplied path.
-type PackSource struct {
+// PackSheet is the design sheet a pack is cut from. ID is also the sources/
+// directory name, never a client supplied path.
+type PackSheet struct {
 	ID             string
+	Provider       string
 	Filename       string
 	ChecksumSHA256 string
 	Width          int
@@ -74,7 +77,8 @@ type Pack struct {
 	StickerCount   int
 	ChecksumSHA256 string
 	ThumbnailPath  string
-	Source         *PackSource
+	SheetID        string
+	Sheet          *PackSheet
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

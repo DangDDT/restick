@@ -64,9 +64,9 @@ func processedVersion(packID, jobID string, version, count int) ProcessedVersion
 // runningJob inserts a job row the publication transaction can commit.
 func runningJob(t *testing.T, db *sql.DB, service *Service, slug string, version int) (string, string) {
 	t.Helper()
-	pack, err := service.Create(context.Background(), PackDraft{
+	pack, err := service.Create(context.Background(), sheeted(t, db, PackDraft{
 		Slug: slug, Name: "Pack " + slug, Author: "Tester",
-	})
+	}))
 	if err != nil {
 		t.Fatalf("create pack: %v", err)
 	}

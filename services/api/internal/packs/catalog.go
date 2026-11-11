@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/eykh/restick/api_svc/internal/assets"
 	"github.com/google/uuid"
 )
 
@@ -18,11 +17,12 @@ const timestampLayout = "2006-01-02T15:04:05Z"
 
 const packColumns = `p.id, p.slug, p.name, p.author, p.description, p.design_id,
 	p.status, p.current_version,
-	p.source_id, p.source_filename, p.source_checksum_sha256, p.source_width, p.source_height, p.source_byte_size,
+	p.sheet_id, s.provider, s.filename, s.checksum_sha256, s.width, s.height, s.byte_size,
 	p.created_at, p.updated_at,
 	COALESCE(v.sticker_count, 0), COALESCE(v.checksum_sha256, ''), COALESCE(v.thumbnail_path, '')`
 
 const packFrom = ` FROM packs p
+	LEFT JOIN design_sheets s ON s.id = p.sheet_id
 	LEFT JOIN pack_versions v ON v.pack_id = p.id AND v.version = p.current_version`
 
 var (
@@ -52,6 +52,7 @@ func (s *Service) Create(ctx context.Context, draft PackDraft) (Pack, error) {
 		Description: draft.Description,
 		Tags:        draft.Tags,
 		DesignID:    draft.DesignID,
+		SheetID:     draft.SheetID,
 	})
 	if err != nil {
 		return Pack{}, err
@@ -64,6 +65,9 @@ func (s *Service) Create(ctx context.Context, draft PackDraft) (Pack, error) {
 	}
 	defer tx.Rollback()
 
+	if err := requireSheet(ctx, tx, metadata); err != nil {
+		return Pack{}, err
+	}
 	var exists int
 	switch err := tx.QueryRowContext(ctx, `SELECT 1 FROM packs WHERE slug = ?`, slug).Scan(&exists); {
 	case err == nil:
@@ -71,9 +75,9 @@ func (s *Service) Create(ctx context.Context, draft PackDraft) (Pack, error) {
 	case !errors.Is(err, sql.ErrNoRows):
 		return Pack{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO packs (id, slug, name, author, description, design_id)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		id, slug, metadata.Name, metadata.Author, metadata.Description, nullable(metadata.DesignID)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO packs (id, slug, name, author, description, design_id, sheet_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		id, slug, metadata.Name, metadata.Author, metadata.Description, metadata.DesignID, metadata.SheetID); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: packs.slug") {
 			return Pack{}, ErrSlugTaken
 		}
@@ -111,10 +115,28 @@ func (s *Service) UpdateCatalog(ctx context.Context, id string, metadata Metadat
 	if status == StatusRevoked {
 		return Pack{}, ErrRevoked
 	}
+	if err := requireSheet(ctx, tx, normalized); err != nil {
+		return Pack{}, err
+	}
+	// Changing the sheet mid-run would desync the queued job's source.
+	var changed int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM packs WHERE id = ? AND sheet_id IS NOT ?`,
+		id, normalized.SheetID).Scan(&changed); err != nil {
+		return Pack{}, err
+	}
+	if changed > 0 {
+		active, err := hasActiveJob(ctx, tx, id)
+		if err != nil {
+			return Pack{}, err
+		}
+		if active {
+			return Pack{}, ErrJobActive
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE packs
-		SET name = ?, author = ?, description = ?, design_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+		SET name = ?, author = ?, description = ?, design_id = ?, sheet_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 		WHERE id = ?`,
-		normalized.Name, normalized.Author, normalized.Description, nullable(normalized.DesignID), id); err != nil {
+		normalized.Name, normalized.Author, normalized.Description, normalized.DesignID, normalized.SheetID, id); err != nil {
 		return Pack{}, fmt.Errorf("packs: update catalog: %w", err)
 	}
 	if err := replaceTags(ctx, tx, id, normalized.Tags); err != nil {
@@ -126,55 +148,15 @@ func (s *Service) UpdateCatalog(ctx context.Context, id string, metadata Metadat
 	return s.Get(ctx, id)
 }
 
-// SetSource attaches a persisted upload for the next processing run. Earlier
-// source files stay on disk; committed versions keep their own snapshot.
-func (s *Service) SetSource(ctx context.Context, id string, source assets.Source) (Pack, error) {
-	if !isUUID(id) {
-		return Pack{}, ErrNotFound
+// requireSheet checks the sheet exists and belongs to the pack's design.
+func requireSheet(ctx context.Context, tx *sql.Tx, m Metadata) error {
+	var ok int
+	err := tx.QueryRowContext(ctx, `SELECT 1 FROM design_sheets WHERE id = ? AND design_id = ?`,
+		m.SheetID, m.DesignID).Scan(&ok)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: sheet does not belong to the design", ErrInvalid)
 	}
-	switch {
-	case !isUUID(source.ID):
-		return Pack{}, fmt.Errorf("%w: invalid source id", ErrInvalid)
-	case strings.TrimSpace(source.Filename) == "":
-		return Pack{}, fmt.Errorf("%w: source filename is required", ErrInvalid)
-	case !checksumPattern.MatchString(source.ChecksumSHA256):
-		return Pack{}, fmt.Errorf("%w: invalid source checksum", ErrInvalid)
-	case source.Width < 1 || source.Height < 1 || source.ByteSize < 1:
-		return Pack{}, fmt.Errorf("%w: invalid source size", ErrInvalid)
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Pack{}, err
-	}
-	defer tx.Rollback()
-
-	status, err := packStatus(ctx, tx, id)
-	if err != nil {
-		return Pack{}, err
-	}
-	if status == StatusRevoked {
-		return Pack{}, ErrRevoked
-	}
-	active, err := hasActiveJob(ctx, tx, id)
-	if err != nil {
-		return Pack{}, err
-	}
-	if active {
-		return Pack{}, ErrJobActive
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE packs SET
-		source_id = ?, source_filename = ?, source_checksum_sha256 = ?,
-		source_width = ?, source_height = ?, source_byte_size = ?,
-		updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-		WHERE id = ?`,
-		source.ID, source.Filename, source.ChecksumSHA256,
-		source.Width, source.Height, source.ByteSize, id); err != nil {
-		return Pack{}, fmt.Errorf("packs: set source: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return Pack{}, err
-	}
-	return s.Get(ctx, id)
+	return err
 }
 
 // ListReady returns ready packs ordered by updated_at descending, then id.
@@ -329,19 +311,20 @@ func scanPack(row scanner) (Pack, error) {
 	var (
 		item          Pack
 		designID      sql.NullString
-		sourceID      sql.NullString
-		sourceFile    sql.NullString
-		sourceSum     sql.NullString
-		sourceWidth   sql.NullInt64
-		sourceHeight  sql.NullInt64
-		sourceSize    sql.NullInt64
+		sheetID       sql.NullString
+		provider      sql.NullString
+		sheetFile     sql.NullString
+		sheetSum      sql.NullString
+		sheetWidth    sql.NullInt64
+		sheetHeight   sql.NullInt64
+		sheetSize     sql.NullInt64
 		status        string
 		createdAtText string
 		updatedAtText string
 	)
 	if err := row.Scan(&item.ID, &item.Slug, &item.Name, &item.Author, &item.Description, &designID,
 		&status, &item.CurrentVersion,
-		&sourceID, &sourceFile, &sourceSum, &sourceWidth, &sourceHeight, &sourceSize,
+		&sheetID, &provider, &sheetFile, &sheetSum, &sheetWidth, &sheetHeight, &sheetSize,
 		&createdAtText, &updatedAtText,
 		&item.StickerCount, &item.ChecksumSHA256, &item.ThumbnailPath); err != nil {
 		return Pack{}, err
@@ -350,14 +333,16 @@ func scanPack(row scanner) (Pack, error) {
 	item.Status = Status(status)
 	item.CreatedAt = parseTimestamp(createdAtText)
 	item.UpdatedAt = parseTimestamp(updatedAtText)
-	if sourceID.Valid {
-		item.Source = &PackSource{
-			ID:             sourceID.String,
-			Filename:       sourceFile.String,
-			ChecksumSHA256: sourceSum.String,
-			Width:          int(sourceWidth.Int64),
-			Height:         int(sourceHeight.Int64),
-			ByteSize:       sourceSize.Int64,
+	item.SheetID = sheetID.String
+	if sheetID.Valid && provider.Valid {
+		item.Sheet = &PackSheet{
+			ID:             sheetID.String,
+			Provider:       provider.String,
+			Filename:       sheetFile.String,
+			ChecksumSHA256: sheetSum.String,
+			Width:          int(sheetWidth.Int64),
+			Height:         int(sheetHeight.Int64),
+			ByteSize:       sheetSize.Int64,
 		}
 	}
 	return item, nil
@@ -473,13 +458,16 @@ func normalizeMetadata(metadata Metadata) (Metadata, error) {
 	metadata.Author = strings.TrimSpace(metadata.Author)
 	metadata.Description = strings.TrimSpace(metadata.Description)
 	metadata.DesignID = strings.TrimSpace(metadata.DesignID)
+	metadata.SheetID = strings.TrimSpace(metadata.SheetID)
 	switch {
 	case metadata.Name == "" || metadata.Author == "":
 		return Metadata{}, fmt.Errorf("%w: name and author are required", ErrInvalid)
 	case len(metadata.Name) > 200 || len(metadata.Author) > 200 || len(metadata.Description) > 4000:
 		return Metadata{}, fmt.Errorf("%w: metadata is too long", ErrInvalid)
-	case metadata.DesignID != "" && !isUUID(metadata.DesignID):
-		return Metadata{}, fmt.Errorf("%w: invalid design id", ErrInvalid)
+	case !isUUID(metadata.DesignID):
+		return Metadata{}, fmt.Errorf("%w: a design is required", ErrInvalid)
+	case !isUUID(metadata.SheetID):
+		return Metadata{}, fmt.Errorf("%w: a design sheet is required", ErrInvalid)
 	}
 	tags := make([]string, 0, len(metadata.Tags))
 	seen := make(map[string]struct{}, len(metadata.Tags))
@@ -515,13 +503,6 @@ func normalizePage(page, size int) (int, int) {
 		size = 100
 	}
 	return page, size
-}
-
-func nullable(value string) any {
-	if value == "" {
-		return nil
-	}
-	return value
 }
 
 func isUUID(value string) bool {
