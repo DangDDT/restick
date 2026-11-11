@@ -42,6 +42,38 @@ func (a *admin) rotateKey(w http.ResponseWriter, r *http.Request) {
 	publicJSON(w, http.StatusCreated, key)
 }
 
+func (a *admin) keyPacks(w http.ResponseWriter, r *http.Request) {
+	ids, err := a.auth.KeyPacks(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeKeyError(w, err)
+		return
+	}
+	writePackIDs(w, ids)
+}
+
+func (a *admin) setKeyPacks(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		PackIDs []string `json:"pack_ids"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	id := r.PathValue("id")
+	if err := a.auth.SetKeyPacks(r.Context(), id, body.PackIDs); err != nil {
+		writeKeyError(w, err)
+		return
+	}
+	a.keyPacks(w, r)
+}
+
+// writePackIDs renders the grant set; an empty set is [], never null.
+func writePackIDs(w http.ResponseWriter, ids []string) {
+	if ids == nil {
+		ids = []string{}
+	}
+	publicJSON(w, http.StatusOK, map[string]any{"pack_ids": ids})
+}
+
 func (a *admin) disableKey(w http.ResponseWriter, r *http.Request) {
 	if err := a.auth.DisableKey(r.Context(), r.PathValue("id")); err != nil {
 		writeKeyError(w, err)

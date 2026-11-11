@@ -371,6 +371,7 @@ func adminUnsafeRoutes(t *testing.T) []adminRouteCase {
 		{http.MethodPost, "/api/v1/admin/api-keys", jsonBody(`{"name":"stolen"}`), jsonContentType},
 		{http.MethodPost, "/api/v1/admin/api-keys/" + id + "/rotate", nil, ""},
 		{http.MethodDelete, "/api/v1/admin/api-keys/" + id, nil, ""},
+		{http.MethodPut, "/api/v1/admin/api-keys/" + id + "/packs", jsonBody(`{"pack_ids":[]}`), jsonContentType},
 		{http.MethodDelete, "/api/v1/admin/session", nil, ""},
 	}
 }
@@ -392,6 +393,7 @@ func adminReadRoutes() []adminRouteCase {
 		{http.MethodGet, "/api/v1/admin/packs/" + id, nil, ""},
 		{http.MethodGet, "/api/v1/admin/jobs/" + id, nil, ""},
 		{http.MethodGet, "/api/v1/admin/api-keys", nil, ""},
+		{http.MethodGet, "/api/v1/admin/api-keys/" + id + "/packs", nil, ""},
 	}
 }
 
@@ -1473,5 +1475,102 @@ func TestAdminPackRequiresMatchingSheet(t *testing.T) {
 
 	if rec := f.mutate(http.MethodPost, "/api/v1/admin/packs/"+pack.ID+"/source", nil); rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("removed /source route = %d, want 404/405", rec.Code)
+	}
+}
+
+func TestAdminKeyPackGrants(t *testing.T) {
+	f := newAdminFixture(t)
+	f.login()
+	a, b := f.readyPack("alpha"), f.readyPack("beta")
+	rec := f.mutate(http.MethodPost, "/api/v1/admin/api-keys", map[string]any{"name": "grants"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create key = %d", rec.Code)
+	}
+	var key auth.CreatedKey
+	decodeInto(t, rec, &key)
+	url := "/api/v1/admin/api-keys/" + key.ID + "/packs"
+	grants := func(target string) []string {
+		t.Helper()
+		rec := f.get(target)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d %s", target, rec.Code, rec.Body.String())
+		}
+		var out struct {
+			PackIDs []string `json:"pack_ids"`
+		}
+		decodeInto(t, rec, &out)
+		if out.PackIDs == nil {
+			t.Fatalf("pack_ids is null in %s", rec.Body.String())
+		}
+		return out.PackIDs
+	}
+
+	if got := grants(url); len(got) != 0 || !strings.Contains(f.get(url).Body.String(), `"pack_ids":[]`) {
+		t.Fatalf("initial grants = %v", got)
+	}
+	if rec := f.mutate(http.MethodPut, url, map[string]any{"pack_ids": []string{a.ID, b.ID, a.ID}}); rec.Code != http.StatusOK {
+		t.Fatalf("PUT = %d %s", rec.Code, rec.Body.String())
+	}
+	if got := grants(url); len(got) != 2 {
+		t.Fatalf("grants after PUT = %v", got)
+	}
+
+	// list shows pack_count
+	var listed struct {
+		Items []struct {
+			ID        string `json:"id"`
+			PackCount int    `json:"pack_count"`
+		} `json:"items"`
+	}
+	decodeInto(t, f.get("/api/v1/admin/api-keys"), &listed)
+	if len(listed.Items) != 1 || listed.Items[0].PackCount != 2 {
+		t.Fatalf("listed = %+v", listed.Items)
+	}
+
+	// unknown pack: 422, set unchanged
+	rec = f.mutate(http.MethodPut, url, map[string]any{"pack_ids": []string{a.ID, testResourceID}})
+	if rec.Code != http.StatusUnprocessableEntity || errorCode(t, rec) != "unprocessable" {
+		t.Fatalf("unknown pack = %d %s", rec.Code, rec.Body.String())
+	}
+	if got := grants(url); len(got) != 2 {
+		t.Fatalf("grants changed after failed PUT: %v", got)
+	}
+
+	// unknown key: 404
+	if rec := f.get("/api/v1/admin/api-keys/" + testResourceID + "/packs"); rec.Code != http.StatusNotFound {
+		t.Fatalf("GET unknown key = %d", rec.Code)
+	}
+	if rec := f.mutate(http.MethodPut, "/api/v1/admin/api-keys/"+testResourceID+"/packs", map[string]any{"pack_ids": []string{}}); rec.Code != http.StatusNotFound {
+		t.Fatalf("PUT unknown key = %d", rec.Code)
+	}
+
+	// Origin required
+	headers := f.adminHeaders()
+	delete(headers, adminOriginKey)
+	body, _ := json.Marshal(map[string]any{"pack_ids": []string{}})
+	if rec := f.request(http.MethodPut, url, body, headers); rec.Code != http.StatusForbidden {
+		t.Fatalf("PUT without Origin = %d, want 403", rec.Code)
+	}
+	if got := grants(url); len(got) != 2 {
+		t.Fatalf("grants changed by rejected PUT: %v", got)
+	}
+
+	// client API key is not an admin credential
+	if rec := f.request(http.MethodGet, url, nil, map[string]string{"X-Api-Key": key.Raw}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("client key GET = %d, want 401", rec.Code)
+	}
+	if rec := f.request(http.MethodPut, url, body, map[string]string{"X-Api-Key": key.Raw, adminOriginKey: adminBaseURL, "Content-Type": jsonContentType}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("client key PUT = %d, want 401", rec.Code)
+	}
+
+	// rotate carries grants to the new key
+	rec = f.mutate(http.MethodPost, "/api/v1/admin/api-keys/"+key.ID+"/rotate", nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("rotate = %d", rec.Code)
+	}
+	var rotated auth.CreatedKey
+	decodeInto(t, rec, &rotated)
+	if got := grants("/api/v1/admin/api-keys/" + rotated.ID + "/packs"); len(got) != 2 {
+		t.Fatalf("rotated key grants = %v", got)
 	}
 }

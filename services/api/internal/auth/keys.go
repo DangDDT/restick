@@ -175,12 +175,14 @@ type Key struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	ExpiresAt  *time.Time `json:"expires_at"`
 	DisabledAt *time.Time `json:"disabled_at"`
+	PackCount  int        `json:"pack_count"`
 }
 
 // ListKeys returns every key newest first; only metadata, never key_hash.
 func (s *Service) ListKeys(ctx context.Context) ([]Key, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, prefix, active, created_at, expires_at, disabled_at
+		`SELECT id, name, prefix, active, created_at, expires_at, disabled_at,
+		(SELECT COUNT(*) FROM api_key_packs WHERE key_id = api_keys.id)
 		FROM api_keys ORDER BY created_at DESC, id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("auth: list api keys: %w", err)
@@ -195,7 +197,7 @@ func (s *Service) ListKeys(ctx context.Context) ([]Key, error) {
 			createdAt             string
 			expiresAt, disabledAt sql.NullString
 		)
-		if err := rows.Scan(&key.ID, &key.Name, &key.Prefix, &active, &createdAt, &expiresAt, &disabledAt); err != nil {
+		if err := rows.Scan(&key.ID, &key.Name, &key.Prefix, &active, &createdAt, &expiresAt, &disabledAt, &key.PackCount); err != nil {
 			return nil, fmt.Errorf("auth: scan api key: %w", err)
 		}
 		key.Active = active == 1

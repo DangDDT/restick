@@ -98,6 +98,8 @@ func (a *admin) mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/admin/api-keys", a.ownerOnly(a.createKey))
 	mux.HandleFunc("POST /api/v1/admin/api-keys/{id}/rotate", a.ownerOnly(a.rotateKey))
 	mux.HandleFunc("DELETE /api/v1/admin/api-keys/{id}", a.ownerOnly(a.disableKey))
+	mux.HandleFunc("GET /api/v1/admin/api-keys/{id}/packs", a.sessionOnly(a.keyPacks))
+	mux.HandleFunc("PUT /api/v1/admin/api-keys/{id}/packs", a.ownerOnly(a.setKeyPacks))
 }
 
 // sessionOnly rejects anything without a valid owner session cookie. API keys
@@ -450,6 +452,8 @@ func writeKeyError(w http.ResponseWriter, err error) {
 		publicError(w, http.StatusNotFound, "not_found", "api key not found")
 	case errors.Is(err, auth.ErrEmptyKeyName):
 		publicError(w, http.StatusUnprocessableEntity, "unprocessable", "key name must not be empty")
+	case errors.Is(err, auth.ErrUnknownPack):
+		publicError(w, http.StatusUnprocessableEntity, "unprocessable", "unknown pack id")
 	default:
 		publicError(w, http.StatusInternalServerError, "internal", "could not complete request")
 	}
