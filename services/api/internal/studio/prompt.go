@@ -419,7 +419,7 @@ func layoutRules(rows, columns int, hasLabels bool) string {
 	b.WriteString("- Draw each sticker as one connected shape with a clear closed contour, thick even lines and flat colours. No gradients, glow, texture or soft shadows. A prop or small context element must stay attached to the sticker's subject.\n")
 	fmt.Fprintf(&b, "- Exactly %d stickers: do not add, merge, duplicate or leave out any.\n", total)
 	if hasLabels {
-		b.WriteString("- Do not draw grid lines, frames, numbers, captions, watermarks or signatures.\n")
+		b.WriteString("- Do not draw grid lines, frames, cell numbering, unrequested lettering, watermarks or signatures. Allow every requested label character, including digits.\n")
 	} else {
 		b.WriteString("- Do not draw grid lines, frames, numbers, text, captions, watermarks or signatures.\n")
 	}

@@ -415,6 +415,72 @@ func TestMixedLabelsRemainExplicit(t *testing.T) {
 	}
 }
 
+func TestNumericLabelsCompileAndSave(t *testing.T) {
+	service, _ := newTestService(t)
+	ctx := context.Background()
+	const label = "Chúc mừng 2026"
+	const unlabeledDescription = "a bowl of pho with fresh herbs"
+	draft := decodeDraft(t, `{
+		"name": "Bộ chúc mừng",
+		"rows": 1, "columns": 2, "outline_width": 4,
+		"cells": [
+			{"free_text": "a celebration with confetti", "label": "Chúc mừng 2026"},
+			{"free_text": "a bowl of pho with fresh herbs"}
+		]
+	}`)
+
+	compiled, err := service.Compile(ctx, draft)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	saved, err := service.SaveDesign(ctx, draft)
+	if err != nil {
+		t.Fatalf("SaveDesign: %v", err)
+	}
+	stored, err := service.GetDesign(ctx, saved.ID)
+	if err != nil {
+		t.Fatalf("GetDesign: %v", err)
+	}
+	want := []string{label, ""}
+	for name, got := range map[string][]string{
+		"compiled snapshot": snapshotLabels(t, compiled.Snapshot),
+		"stored snapshot":   snapshotLabels(t, stored.Snapshot),
+		"stored draft":      draftLabels(t, stored.Draft),
+	} {
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s labels = %#v, want %#v", name, got, want)
+		}
+	}
+	for name, prompt := range map[string]string{"compiled": compiled.Text, "stored": stored.Prompt} {
+		if !strings.Contains(prompt, strconv.Quote(label)) {
+			t.Errorf("%s prompt lost the exact numeric Vietnamese label %q:\n%s", name, label, prompt)
+		}
+		rule := strings.ToLower(lineContaining(t, prompt, "grid lines"))
+		if strings.Contains(rule, ", numbers,") {
+			t.Errorf("%s prompt categorically prohibits numbers despite the requested label: %s", name, rule)
+		}
+		if !strings.Contains(rule, "allow") || !strings.Contains(rule, "label") || !strings.Contains(rule, "digits") {
+			t.Errorf("%s prompt must explicitly allow requested label characters including digits: %s", name, rule)
+		}
+		if !strings.Contains(rule, "cell numbering") || !strings.Contains(rule, "unrequested lettering") {
+			t.Errorf("%s prompt must prohibit cell numbering and unrequested lettering: %s", name, rule)
+		}
+		if neighbor := lineContaining(t, prompt, unlabeledDescription); !strings.Contains(strings.ToLower(neighbor), "no text") {
+			t.Errorf("%s prompt allows lettering on the unlabeled neighbor: %s", name, neighbor)
+		}
+	}
+
+	draft.Cells[0].Label = ""
+	unlabeled, err := service.Compile(ctx, draft)
+	if err != nil {
+		t.Fatalf("Compile without labels: %v", err)
+	}
+	rule := strings.ToLower(lineContaining(t, unlabeled.Text, "grid lines"))
+	if !strings.Contains(rule, "numbers") || !strings.Contains(rule, "text") {
+		t.Errorf("unlabeled sheet lost its blanket number/text prohibition: %s", rule)
+	}
+}
+
 func TestLabelOnlyCellRejected(t *testing.T) {
 	service, _ := newTestService(t)
 	ctx := context.Background()

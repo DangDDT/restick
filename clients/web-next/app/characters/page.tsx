@@ -85,6 +85,7 @@ function CharacterForm({
 
   // Sequential: successes stay in the gallery even when a later file fails.
   async function upload(files: FileList | null) {
+    if (save.isPending) return;
     const selected = files ? Array.from(files) : [];
     if (selected.length === 0) return;
     setUploading({ done: 0, total: selected.length });
@@ -109,7 +110,7 @@ function CharacterForm({
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (uploading) return;
+    if (save.isPending || uploading) return;
     if (!name.trim()) {
       setNameError(t("nameRequired"));
       return;
@@ -127,7 +128,8 @@ function CharacterForm({
 
   return (
     <Dialog title={character ? t("edit") : t("newCharacter")} onClose={onClose} variant="drawer">
-      <form onSubmit={submit} className="space-y-4" noValidate>
+      <form onSubmit={submit} noValidate>
+        <fieldset disabled={save.isPending} className="space-y-4">
         {error && <ErrorBanner message={error} />}
 
         <Field label={t("characterName")} error={nameError}>
@@ -285,6 +287,7 @@ function CharacterForm({
             {save.isPending ? t("saving") : t("save")}
           </Button>
         </div>
+        </fieldset>
       </form>
     </Dialog>
   );

@@ -46,6 +46,8 @@ the profile and explicitly choose one of its images (even if only one exists).
 Changing/removing the character clears that choice. Compile and Save require
 current membership; Suggest can run before an image is selected and preserves
 references, labels and authored text.
+The character form is disabled while Save is pending, including reference removal
+and file selection; Save is unavailable until reference uploads finish.
 
 The prompt and reference shown below it are one frozen compilation snapshot.
 Changing the editor to image B does not replace image A beneath an older prompt;
@@ -60,7 +62,9 @@ Each cell's drawing description can name a different subject. For example, a
 1×3 food set can use separate dish descriptions and the exact optional labels
 “Bún bò Huế”, “Phở Hà Nội”, “Bánh xèo miền Tây”. Empty labels mean no lettering;
 a label alone is not a drawing description. Labels keep Unicode and internal
-whitespace. The external agent draws both art and lettering as one connected
+whitespace, including requested digits (for example, “Chúc mừng 2026”). Cell
+numbering and unrequested lettering remain prohibited. The external agent draws
+both art and lettering as one connected
 shape (for example on an attached ribbon); inspect spelling/diacritics and
 regenerate if needed. Restick adds no typography engine and cannot guarantee
 AI lettering. Palette cards expose all four colors before selection; palettes
