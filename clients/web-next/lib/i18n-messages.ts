@@ -189,6 +189,17 @@ export const vi = {
   referenceHint:
     "Ảnh tham chiếu không tự gửi cho AI. Khi dùng công cụ AI bên ngoài, hãy đính kèm ảnh bằng tay.",
   referenceMissing: "Chưa có ảnh tham chiếu.",
+  referenceImageCount: "ảnh",
+  referenceGallery: "Ảnh tham chiếu đã tải",
+  referenceGalleryHint:
+    "Tải lần lượt từng ảnh. Ảnh đã tải xong vẫn giữ nếu tệp sau lỗi; bỏ ảnh chỉ đổi hồ sơ sau khi lưu.",
+  referenceView: "Xem ảnh",
+  referenceRemove: "Bỏ ảnh khỏi hồ sơ",
+  referenceUploadFailed: "Tệp tải lỗi:",
+  characterPrompt: "Prompt tạo nhân vật",
+  characterPromptHint:
+    "Prompt tiếng Anh chỉ đọc, cập nhật theo nội dung form. Sao chép rồi dán vào công cụ tạo ảnh; Restick không tự tạo ảnh và không tự gửi ảnh tham chiếu.",
+  copyCharacterPrompt: "Sao chép prompt",
   noCharacters: "Chưa có nhân vật nào.",
   characterArchiveConfirm: "Lưu trữ nhân vật này? Thiết kế đã lưu vẫn giữ snapshot cũ.",
   characterArchived: "Đã lưu trữ nhân vật.",

@@ -4,22 +4,27 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
+import { ReferencePreview } from "@/components/reference-preview";
 import {
   ArtFrame,
   Button,
   ConfirmDialog,
+  CopyButton,
   Dialog,
   EmptyState,
   ErrorBanner,
   Field,
+  IconButton,
   PageHeader,
   SkeletonRows,
   SuccessBanner,
   WarnBanner,
+  cx,
   inputClass,
   selectClass,
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { buildCharacterPrompt } from "@/lib/character-prompt";
 import { formatDate } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import type {
@@ -29,21 +34,6 @@ import type {
   FragmentPage,
   ReferenceAsset,
 } from "@/lib/types";
-
-function ReferencePreview({ assetId, className }: { assetId: string; className?: string }) {
-  const { t } = useI18n();
-  return (
-    <ArtFrame className={className}>
-      {/* The private route answers only with the session cookie; no key in the URL. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/api/v1/admin/reference-assets/${assetId}`}
-        alt={t("referenceImage")}
-        className="h-full w-full object-contain"
-      />
-    </ArtFrame>
-  );
-}
 
 function CharacterForm({
   character,
@@ -57,15 +47,16 @@ function CharacterForm({
   const { t } = useI18n();
   const qc = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   const [name, setName] = useState(character?.name ?? "");
   const [description, setDescription] = useState(character?.description ?? "");
   const [identityNotes, setIdentityNotes] = useState(character?.identity_notes ?? "");
   const [rightsNotes, setRightsNotes] = useState(character?.rights_notes ?? "");
-  const [assetId, setAssetId] = useState(character?.reference_asset_id ?? "");
-  const [asset, setAsset] = useState<ReferenceAsset | null>(null);
+  const [assetIds, setAssetIds] = useState<string[]>(character?.reference_asset_ids ?? []);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [nameError, setNameError] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState<{ done: number; total: number } | null>(null);
   const [identityFragmentId, setIdentityFragmentId] = useState("");
   const identityFragments = useInfiniteQuery({
     queryKey: ["character-identity-fragments"],
@@ -77,6 +68,7 @@ function CharacterForm({
       lastPage.page * lastPage.page_size < lastPage.total ? lastPage.page + 1 : undefined,
   });
   const identityChoices = identityFragments.data?.pages.flatMap((page) => page.items) ?? [];
+  const prompt = buildCharacterPrompt({ name, description, identity_notes: identityNotes });
 
   const save = useMutation({
     mutationFn: (body: CharacterDraft) =>
@@ -91,26 +83,33 @@ function CharacterForm({
     onError: (err) => setError(errorText(err)),
   });
 
-  async function upload(file: File | undefined) {
-    if (!file) return;
-    setUploading(true);
+  // Sequential: successes stay in the gallery even when a later file fails.
+  async function upload(files: FileList | null) {
+    const selected = files ? Array.from(files) : [];
+    if (selected.length === 0) return;
+    setUploading({ done: 0, total: selected.length });
+    setUploadErrors([]);
     setError(null);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const created = await api<ReferenceAsset>("/api/v1/admin/reference-assets", { form });
-      setAsset(created);
-      setAssetId(created.id);
-      if (fileInput.current) fileInput.current.value = "";
-    } catch (err) {
-      setError(errorText(err));
-    } finally {
-      setUploading(false);
+    const failed: string[] = [];
+    for (const [index, file] of selected.entries()) {
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const created = await api<ReferenceAsset>("/api/v1/admin/reference-assets", { form });
+        setAssetIds((current) => (current.includes(created.id) ? current : [...current, created.id]));
+      } catch (err) {
+        failed.push(`${file.name} (${errorText(err)})`);
+      }
+      setUploading({ done: index + 1, total: selected.length });
     }
+    setUploading(null);
+    setUploadErrors(failed);
+    if (fileInput.current) fileInput.current.value = "";
   }
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (uploading) return;
     if (!name.trim()) {
       setNameError(t("nameRequired"));
       return;
@@ -122,7 +121,7 @@ function CharacterForm({
       description: description.trim(),
       identity_notes: identityNotes.trim(),
       rights_notes: rightsNotes.trim(),
-      reference_asset_id: assetId,
+      reference_asset_ids: assetIds,
     });
   }
 
@@ -205,44 +204,84 @@ function CharacterForm({
         </Field>
 
         <fieldset className="space-y-3 border-t border-line pt-4">
-          <legend className="mb-2 text-[13px] font-medium text-ink">{t("referenceImage")}</legend>
+          <legend className="mb-2 text-[13px] font-medium text-ink">
+            {t("referenceImage")}
+            <span className="mono ml-2 text-[11px] font-normal text-ink-3">
+              {assetIds.length} {t("referenceImageCount")}
+            </span>
+          </legend>
           <WarnBanner message={t("referenceHint")} />
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-            {assetId ? (
-              <ReferencePreview assetId={assetId} className="size-40 shrink-0" />
-            ) : (
-              <ArtFrame className="size-40 shrink-0">
-                <span className="px-3 text-center text-xs text-ink-2">{t("referenceMissing")}</span>
-              </ArtFrame>
-            )}
-            <div className="min-w-0 flex-1 space-y-2">
-              <span className="block text-[13px] text-ink-2">{t("referenceUpload")}</span>
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(e) => void upload(e.target.files?.[0])}
-                aria-label={t("referenceUpload")}
-                disabled={uploading}
-                className="block w-full text-sm text-ink-2 file:mr-3 file:min-h-9 file:cursor-pointer file:rounded-ctl file:border file:border-line-strong file:bg-panel file:px-3 file:text-sm file:font-medium file:text-ink hover:file:bg-sunk disabled:opacity-45 max-md:file:min-h-11"
-              />
-              <p role="status" aria-live="polite" className="text-xs text-ink-2">
-                {uploading
-                  ? t("uploading")
-                  : asset
-                    ? `${asset.filename} · ${asset.width}×${asset.height}`
-                    : ""}
-              </p>
-              {asset && <p className="text-xs font-medium text-ok">{t("referenceUploaded")}</p>}
-            </div>
-          </div>
+          <p className="text-xs text-ink-2">{t("referenceGalleryHint")}</p>
+          {assetIds.length > 0 ? (
+            <ul aria-label={t("referenceGallery")} className="flex flex-wrap gap-3">
+              {assetIds.map((id, index) => (
+                <li key={id} className="relative">
+                  <a
+                    href={`/api/v1/admin/reference-assets/${id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`${t("referenceView")} ${index + 1}`}
+                    className="block rounded-[6px]"
+                  >
+                    <ReferencePreview
+                      assetId={id}
+                      alt={`${t("referenceImage")} ${index + 1}`}
+                      className="size-28"
+                    />
+                  </a>
+                  <IconButton
+                    icon="close"
+                    label={`${t("referenceRemove")} ${index + 1}`}
+                    variant="secondary"
+                    onClick={() => setAssetIds((current) => current.filter((item) => item !== id))}
+                    className="absolute -right-2 -top-2 shadow"
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ArtFrame className="size-28">
+              <span className="px-3 text-center text-xs text-ink-2">{t("referenceMissing")}</span>
+            </ArtFrame>
+          )}
+          <span className="block text-[13px] text-ink-2">{t("referenceUpload")}</span>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            onChange={(e) => void upload(e.target.files)}
+            aria-label={t("referenceUpload")}
+            disabled={uploading !== null}
+            className="block w-full text-sm text-ink-2 file:mr-3 file:min-h-9 file:cursor-pointer file:rounded-ctl file:border file:border-line-strong file:bg-panel file:px-3 file:text-sm file:font-medium file:text-ink hover:file:bg-sunk disabled:opacity-45 max-md:file:min-h-11"
+          />
+          <p role="status" aria-live="polite" className="text-xs text-ink-2">
+            {uploading ? `${t("uploading")} ${uploading.done}/${uploading.total}` : ""}
+          </p>
+          {uploadErrors.length > 0 && (
+            <ErrorBanner message={`${t("referenceUploadFailed")} ${uploadErrors.join("; ")}`} />
+          )}
+        </fieldset>
+
+        <fieldset className="space-y-3 border-t border-line pt-4">
+          <legend className="mb-2 text-[13px] font-medium text-ink">{t("characterPrompt")}</legend>
+          <p className="text-xs text-ink-2">{t("characterPromptHint")}</p>
+          <textarea
+            ref={promptRef}
+            readOnly
+            value={prompt}
+            rows={10}
+            aria-label={t("characterPrompt")}
+            className={cx(inputClass, "mono text-xs leading-5")}
+          />
+          <CopyButton text={prompt} selectRef={promptRef} label={t("copyCharacterPrompt")} />
         </fieldset>
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
           <Button variant="secondary" onClick={onClose} disabled={save.isPending}>
             {t("cancel")}
           </Button>
-          <Button type="submit" loading={save.isPending} disabled={uploading}>
+          <Button type="submit" loading={save.isPending} disabled={uploading !== null}>
             {save.isPending ? t("saving") : t("save")}
           </Button>
         </div>
@@ -322,8 +361,8 @@ function Characters() {
           <ul aria-label={t("charactersTitle")} className="divide-y divide-line border-y border-line">
             {characters.data.items.map((character) => (
               <li key={character.id} className="flex flex-col gap-4 py-4 sm:flex-row sm:items-start">
-                {character.reference_asset_id ? (
-                  <ReferencePreview assetId={character.reference_asset_id} className="size-20 shrink-0" />
+                {character.reference_asset_ids.length > 0 ? (
+                  <ReferencePreview assetId={character.reference_asset_ids[0]} className="size-20 shrink-0" />
                 ) : (
                   <ArtFrame className="size-20 shrink-0">
                     <span className="px-2 text-center text-[11px] leading-4 text-ink-2">{t("referenceMissing")}</span>
@@ -332,6 +371,9 @@ function Characters() {
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                     <h3 className="min-w-0 break-words text-sm font-semibold text-ink">{character.name}</h3>
+                    <span className="mono text-[11px] text-ink-3">
+                      {character.reference_asset_ids.length} {t("referenceImageCount")}
+                    </span>
                     <span className="mono text-[11px] text-ink-3">
                       {t("updatedAt")} {formatDate(character.updated_at)}
                     </span>
