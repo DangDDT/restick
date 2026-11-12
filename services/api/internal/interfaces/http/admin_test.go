@@ -1010,7 +1010,7 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 	decodeInto(t, rec, &reference)
 
 	rec = f.mutate(http.MethodPost, "/api/v1/admin/characters", map[string]any{
-		"name": "Mèo Mun", "description": "black cat", "identity_notes": "white whiskers",
+		"name": "Mèo Mun", "description": "black cat", "identity_notes": "white whiskers; " + fragment.Prompt,
 		"reference_asset_id": reference.ID,
 	})
 	if rec.Code != http.StatusCreated {
@@ -1025,11 +1025,22 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 		t.Fatalf("get character = %d", rec.Code)
 	}
 
+	for _, path := range []string{"/api/v1/admin/designs/compile", "/api/v1/admin/designs", "/api/v1/admin/designs/suggest"} {
+		rejected := f.mutate(http.MethodPost, path, map[string]any{
+			"name": "Conflicting identity", "rows": 1, "columns": 1,
+			"cells":        []map[string]any{{"action": "wave"}},
+			"fragment_ids": []string{fragment.ID}, "character_id": character.ID,
+		})
+		if rejected.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("%s with character and identity fragment = %d: %s", path, rejected.Code, rejected.Body.String())
+		}
+	}
+
 	// Designs: omitted outline_width binds to the 4 px default, an explicit 0
 	// keeps meaning "no outline", and the compiled prompt proves it downstream.
 	rec = f.mutate(http.MethodPost, "/api/v1/admin/designs/compile", map[string]any{
 		"rows": 1, "columns": 1, "cells": []map[string]any{{"action": "wave"}},
-		"fragment_ids": []string{fragment.ID}, "character_id": character.ID, "outline_color": "#FFFFFF",
+		"character_id": character.ID, "outline_color": "#FFFFFF",
 	})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("compile default = %d: %s", rec.Code, rec.Body.String())
@@ -1063,7 +1074,7 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 
 	rec = f.mutate(http.MethodPost, "/api/v1/admin/designs", map[string]any{
 		"name": "Design A", "rows": 1, "columns": 1, "cells": []map[string]any{{"action": "wave"}},
-		"character_id": character.ID, "fragment_ids": []string{fragment.ID},
+		"character_id": character.ID,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("save design = %d: %s", rec.Code, rec.Body.String())

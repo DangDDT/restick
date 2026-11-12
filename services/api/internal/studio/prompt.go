@@ -42,6 +42,9 @@ func (s *Service) Compile(ctx context.Context, draft Draft) (CompiledPrompt, err
 	if err != nil {
 		return CompiledPrompt{}, err
 	}
+	if err := validateCharacterIdentity(draft.CharacterID, fragments); err != nil {
+		return CompiledPrompt{}, err
+	}
 	groups, err := s.groupMap(ctx, fragments)
 	if err != nil {
 		return CompiledPrompt{}, err
@@ -116,6 +119,18 @@ func (s *Service) Compile(ctx context.Context, draft Draft) (CompiledPrompt, err
 	return CompiledPrompt{Text: renderPrompt(draft, snapshot), Snapshot: snapshot}, nil
 }
 
+func validateCharacterIdentity(characterID string, fragments map[string]Fragment) error {
+	if characterID == "" {
+		return nil
+	}
+	for _, fragment := range fragments {
+		if fragment.Scope == ScopeIdentity {
+			return fmt.Errorf("%w: character profile owns identity; remove identity fragment %q from the design", ErrInvalid, fragment.Name)
+		}
+	}
+	return nil
+}
+
 // Suggest re-draws the unpinned selections of the participating groups. Pinned
 // selections, free text, cell content and every non-selection field are left
 // exactly as they were.
@@ -128,8 +143,20 @@ func (s *Service) Suggest(ctx context.Context, draft Draft, rng *rand.Rand) (Dra
 	topLevel := make([]string, 0, len(draft.FragmentIDs)+len(draft.PinnedFragmentIDs))
 	topLevel = append(topLevel, draft.FragmentIDs...)
 	topLevel = append(topLevel, draft.PinnedFragmentIDs...)
+	selectionIDs := topLevel
+	if draft.CharacterID != "" {
+		for _, cell := range draft.Cells {
+			topLevel = append(topLevel, cell.FragmentIDs...)
+		}
+		if draft.PaletteID != "" {
+			topLevel = append(topLevel, draft.PaletteID)
+		}
+	}
 	known, err := s.loadFragments(ctx, topLevel)
 	if err != nil {
+		return Draft{}, err
+	}
+	if err := validateCharacterIdentity(draft.CharacterID, known); err != nil {
 		return Draft{}, err
 	}
 	pinned := map[string]bool{}
@@ -147,15 +174,17 @@ func (s *Service) Suggest(ctx context.Context, draft Draft, rng *rand.Rand) (Dra
 		}
 		participating[id] = true
 	}
-	for id := range known {
-		participating[known[id].GroupID] = true
+	for _, id := range selectionIDs {
+		if fragment, ok := known[id]; ok {
+			participating[fragment.GroupID] = true
+		}
 	}
 
 	groupOrder, err := s.loadGroups(ctx, keys(participating))
 	if err != nil {
 		return Draft{}, err
 	}
-	candidates, err := s.candidates(ctx, keys(participating))
+	candidates, err := s.candidates(ctx, keys(participating), draft.CharacterID != "")
 	if err != nil {
 		return Draft{}, err
 	}
@@ -458,7 +487,7 @@ func selectionsFor(ids []string, fragments map[string]Fragment, groups map[strin
 }
 
 // candidates returns the selectable fragments of each group by group id.
-func (s *Service) candidates(ctx context.Context, groupIDs []string) (map[string][]string, error) {
+func (s *Service) candidates(ctx context.Context, groupIDs []string, excludeIdentity bool) (map[string][]string, error) {
 	pool := make(map[string][]string, len(groupIDs))
 	if len(groupIDs) == 0 {
 		return pool, nil
@@ -468,8 +497,13 @@ func (s *Service) candidates(ctx context.Context, groupIDs []string) (map[string
 	for index, id := range groupIDs {
 		args[index] = id
 	}
+	scopeFilter := ""
+	if excludeIdentity {
+		scopeFilter = " AND scope != ?"
+		args = append(args, ScopeIdentity)
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT id, group_id FROM fragments
-		WHERE archived_at IS NULL AND group_id IN (`+placeholders+`) ORDER BY group_id, name, id`, args...)
+		WHERE archived_at IS NULL AND group_id IN (`+placeholders+`)`+scopeFilter+` ORDER BY group_id, name, id`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("studio: list candidates: %w", err)
 	}

@@ -1395,70 +1395,70 @@
    "id": "vn-char-01",
    "name": "Sen Con",
    "description": "A tiny lotus-bud sprite with a round pink bud as a hat, a soft cream face, two small green leaf arms and short stubby legs.",
-   "identity_notes": "Pink lotus bud hat with three visible petals on top; small black dot eyes; rosy round cheeks; two green leaf hands; same proportions on every sticker.",
+   "identity_notes": "Pink lotus bud hat with three visible petals on top; small black dot eyes; rosy round cheeks; two green leaf hands; same proportions on every sticker. a tapered brush line, thin at the ends; completely flat colour with no shading.",
    "rights_notes": "Nhân vật gốc của Restick, không dựa trên nhân vật có bản quyền."
   },
   {
    "id": "vn-char-02",
    "name": "Trâu Con",
    "description": "A round chubby water buffalo calf with short swept-back horns, a grey body and a light belly, smiling softly.",
-   "identity_notes": "Short swept-back horns; a small red cloth tied around the neck; a white tuft on the forehead; round belly; same colours on every sticker.",
+   "identity_notes": "Short swept-back horns; a small red cloth tied around the neck; a white tuft on the forehead; round belly; same colours on every sticker. a uniform ink line of constant weight.",
    "rights_notes": "Nhân vật gốc của Restick."
   },
   {
    "id": "vn-char-03",
    "name": "Tô Phở",
    "description": "A walking bowl of phở with a tiny face on the broth, a green onion tuft on top and chopsticks for arms.",
-   "identity_notes": "A white bowl with a thin blue rim; a green onion tuft on top; wooden chopsticks as arms; small steam curl above; face stays on the broth.",
+   "identity_notes": "A white bowl with a thin blue rim; a green onion tuft on top; wooden chopsticks as arms; small steam curl above; face stays on the broth. a uniform ink line of constant weight.",
    "rights_notes": "Nhân vật gốc của Restick."
   },
   {
    "id": "vn-char-04",
    "name": "Ổ Bánh Mì",
    "description": "A cheerful baguette character with a golden crust, a smiling face and visible pickled filling at one end.",
-   "identity_notes": "A golden brown crust with diagonal slashes; a cheerful smile; green cilantro and orange pickled carrot peeking out one end; same size and shape on every sticker.",
+   "identity_notes": "A golden brown crust with diagonal slashes; a cheerful smile; green cilantro and orange pickled carrot peeking out one end; same size and shape on every sticker. a uniform ink line of constant weight.",
    "rights_notes": "Nhân vật gốc của Restick."
   },
   {
    "id": "vn-char-05",
    "name": "Nón Lá",
    "description": "A small child hidden under an oversized conical hat, with only a wide smile and rosy cheeks visible.",
-   "identity_notes": "A large woven conical hat that covers the eyes; a wide smile and rosy cheeks; a red silk chin strap; a plain cream tunic.",
+   "identity_notes": "A large woven conical hat that covers the eyes; a wide smile and rosy cheeks; a red silk chin strap; a plain cream tunic. a uniform ink line of constant weight.",
    "rights_notes": "Nhân vật gốc của Restick."
   },
   {
    "id": "vn-char-06",
    "name": "Rồng Con",
    "description": "A baby Vietnamese dragon with a soft sage-green body, a small golden mane and gentle S-curved posture, no wings.",
-   "identity_notes": "Sage-green scales; golden mane tuft; two small curved horns; gentle S-curve body; round dark eyes; no wings and no claws.",
+   "identity_notes": "Sage-green scales; golden mane tuft; two small curved horns; gentle S-curve body; round dark eyes; no wings and no claws. a uniform ink line of constant weight; two-step cel shading.",
    "rights_notes": "Nhân vật gốc của Restick, dựa trên hình tượng rồng Việt chung."
   },
   {
    "id": "vn-char-07",
    "name": "Mèo Mướp",
    "description": "A tabby cat with brown-orange stripes, a white chest and a small red and white checkered scarf.",
-   "identity_notes": "Brown-orange tabby stripes; a white chest; a red and white checkered scarf; short tail; half-closed sleepy eyes.",
+   "identity_notes": "Brown-orange tabby stripes; a white chest; a red and white checkered scarf; short tail; half-closed sleepy eyes. a uniform ink line of constant weight.",
    "rights_notes": "Nhân vật gốc của Restick."
   },
   {
    "id": "vn-char-08",
    "name": "Cá Chép Nhí",
    "description": "A plump orange carp with big round eyes, long whiskers, translucent fins and a small tail.",
-   "identity_notes": "Plump orange body; two long thin whiskers; translucent fins; a small white spot on the forehead; big round eyes.",
+   "identity_notes": "Plump orange body; two long thin whiskers; translucent fins; a small white spot on the forehead; big round eyes. a uniform ink line of constant weight; two-step cel shading.",
    "rights_notes": "Nhân vật gốc của Restick."
   },
   {
    "id": "vn-char-09",
    "name": "Cậu Cóc",
    "description": "A round green toad with warty skin, wide mouth, a tiny straw hat and a calm confident expression.",
-   "identity_notes": "A green round body with warty bumps; a small straw hat; a wide calm mouth; gold ringed eyes; upright seated posture.",
+   "identity_notes": "A green round body with warty bumps; a small straw hat; a wide calm mouth; gold ringed eyes; upright seated posture. a uniform ink line of constant weight.",
    "rights_notes": "Nhân vật gốc của Restick, lấy cảm hứng từ truyện dân gian."
   },
   {
    "id": "vn-char-10",
    "name": "Chú Phin",
    "description": "A small steel phin coffee filter with tiny arms and legs, a lid hat and a drop of coffee on its head.",
-   "identity_notes": "Steel phin body with a lid as a hat; a single drop of dark coffee on top; thin arms and legs; two small dot eyes; a round body.",
+   "identity_notes": "Steel phin body with a lid as a hat; a single drop of dark coffee on top; thin arms and legs; two small dot eyes; a round body. a uniform ink line of constant weight.",
    "rights_notes": "Nhân vật gốc của Restick."
   }
  ],
@@ -1474,9 +1474,7 @@
    "fragment_ids": [
     "vn-festival-01",
     "vn-festival-04",
-    "vn-food-07",
-    "v-d11-001",
-    "v-d12-003"
+    "vn-food-07"
    ],
    "palette_id": "p-vn-02",
    "free_text": "Chúc Tết sticker pack for Vietnamese Lunar New Year.",
@@ -1538,9 +1536,7 @@
    ],
    "fragment_ids": [
     "vn-festival-09",
-    "vn-festival-10",
-    "v-d11-001",
-    "v-d12-003"
+    "vn-festival-10"
    ],
    "palette_id": "p-vn-05",
    "free_text": "Mid-Autumn Festival with carp lantern and mooncakes.",
@@ -1597,8 +1593,7 @@
    ],
    "fragment_ids": [
     "vn-food-01",
-    "vn-food-18",
-    "v-d11-001"
+    "vn-food-18"
    ],
    "palette_id": "p-vn-02",
    "free_text": "Street food mood sticker pack about phở morning routine.",
@@ -1665,8 +1660,7 @@
    "fragment_ids": [
     "vn-food-05",
     "vn-food-06",
-    "vn-life-02",
-    "v-d11-001"
+    "vn-life-02"
    ],
    "palette_id": "p-001",
    "free_text": "Morning coffee sticker pack for friends and colleagues.",
@@ -1729,8 +1723,7 @@
     "vn-chat"
    ],
    "fragment_ids": [
-    "vn-food-02",
-    "v-d11-001"
+    "vn-food-02"
    ],
    "palette_id": "p-vn-02",
    "free_text": "Office reactions sticker pack.",
@@ -1805,8 +1798,7 @@
    "fragment_ids": [
     "vn-nature-09",
     "vn-nature-08",
-    "vn-animal-07",
-    "v-d11-001"
+    "vn-animal-07"
    ],
    "palette_id": "p-007",
    "free_text": "Countryside summer day sticker pack.",
@@ -1867,8 +1859,7 @@
    "fragment_ids": [
     "vn-place-06",
     "vn-costume-02",
-    "vn-festival-12",
-    "v-d11-001"
+    "vn-festival-12"
    ],
    "palette_id": "p-vn-05",
    "free_text": "Hội An lantern town sticker pack.",
@@ -1930,9 +1921,7 @@
    ],
    "fragment_ids": [
     "vn-nature-01",
-    "vn-nature-09",
-    "v-d11-002",
-    "v-d12-001"
+    "vn-nature-09"
    ],
    "palette_id": "p-vn-01",
    "free_text": "Lotus summer sticker pack.",
@@ -1989,8 +1978,7 @@
    ],
    "fragment_ids": [
     "vn-life-06",
-    "vn-life-12",
-    "v-d11-001"
+    "vn-life-12"
    ],
    "palette_id": "p-vn-05",
    "free_text": "Morning market and neighbourhood life sticker pack.",
@@ -2046,8 +2034,7 @@
    ],
    "fragment_ids": [
     "vn-animal-06",
-    "vn-life-08",
-    "v-d11-001"
+    "vn-life-08"
    ],
    "palette_id": "p-vn-04",
    "free_text": "Rainy season sticker pack with a toad bringing rain.",

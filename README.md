@@ -26,6 +26,16 @@ editor. Replacing a fragment selection clears its old pin; removing a group
 removes its pins. A failed logout leaves the studio authenticated and displays
 the failure rather than claiming the session ended.
 
+Character identity is authored once in `/characters`: choose an identity-scoped
+fragment and use **Thêm vào nhận diện** to copy its prompt into the editable
+identity notes. Later fragment edits or archival never update that profile.
+When a design selects a character, its profile is the sole identity source:
+identity fragments are unavailable in the pack/cell pickers and suggestions,
+and compile/save/suggest reject conflicting fragment references. Existing saved
+prompts remain readable and unchanged; editing a conflicting old design requires
+explicitly removing its identity fragments after preserving any wanted features
+in the character profile. Designs without a character can still use identity fragments.
+
 The design is in
 [`docs/specs/2026-11-10-single-operator-sticker-factory-design.md`](docs/specs/2026-11-10-single-operator-sticker-factory-design.md).
 

@@ -19,6 +19,7 @@ import {
   Section,
   Skeleton,
   SuccessBanner,
+  WarnBanner,
   checkClass,
   cx,
   inputClass,
@@ -287,8 +288,16 @@ function Factory() {
 
   const fragmentsById = new Map((fragments.data ?? []).map((f) => [f.id, f]));
   const groupsById = new Map((groups.data?.items ?? []).map((g) => [g.id, g]));
+  const identityConflictIds = state.characterId ? Array.from(new Set([
+    ...Object.values(state.selections),
+    ...state.pinned,
+    ...state.cells.flatMap((cell) => cell.fragment_ids),
+    state.paletteId,
+  ])).filter((id) => fragmentsById.get(id)?.scope === "identity") : [];
+  const hasIdentityConflict = identityConflictIds.length > 0;
   const palettes = (fragments.data ?? []).filter(
-    (f) => f.colors && (!f.archived || f.id === state.paletteId),
+    (f) => f.colors && (!f.archived || f.id === state.paletteId) &&
+      (!state.characterId || f.scope !== "identity" || f.id === state.paletteId),
   );
   const charactersById = new Map((characters.data?.items ?? []).map((c) => [c.id, c]));
   const selectedPalette = state.paletteId ? fragmentsById.get(state.paletteId) : undefined;
@@ -386,6 +395,21 @@ function Factory() {
     });
   }
 
+  function removeIdentityFragments() {
+    const identityIds = new Set(identityConflictIds);
+    setState((current) => ({
+      ...current,
+      selections: Object.fromEntries(Object.entries(current.selections).filter(([, id]) => !identityIds.has(id))),
+      pinned: current.pinned.filter((id) => !identityIds.has(id)),
+      paletteId: identityIds.has(current.paletteId) ? "" : current.paletteId,
+      cells: current.cells.map((cell) => ({
+        ...cell,
+        fragment_ids: cell.fragment_ids.filter((id) => !identityIds.has(id)),
+      })),
+    }));
+    setError(null);
+  }
+
   async function suggest() {
     setSuggesting(true);
     setError(null);
@@ -446,10 +470,14 @@ function Factory() {
   }
 
   const availableGroups = (groups.data?.items ?? []).filter(
-    (group) => !state.groupIds.includes(group.id),
+    (group) => !state.groupIds.includes(group.id) && (!state.characterId || (fragments.data ?? []).some(
+      (fragment) => fragment.group_id === group.id && !fragment.archived && fragment.scope !== "identity",
+    )),
   );
   const cellCount = state.rows * state.columns;
-  const pickerFragments = (fragments.data ?? []).filter((f) => !f.archived);
+  const pickerFragments = (fragments.data ?? []).filter(
+    (f) => !f.archived && (!state.characterId || f.scope !== "identity"),
+  );
   const activeCell = pickerCell === null ? null : state.cells[pickerCell];
   // The name check is shown beside its field; the banner only carries other errors.
   const nameError = error === t("designNameRequired") && !state.name.trim() ? error : undefined;
@@ -565,7 +593,7 @@ function Factory() {
                     className={inputClass}
                   />
                 </Field>
-                <Field label={t("character")}>
+                <Field label={t("character")} hint={state.characterId ? t("characterIdentitySource") : undefined}>
                   <select
                     value={state.characterId}
                     onChange={(e) => update({ characterId: e.target.value })}
@@ -590,7 +618,7 @@ function Factory() {
                   >
                     <option value="">{t("paletteNone")}</option>
                     {palettes.map((palette) => (
-                      <option key={palette.id} value={palette.id}>
+                      <option key={palette.id} value={palette.id} disabled={Boolean(state.characterId) && palette.scope === "identity"}>
                         {palette.name}
                       </option>
                     ))}
@@ -625,6 +653,18 @@ function Factory() {
                 </div>
               </div>
             </Section>
+
+            {hasIdentityConflict && (
+              <div className="space-y-3 py-4">
+                <WarnBanner message={t("characterIdentityConflict")} />
+                <p className="text-sm text-ink-2">
+                  {identityConflictIds.map((id) => fragmentsById.get(id)?.name ?? id).join(", ")}
+                </p>
+                <Button variant="secondary" onClick={removeIdentityFragments} disabled={editorBusy}>
+                  {t("removeIdentityFragments")}
+                </Button>
+              </div>
+            )}
 
             <Section title={t("groupsTitle")} hint={`${t("groupsHint")} ${t("pinnedHint")}`}>
               <div className="flex flex-wrap gap-2">
@@ -662,7 +702,8 @@ function Factory() {
                     const candidates = (fragments.data ?? []).filter(
                       (fragment) =>
                         fragment.group_id === groupId &&
-                        (!fragment.archived || fragment.id === state.selections[groupId]),
+                        (!fragment.archived || fragment.id === state.selections[groupId]) &&
+                        (!state.characterId || fragment.scope !== "identity" || fragment.id === state.selections[groupId]),
                     );
                     const selectedId = state.selections[groupId] ?? "";
                     const pinned = selectedId ? state.pinned.includes(selectedId) : false;
@@ -683,7 +724,7 @@ function Factory() {
                           >
                             <option value="">{t("chooseFragment")}</option>
                             {candidates.map((fragment) => (
-                              <option key={fragment.id} value={fragment.id}>
+                              <option key={fragment.id} value={fragment.id} disabled={Boolean(state.characterId) && fragment.scope === "identity"}>
                                 {fragment.name}
                                 {fragment.archived ? ` (${t("archived")})` : ""}
                               </option>
@@ -844,22 +885,22 @@ function Factory() {
 
             <Section title={t("actions")}>
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" loading={suggesting} onClick={() => void suggest()}>
+                <Button variant="secondary" loading={suggesting} disabled={hasIdentityConflict} onClick={() => void suggest()}>
                   {suggesting ? t("suggesting") : t("suggest")}
                 </Button>
-                <Button variant="secondary" loading={compiling} onClick={() => void compile()}>
+                <Button variant="secondary" loading={compiling} disabled={hasIdentityConflict} onClick={() => void compile()}>
                   {compiling ? t("compiling") : t("compile")}
                 </Button>
                 <Button
                   variant="secondary"
                   loading={saveDesign.isPending}
-                  disabled={editorBusy}
+                  disabled={editorBusy || hasIdentityConflict}
                   onClick={save}
                 >
                   {saveDesign.isPending ? t("saving") : state.id ? t("updateDesign") : t("saveDesign")}
                 </Button>
                 {state.id && (
-                  <Button variant="secondary" icon="copy" disabled={editorBusy} onClick={saveCopy}>
+                  <Button variant="secondary" icon="copy" disabled={editorBusy || hasIdentityConflict} onClick={saveCopy}>
                     {t("saveCopy")}
                   </Button>
                 )}

@@ -302,6 +302,73 @@ func TestPinnedSelectionsAndCellTextSurviveSuggestion(t *testing.T) {
 	}
 }
 
+func TestCharacterRejectsIdentityFragments(t *testing.T) {
+	service, _ := newTestService(t)
+	ctx := context.Background()
+	group := mustGroup(t, service, "Identity", 10)
+	identity := mustFragment(t, service, group.ID, "a bipedal cat", ScopeIdentity)
+	character, err := service.CreateCharacter(ctx, CharacterDraft{Name: "Buffalo", Description: "a buffalo calf"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, location := range []string{"selection", "pin", "cell", "palette"} {
+		t.Run(location, func(t *testing.T) {
+			draft := sheetDraft(nil, nil)
+			draft.CharacterID = character.ID
+			switch location {
+			case "selection":
+				draft.FragmentIDs = []string{identity.ID}
+			case "pin":
+				draft.PinnedFragmentIDs = []string{identity.ID}
+			case "cell":
+				draft.Cells[0].FragmentIDs = []string{identity.ID}
+			case "palette":
+				draft.PaletteID = identity.ID
+			}
+			if _, err := service.Compile(ctx, draft); !errors.Is(err, ErrInvalid) {
+				t.Errorf("Compile = %v, want ErrInvalid", err)
+			}
+			if _, err := service.SaveDesign(ctx, draft); !errors.Is(err, ErrInvalid) {
+				t.Errorf("SaveDesign = %v, want ErrInvalid", err)
+			}
+			if _, err := service.Suggest(ctx, draft, rand.New(rand.NewSource(1))); !errors.Is(err, ErrInvalid) {
+				t.Errorf("Suggest = %v, want ErrInvalid", err)
+			}
+		})
+	}
+	withoutCharacter := sheetDraft([]string{identity.ID}, []string{group.ID})
+	compiled, err := service.Compile(ctx, withoutCharacter)
+	if err != nil || !strings.Contains(compiled.Text, "a bipedal cat") {
+		t.Fatalf("identity without character = %v, %s", err, compiled.Text)
+	}
+}
+
+func TestCharacterSuggestionExcludesIdentityCandidates(t *testing.T) {
+	service, _ := newTestService(t)
+	ctx := context.Background()
+	mixed := mustGroup(t, service, "Mixed", 10)
+	identityOnly := mustGroup(t, service, "Identity only", 20)
+	mustFragment(t, service, mixed.ID, "a bipedal cat", ScopeIdentity)
+	style := mustFragment(t, service, mixed.ID, "flat colours", ScopePack)
+	mustFragment(t, service, identityOnly.ID, "a floppy-eared rabbit", ScopeIdentity)
+	character, err := service.CreateCharacter(ctx, CharacterDraft{Name: "Buffalo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft := sheetDraft(nil, []string{mixed.ID, identityOnly.ID})
+	draft.CharacterID = character.ID
+	suggested, err := service.Suggest(ctx, draft, rand.New(rand.NewSource(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(suggested.FragmentIDs) != 1 || suggested.FragmentIDs[0] != style.ID {
+		t.Fatalf("suggestion includes an identity fragment: %v", suggested.FragmentIDs)
+	}
+	if suggested.CharacterID != character.ID || suggested.Cells[0].Action != "waving" {
+		t.Fatalf("suggestion changed the character or cell: %+v", suggested)
+	}
+}
+
 func TestCompileRejectsCellCountAndOutlineRange(t *testing.T) {
 	service, _ := newTestService(t)
 	ctx := context.Background()

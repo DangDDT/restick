@@ -252,7 +252,9 @@ components:
       properties:
         name: { type: string }
         description: { type: string }
-        identity_notes: { type: string }
+        identity_notes:
+          type: string
+          description: Independent identity text. The studio can copy identity fragment prompts here; later fragment edits or archival do not change the profile.
         rights_notes: { type: string }
         reference_asset_id: { type: string }
       additionalProperties: false
@@ -289,6 +291,12 @@ components:
 
     Draft:
       type: object
+      description: >-
+        With a non-empty character_id, the character profile is the sole identity
+        source. Compile, save and suggest reject identity-scoped fragments in
+        fragment_ids, pinned_fragment_ids, palette_id or any cell's fragment_ids
+        with 422. Without a character, identity fragments remain supported.
+        Previously saved snapshots and prompts are not rewritten by this rule.
       required: [name, rows, columns, cells]
       properties:
         id: { type: string, description: Ignored on create and on compile/suggest. }
@@ -1279,6 +1287,7 @@ paths:
     post:
       tags: [Admin designs]
       summary: Suggest fragment selections without saving
+      description: Excludes identity-scoped candidates when character_id is set; mixed groups still offer their other scopes. Existing conflicting selections are rejected rather than silently removed.
       security: [{ OwnerCookie: [] }]
       requestBody:
         required: true

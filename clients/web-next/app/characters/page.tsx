@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
@@ -17,6 +17,7 @@ import {
   SuccessBanner,
   WarnBanner,
   inputClass,
+  selectClass,
 } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { formatDate } from "@/lib/format";
@@ -25,6 +26,7 @@ import type {
   Character,
   CharacterDraft,
   CharacterList,
+  FragmentPage,
   ReferenceAsset,
 } from "@/lib/types";
 
@@ -64,6 +66,17 @@ function CharacterForm({
   const [nameError, setNameError] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [identityFragmentId, setIdentityFragmentId] = useState("");
+  const identityFragments = useInfiniteQuery({
+    queryKey: ["character-identity-fragments"],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => api<FragmentPage>(
+      `/api/v1/admin/fragments?scope=identity&page_size=100&page=${pageParam}`,
+    ),
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.page_size < lastPage.total ? lastPage.page + 1 : undefined,
+  });
+  const identityChoices = identityFragments.data?.pages.flatMap((page) => page.items) ?? [];
 
   const save = useMutation({
     mutationFn: (body: CharacterDraft) =>
@@ -129,6 +142,51 @@ function CharacterForm({
         <Field label={t("characterDescription")}>
           <input value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
         </Field>
+        <div className="space-y-2">
+          <Field label={t("identityFragmentSource")} hint={t("identitySnapshotHint")}>
+            <select
+              value={identityFragmentId}
+              onChange={(event) => setIdentityFragmentId(event.target.value)}
+              disabled={identityFragments.isPending}
+              className={selectClass}
+            >
+              <option value="">{identityFragments.isPending ? t("loading") : t("chooseFragment")}</option>
+              {identityChoices.map((fragment) => (
+                <option key={fragment.id} value={fragment.id}>{fragment.name}</option>
+              ))}
+            </select>
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              disabled={!identityFragmentId}
+              onClick={() => {
+                const fragment = identityChoices.find((item) => item.id === identityFragmentId);
+                if (!fragment) return;
+                setIdentityNotes((current) => [current.trim(), fragment.prompt].filter(Boolean).join("\n"));
+                setIdentityFragmentId("");
+              }}
+            >
+              {t("identityImport")}
+            </Button>
+            {identityFragments.hasNextPage && (
+              <Button
+                variant="secondary"
+                loading={identityFragments.isFetchingNextPage}
+                onClick={() => void identityFragments.fetchNextPage()}
+              >
+                {t("identityLoadMore")}
+              </Button>
+            )}
+            {identityFragments.isError && (
+              <Button variant="secondary" onClick={() => void identityFragments.refetch()}>{t("retry")}</Button>
+            )}
+          </div>
+          {identityFragments.isError && <ErrorBanner message={errorText(identityFragments.error)} />}
+          {!identityFragments.isPending && !identityFragments.isError && identityChoices.length === 0 && (
+            <p className="text-sm text-ink-2">{t("noFragments")}</p>
+          )}
+        </div>
         <Field label={t("identityNotes")}>
           <textarea
             value={identityNotes}

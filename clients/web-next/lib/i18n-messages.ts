@@ -175,6 +175,13 @@ export const vi = {
   characterName: "Tên nhân vật",
   characterDescription: "Mô tả",
   identityNotes: "Đặc điểm nhận diện cần giữ",
+  identityFragmentSource: "Lấy đặc điểm từ mảnh Nhận diện",
+  identitySnapshotHint: "Thêm nội dung mảnh vào đặc điểm bên dưới rồi chỉnh sửa nếu cần. Sửa hoặc lưu trữ mảnh gốc không làm thay đổi hồ sơ nhân vật.",
+  identityImport: "Thêm vào nhận diện",
+  identityLoadMore: "Tải thêm mảnh nhận diện",
+  characterIdentitySource: "Nhận diện lấy từ hồ sơ nhân vật. Muốn đổi đặc điểm, hãy sửa hồ sơ trong Nhân vật.",
+  characterIdentityConflict: "Thiết kế có cả nhân vật và mảnh Nhận diện. Hãy đưa đặc điểm cần giữ vào hồ sơ nhân vật rồi gỡ các mảnh này để tiếp tục. Prompt đã lưu không tự thay đổi.",
+  removeIdentityFragments: "Gỡ mảnh Nhận diện khỏi thiết kế",
   rightsNotes: "Ghi chú quyền sử dụng",
   referenceImage: "Ảnh tham chiếu",
   referenceUpload: "Tải ảnh tham chiếu",
@@ -403,6 +410,13 @@ const en: Partial<Record<MessageKey, string>> = {
   keysSubtitle: "Manage keys for the Restick SDK",
   keyName: "Key name",
   actions: "Actions",
+  identityFragmentSource: "Use identity fragments",
+  identitySnapshotHint: "Add fragment text to the identity notes below, then edit as needed. Editing or archiving the original fragment does not change this character profile.",
+  identityImport: "Add to identity notes",
+  identityLoadMore: "Load more identity fragments",
+  characterIdentitySource: "Identity comes from the character profile. To change features, edit the profile in Characters.",
+  characterIdentityConflict: "This design has both a character and identity fragments. Add any features you want to keep to the character profile, then remove these fragments to continue. Saved prompts do not change automatically.",
+  removeIdentityFragments: "Remove identity fragments from design",
 };
 
 export const messages: Record<Locale, Partial<Record<MessageKey, string>>> = { vi, en };
