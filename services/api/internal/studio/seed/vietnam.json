@@ -1465,7 +1465,6 @@
  "designs": [
   {
    "name": "Tết Nguyên đán cùng Rồng Con",
-   "character_id": "vn-char-06",
    "group_ids": [
     "vn-festival",
     "vn-chat",
@@ -1477,7 +1476,7 @@
     "vn-food-07"
    ],
    "palette_id": "p-vn-02",
-   "free_text": "Chúc Tết sticker pack for Vietnamese Lunar New Year.",
+   "free_text": "Chúc Tết sticker pack for Vietnamese Lunar New Year. Subject: A baby Vietnamese dragon with a soft sage-green body, a small golden mane and gentle S-curved posture, no wings. Sage-green scales; golden mane tuft; two small curved horns; gentle S-curve body; round dark eyes; no wings and no claws. a uniform ink line of constant weight; two-step cel shading.",
    "rows": 3,
    "columns": 3,
    "cells": [
@@ -1529,7 +1528,6 @@
   },
   {
    "name": "Trung thu rước đèn Cá Chép",
-   "character_id": "vn-char-08",
    "group_ids": [
     "vn-festival",
     "vn-food"
@@ -1539,7 +1537,7 @@
     "vn-festival-10"
    ],
    "palette_id": "p-vn-05",
-   "free_text": "Mid-Autumn Festival with carp lantern and mooncakes.",
+   "free_text": "Mid-Autumn Festival with carp lantern and mooncakes. Subject: A plump orange carp with big round eyes, long whiskers, translucent fins and a small tail. Plump orange body; two long thin whiskers; translucent fins; a small white spot on the forehead; big round eyes. a uniform ink line of constant weight; two-step cel shading.",
    "rows": 3,
    "columns": 3,
    "cells": [
@@ -1585,7 +1583,6 @@
   },
   {
    "name": "Ăn phở cùng Tô Phở",
-   "character_id": "vn-char-03",
    "group_ids": [
     "vn-food",
     "vn-chat",
@@ -1596,7 +1593,7 @@
     "vn-food-18"
    ],
    "palette_id": "p-vn-02",
-   "free_text": "Street food mood sticker pack about phở morning routine.",
+   "free_text": "Street food mood sticker pack about phở morning routine. Subject: A walking bowl of phở with a tiny face on the broth, a green onion tuft on top and chopsticks for arms. A white bowl with a thin blue rim; a green onion tuft on top; wooden chopsticks as arms; small steam curl above; face stays on the broth. a uniform ink line of constant weight.",
    "rows": 3,
    "columns": 3,
    "cells": [
@@ -1651,7 +1648,6 @@
   },
   {
    "name": "Cà phê sáng cùng Chú Phin",
-   "character_id": "vn-char-10",
    "group_ids": [
     "vn-food",
     "vn-life",
@@ -1663,7 +1659,7 @@
     "vn-life-02"
    ],
    "palette_id": "p-001",
-   "free_text": "Morning coffee sticker pack for friends and colleagues.",
+   "free_text": "Morning coffee sticker pack for friends and colleagues. Subject: A small steel phin coffee filter with tiny arms and legs, a lid hat and a drop of coffee on its head. Steel phin body with a lid as a hat; a single drop of dark coffee on top; thin arms and legs; two small dot eyes; a round body. a uniform ink line of constant weight.",
    "rows": 2,
    "columns": 4,
    "cells": [
@@ -1717,7 +1713,6 @@
   },
   {
    "name": "Chat công sở cùng Ổ Bánh Mì",
-   "character_id": "vn-char-04",
    "group_ids": [
     "vn-food",
     "vn-chat"
@@ -1726,7 +1721,7 @@
     "vn-food-02"
    ],
    "palette_id": "p-vn-02",
-   "free_text": "Office reactions sticker pack.",
+   "free_text": "Office reactions sticker pack. Subject: A cheerful baguette character with a golden crust, a smiling face and visible pickled filling at one end. A golden brown crust with diagonal slashes; a cheerful smile; green cilantro and orange pickled carrot peeking out one end; same size and shape on every sticker. a uniform ink line of constant weight.",
    "rows": 2,
    "columns": 4,
    "cells": [
@@ -1789,7 +1784,6 @@
   },
   {
    "name": "Đồng quê cùng Trâu Con",
-   "character_id": "vn-char-02",
    "group_ids": [
     "vn-animal",
     "vn-nature",
@@ -1801,7 +1795,7 @@
     "vn-animal-07"
    ],
    "palette_id": "p-007",
-   "free_text": "Countryside summer day sticker pack.",
+   "free_text": "Countryside summer day sticker pack. Subject: A round chubby water buffalo calf with short swept-back horns, a grey body and a light belly, smiling softly. Short swept-back horns; a small red cloth tied around the neck; a white tuft on the forehead; round belly; same colours on every sticker. a uniform ink line of constant weight.",
    "rows": 3,
    "columns": 3,
    "cells": [
@@ -1850,7 +1844,6 @@
   },
   {
    "name": "Hội An cùng Nón Lá",
-   "character_id": "vn-char-05",
    "group_ids": [
     "vn-place",
     "vn-costume",
@@ -1862,7 +1855,7 @@
     "vn-festival-12"
    ],
    "palette_id": "p-vn-05",
-   "free_text": "Hội An lantern town sticker pack.",
+   "free_text": "Hội An lantern town sticker pack. Subject: A small child hidden under an oversized conical hat, with only a wide smile and rosy cheeks visible. A large woven conical hat that covers the eyes; a wide smile and rosy cheeks; a red silk chin strap; a plain cream tunic. a uniform ink line of constant weight.",
    "rows": 3,
    "columns": 3,
    "cells": [
@@ -1914,7 +1907,6 @@
   },
   {
    "name": "Mùa sen cùng Sen Con",
-   "character_id": "vn-char-01",
    "group_ids": [
     "vn-nature",
     "vn-life"
@@ -1924,7 +1916,7 @@
     "vn-nature-09"
    ],
    "palette_id": "p-vn-01",
-   "free_text": "Lotus summer sticker pack.",
+   "free_text": "Lotus summer sticker pack. Subject: A tiny lotus-bud sprite with a round pink bud as a hat, a soft cream face, two small green leaf arms and short stubby legs. Pink lotus bud hat with three visible petals on top; small black dot eyes; rosy round cheeks; two green leaf hands; same proportions on every sticker. a tapered brush line, thin at the ends; completely flat colour with no shading.",
    "rows": 3,
    "columns": 3,
    "cells": [
@@ -1970,7 +1962,6 @@
   },
   {
    "name": "Chợ sáng cùng Mèo Mướp",
-   "character_id": "vn-char-07",
    "group_ids": [
     "vn-life",
     "vn-food",
@@ -1981,7 +1972,7 @@
     "vn-life-12"
    ],
    "palette_id": "p-vn-05",
-   "free_text": "Morning market and neighbourhood life sticker pack.",
+   "free_text": "Morning market and neighbourhood life sticker pack. Subject: A tabby cat with brown-orange stripes, a white chest and a small red and white checkered scarf. Brown-orange tabby stripes; a white chest; a red and white checkered scarf; short tail; half-closed sleepy eyes. a uniform ink line of constant weight.",
    "rows": 2,
    "columns": 4,
    "cells": [
@@ -2026,7 +2017,6 @@
   },
   {
    "name": "Mùa mưa Nam Bộ cùng Cậu Cóc",
-   "character_id": "vn-char-09",
    "group_ids": [
     "vn-animal",
     "vn-life",
@@ -2037,7 +2027,7 @@
     "vn-life-08"
    ],
    "palette_id": "p-vn-04",
-   "free_text": "Rainy season sticker pack with a toad bringing rain.",
+   "free_text": "Rainy season sticker pack with a toad bringing rain. Subject: A round green toad with warty skin, wide mouth, a tiny straw hat and a calm confident expression. A green round body with warty bumps; a small straw hat; a wide calm mouth; gold ringed eyes; upright seated posture. a uniform ink line of constant weight.",
    "rows": 3,
    "columns": 3,
    "cells": [

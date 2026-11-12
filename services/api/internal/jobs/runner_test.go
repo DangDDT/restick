@@ -264,6 +264,95 @@ func TestEnqueueUsesSheetSource(t *testing.T) {
 	}
 }
 
+// TestEnqueueKeepsExtendedDesignSnapshot proves the schema-1 snapshot handoff
+// still freezes the optional label and selected reference appended by Task 2.
+func TestEnqueueKeepsExtendedDesignSnapshot(t *testing.T) {
+	h := newHarness(t)
+	packID, designID, sourceID := h.newPack("extended-snapshot")
+
+	snapshot := map[string]any{
+		"schema_version": 1,
+		"character": map[string]any{
+			"id": "char-1", "name": "Sen Con", "description": "a lotus sprite",
+			"identity_notes": "pink bud hat", "reference_asset_id": "asset-1",
+		},
+		"selections": []any{}, "free_text": "three Vietnamese dishes",
+		"rows": 1, "columns": 2, "outline_width": 4, "outline_color": "#FFFFFF",
+		"cells": []any{
+			map[string]any{"row": 1, "column": 1, "action": "steaming", "expression": "happy",
+				"free_text": "a beef noodle bowl", "fragments": []any{}, "label": "Bún bò Huế"},
+			map[string]any{"row": 1, "column": 2, "action": "sitting", "expression": "calm",
+				"free_text": "a pho plate", "fragments": []any{}},
+		},
+		"compiled_at": "2026-11-10T00:00:00Z",
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal snapshot: %v", err)
+	}
+	if _, err := h.db.Exec(`UPDATE designs SET rows = 1, columns = 2, snapshot_json = ? WHERE id = ?`,
+		string(raw), designID); err != nil {
+		t.Fatalf("store extended snapshot: %v", err)
+	}
+
+	job, err := NewRunner(h.db, h.store, nil, time.Second).Enqueue(context.Background(), packID, sourceID, designID)
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	var stored string
+	if err := h.db.QueryRow(`SELECT request_json FROM processing_jobs WHERE id = ?`, job.ID).Scan(&stored); err != nil {
+		t.Fatalf("read request_json: %v", err)
+	}
+	var request map[string]any
+	if err := json.Unmarshal([]byte(stored), &request); err != nil {
+		t.Fatalf("decode request_json: %v", err)
+	}
+	if request["schema_version"] != float64(1) {
+		t.Fatalf("request schema_version = %v, want 1", request["schema_version"])
+	}
+	design, ok := request["design"].(map[string]any)
+	if !ok {
+		t.Fatalf("request has no design snapshot: %v", request)
+	}
+	if design["schema_version"] != float64(1) {
+		t.Fatalf("design schema_version = %v, want 1", design["schema_version"])
+	}
+	if design["free_text"] != "three Vietnamese dishes" {
+		t.Fatalf("design free_text = %v", design["free_text"])
+	}
+	character, ok := design["character"].(map[string]any)
+	if !ok || character["reference_asset_id"] != "asset-1" {
+		t.Fatalf("design character = %v, want the frozen reference", design["character"])
+	}
+	cells, ok := design["cells"].([]any)
+	if !ok || len(cells) != 2 {
+		t.Fatalf("design cells = %v, want two", design["cells"])
+	}
+	first, _ := cells[0].(map[string]any)
+	second, _ := cells[1].(map[string]any)
+	if first["row"] != float64(1) || first["column"] != float64(1) || first["label"] != "Bún bò Huế" {
+		t.Fatalf("first cell = %v, want row-major label", first)
+	}
+	if second["row"] != float64(1) || second["column"] != float64(2) {
+		t.Fatalf("second cell = %v, want the next row-major cell", second)
+	}
+	if label, ok := second["label"]; ok && label != "" {
+		t.Fatalf("second cell label = %v, want none", label)
+	}
+
+	// The extended document still decodes as a schema-1 job request.
+	var decoded JobRequest
+	if err := json.Unmarshal([]byte(stored), &decoded); err != nil {
+		t.Fatalf("decode JobRequest: %v", err)
+	}
+	if decoded.SchemaVersion != 1 || decoded.Design.SchemaVersion != 1 ||
+		len(decoded.Design.Cells) != 2 || decoded.Rows != 1 || decoded.Columns != 2 {
+		t.Fatalf("decoded request = schema %d design schema %d cells %d grid %dx%d",
+			decoded.SchemaVersion, decoded.Design.SchemaVersion, len(decoded.Design.Cells),
+			decoded.Rows, decoded.Columns)
+	}
+}
+
 func TestEnqueueWithoutSheetReturnsErrNoSource(t *testing.T) {
 	h := newHarness(t)
 	packID, designID, _ := h.newPack("no-sheet")

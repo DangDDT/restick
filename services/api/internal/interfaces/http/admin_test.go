@@ -1030,6 +1030,7 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 			"name": "Conflicting identity", "rows": 1, "columns": 1,
 			"cells":        []map[string]any{{"action": "wave"}},
 			"fragment_ids": []string{fragment.ID}, "character_id": character.ID,
+			"reference_asset_id": reference.ID,
 		})
 		if rejected.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("%s with character and identity fragment = %d: %s", path, rejected.Code, rejected.Body.String())
@@ -1041,6 +1042,7 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 	rec = f.mutate(http.MethodPost, "/api/v1/admin/designs/compile", map[string]any{
 		"rows": 1, "columns": 1, "cells": []map[string]any{{"action": "wave"}},
 		"character_id": character.ID, "outline_color": "#FFFFFF",
+		"reference_asset_id": reference.ID,
 	})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("compile default = %d: %s", rec.Code, rec.Body.String())
@@ -1074,7 +1076,7 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 
 	rec = f.mutate(http.MethodPost, "/api/v1/admin/designs", map[string]any{
 		"name": "Design A", "rows": 1, "columns": 1, "cells": []map[string]any{{"action": "wave"}},
-		"character_id": character.ID,
+		"character_id": character.ID, "reference_asset_id": reference.ID,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("save design = %d: %s", rec.Code, rec.Body.String())

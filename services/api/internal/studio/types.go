@@ -104,12 +104,14 @@ type CharacterDraft struct {
 	ReferenceAssetIDs []string `json:"reference_asset_ids"`
 }
 
-// Cell describes one sticker of the sheet.
+// Cell describes one sticker of the sheet. Label is the optional text the
+// external agent writes on that sticker; FreeText stays the drawing instruction.
 type Cell struct {
 	Action      string   `json:"action"`
 	Expression  string   `json:"expression"`
 	FragmentIDs []string `json:"fragment_ids,omitempty"`
 	FreeText    string   `json:"free_text"`
+	Label       string   `json:"label,omitempty"`
 }
 
 // Draft is the editable composition. IDs reference the library; free text is
@@ -120,6 +122,7 @@ type Draft struct {
 	ID                string   `json:"id,omitempty"`
 	Name              string   `json:"name"`
 	CharacterID       string   `json:"character_id,omitempty"`
+	ReferenceAssetID  string   `json:"reference_asset_id,omitempty"`
 	GroupIDs          []string `json:"group_ids,omitempty"`
 	FragmentIDs       []string `json:"fragment_ids,omitempty"`
 	PinnedFragmentIDs []string `json:"pinned_fragment_ids,omitempty"`
@@ -145,10 +148,11 @@ type Selection struct {
 
 // SnapshotCharacter is the frozen identity block of a compiled design.
 type SnapshotCharacter struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	IdentityNotes string `json:"identity_notes"`
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Description      string `json:"description"`
+	IdentityNotes    string `json:"identity_notes"`
+	ReferenceAssetID string `json:"reference_asset_id,omitempty"`
 }
 
 // SnapshotPalette is the frozen palette block of a compiled design.
@@ -169,6 +173,7 @@ type SnapshotCell struct {
 	Action     string      `json:"action"`
 	Expression string      `json:"expression"`
 	FreeText   string      `json:"free_text"`
+	Label      string      `json:"label,omitempty"`
 	Fragments  []Selection `json:"fragments"`
 }
 

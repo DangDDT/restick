@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand" // math/rand v1: the approved Suggest signature is asked for a seeded *rand.Rand
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -58,6 +59,9 @@ func (s *Service) Compile(ctx context.Context, draft Draft) (CompiledPrompt, err
 		}
 		character = &found
 	}
+	if err := validateReference(draft, character); err != nil {
+		return CompiledPrompt{}, err
+	}
 
 	var palette *SnapshotPalette
 	if draft.PaletteID != "" {
@@ -92,6 +96,7 @@ func (s *Service) Compile(ctx context.Context, draft Draft) (CompiledPrompt, err
 			Action:     cell.Action,
 			Expression: cell.Expression,
 			FreeText:   cell.FreeText,
+			Label:      cell.Label,
 			Fragments:  frozen,
 		})
 	}
@@ -110,10 +115,11 @@ func (s *Service) Compile(ctx context.Context, draft Draft) (CompiledPrompt, err
 	}
 	if character != nil {
 		snapshot.Character = &SnapshotCharacter{
-			ID:            character.ID,
-			Name:          character.Name,
-			Description:   character.Description,
-			IdentityNotes: character.IdentityNotes,
+			ID:               character.ID,
+			Name:             character.Name,
+			Description:      character.Description,
+			IdentityNotes:    character.IdentityNotes,
+			ReferenceAssetID: draft.ReferenceAssetID,
 		}
 	}
 	return CompiledPrompt{Text: renderPrompt(draft, snapshot), Snapshot: snapshot}, nil
@@ -129,6 +135,26 @@ func validateCharacterIdentity(characterID string, fragments map[string]Fragment
 		}
 	}
 	return nil
+}
+
+// validateReference enforces the selected-image rule of spec §5.2: a design
+// with a character needs one image that belongs to that character, and a design
+// without a character must not carry one.
+func validateReference(draft Draft, character *Character) error {
+	switch {
+	case character == nil && draft.ReferenceAssetID == "":
+		return nil
+	case character == nil:
+		return fmt.Errorf("%w: reference %q needs a character", ErrInvalid, draft.ReferenceAssetID)
+	case draft.ReferenceAssetID == "":
+		return fmt.Errorf("%w: character %q needs a selected reference image", ErrInvalid, character.Name)
+	}
+	for _, id := range character.ReferenceAssetIDs {
+		if id == draft.ReferenceAssetID {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: reference %q is not attached to character %q", ErrInvalid, draft.ReferenceAssetID, character.Name)
 }
 
 // Suggest re-draws the unpinned selections of the participating groups. Pinned
@@ -256,6 +282,7 @@ func validateDraft(draft Draft) error {
 func normalizeDraft(draft Draft) Draft {
 	draft.Name = strings.TrimSpace(draft.Name)
 	draft.CharacterID = strings.TrimSpace(draft.CharacterID)
+	draft.ReferenceAssetID = strings.TrimSpace(draft.ReferenceAssetID)
 	draft.PaletteID = strings.TrimSpace(draft.PaletteID)
 	draft.FreeText = strings.TrimSpace(draft.FreeText)
 	draft.OutlineColor = strings.ToUpper(strings.TrimSpace(draft.OutlineColor))
@@ -272,21 +299,29 @@ func normalizeDraft(draft Draft) Draft {
 			Expression:  strings.TrimSpace(cell.Expression),
 			FragmentIDs: uniqueStrings(cell.FragmentIDs),
 			FreeText:    strings.TrimSpace(cell.FreeText),
+			Label:       strings.TrimSpace(cell.Label),
 		})
 	}
 	draft.Cells = cells
 	return draft
 }
 
-// renderPrompt follows spec §5.3: identity, theme, style/colour/prop/culture,
-// every cell, then the technical sheet instruction. It is written for an
-// external image agent that sees only this text, so each block says what it is
-// for and what must stay constant.
+// renderPrompt follows spec §7: opening, identity or per-subject block, theme,
+// style/palette, every cell with its drawing instruction and label, then the
+// technical sheet instruction. It is written for an external image agent that
+// sees only this text.
 func renderPrompt(draft Draft, snapshot Snapshot) string {
 	var b strings.Builder
 	total := snapshot.Rows * snapshot.Columns
-	fmt.Fprintf(&b, "Task: draw one sticker sheet containing exactly %d separate sticker illustrations of the same subject, laid out in a regular grid. Software will cut the sheet automatically, so the Technical rules below matter as much as the artwork.\n", total)
+	hasLabels := false
+	for _, cell := range snapshot.Cells {
+		if cell.Label != "" {
+			hasLabels = true
+			break
+		}
+	}
 	if character := snapshot.Character; character != nil {
+		fmt.Fprintf(&b, "Task: draw one sticker sheet containing exactly %d separate sticker illustrations of the same character, laid out in a regular grid. Software will cut the sheet automatically, so the Technical rules below matter as much as the artwork.\n", total)
 		fmt.Fprintf(&b, "Character: %s.", character.Name)
 		if character.Description != "" {
 			b.WriteString(" " + finishSentence(character.Description))
@@ -295,7 +330,10 @@ func renderPrompt(draft Draft, snapshot Snapshot) string {
 			b.WriteString(" Keep these identity features identical on every sticker: " + character.IdentityNotes)
 		}
 		b.WriteString("\n")
-		b.WriteString("Consistency: the character must have the same proportions, colours, face design and line weight in every sticker; only pose, expression and props change.\n")
+		b.WriteString("Reference image: attach the reference image selected for this design to the request and use it as the identity source. It is private and is not linked in this prompt. Keep the same proportions, colours, face design and line weight on every sticker; only pose, expression and props change.\n")
+	} else {
+		fmt.Fprintf(&b, "Task: draw one sticker sheet containing exactly %d separate sticker illustrations, laid out in a regular grid. Software will cut the sheet automatically, so the Technical rules below matter as much as the artwork.\n", total)
+		b.WriteString("Subjects: each sticker is described separately below and the stickers may show different subjects, objects or dishes, while line weight, rendering and presentation stay consistent across the whole sheet.\n")
 	}
 
 	identity := make([]string, 0, len(snapshot.Selections))
@@ -319,14 +357,23 @@ func renderPrompt(draft Draft, snapshot Snapshot) string {
 	if palette := snapshot.Palette; palette != nil {
 		fmt.Fprintf(&b, "Palette: %s Primary %s, secondary %s, accent %s, line %s.\n",
 			finishSentence(palette.Prompt), palette.Primary, palette.Secondary, palette.Accent, palette.Line)
-		b.WriteString("Palette use: primary for the largest areas, secondary for supporting areas, accent only for small highlights and props, line for the artwork's own contour lines. Use flat fills; do not introduce unrelated dominant colours.\n")
+		b.WriteString("Palette use: primary for the largest areas, secondary for supporting areas, accent only for small highlights and props, line for the artwork's own contour lines. Use flat fills; do not introduce unrelated dominant colours. The character's identity colours and each subject's natural colours take precedence: use the palette only in supporting areas, never to recolour the character or the subject to match it.\n")
 	}
 	fmt.Fprintf(&b, "Sheet: %d rows by %d columns, %d stickers in total, read left to right then top to bottom. Every sticker sits in its own equal-sized area of the sheet.\n",
 		snapshot.Rows, snapshot.Columns, total)
-	b.WriteString(layoutRules(snapshot.Rows, snapshot.Columns))
-	b.WriteString("Stickers: read each description as a drawing instruction, never as text to write on the image; it may be written in Vietnamese.\n")
+	b.WriteString(layoutRules(snapshot.Rows, snapshot.Columns, hasLabels))
+	if hasLabels {
+		b.WriteString("Stickers: each numbered line gives a drawing instruction and the exact visible label to write on that sticker. Read the instruction as what to draw, never as text to write; instructions may be written in Vietnamese. Letter each quoted label exactly as written, keeping its Vietnamese spelling and accents, without translating, transliterating or rewording it.\n")
+	} else {
+		b.WriteString("Stickers: read each description as a drawing instruction, never as text to write on the image; it may be written in Vietnamese.\n")
+	}
 	for index, cell := range snapshot.Cells {
 		fmt.Fprintf(&b, "%d. (row %d, column %d) %s\n", index+1, cell.Row, cell.Column, cellSentence(cell))
+	}
+	if hasLabels {
+		b.WriteString("Label style: letter every visible label in one uniform, legible typeface sized to read at sticker size. Make the label part of its own sticker: put it on a solid coloured ribbon or banner that physically connects to the subject's drawing, so the cutter never separates letters from the picture. Vietnamese diacritics must sit on that solid fill, not float on the white background. Write only the labels listed above; never write the drawing descriptions, cell numbers, coordinates, group names or this prompt as text.\n")
+	} else {
+		b.WriteString("Text: this sheet has no visible labels, so do not write any text on the stickers.\n")
 	}
 	b.WriteString(outlineLine(draft.OutlineWidth, draft.OutlineColor))
 	return strings.TrimRight(b.String(), " \n") + "\n"
@@ -349,13 +396,19 @@ func cellSentence(cell SnapshotCell) string {
 	for index, part := range parts {
 		parts[index] = strings.TrimRight(strings.TrimSpace(part), ".")
 	}
-	return strings.Join(parts, "; ") + "."
+	drawing := strings.Join(parts, "; ") + "."
+	if cell.Label == "" {
+		return drawing + " Visible label: none; this sticker has no text."
+	}
+	return drawing + " Visible label (write exactly, with accents): " + strconv.Quote(cell.Label) + "."
 }
 
 // layoutRules states the extraction contract once, before the cells: the sheet
 // is cut by software into an equal grid, so every rule maps to a way the cut
 // fails (touching stickers, a second background, a box crossing a grid line).
-func layoutRules(rows, columns int) string {
+// Only an unlabeled sheet bans all text; with labels, the label rule replaces
+// that sentence so the prompt cannot contradict itself.
+func layoutRules(rows, columns int, hasLabels bool) string {
 	total := rows * columns
 	d := gcd(columns, rows)
 	var b strings.Builder
@@ -363,9 +416,13 @@ func layoutRules(rows, columns int) string {
 	fmt.Fprintf(&b, "- Output one single image with aspect ratio %d:%d (width:height), divided into %d rows by %d columns of equal areas, so every area is square. The areas are imaginary: do not draw them.\n", columns/d, rows/d, rows, columns)
 	b.WriteString("- Use one uniform flat pure white background (#FFFFFF) everywhere: no scenery, ground, sky, floor, shadow, gradient or vignette.\n")
 	b.WriteString("- Centre each sticker in its own area and keep it at most about 70% of that area's width and height, leaving even empty white margin on every side. Stickers never touch, overlap or cross an area boundary, and nothing touches the sheet edge.\n")
-	b.WriteString("- Draw each sticker as one connected shape with a clear closed contour, thick even lines and flat colours. No gradients, glow, texture or soft shadows. A prop or small context element must stay attached to the character.\n")
+	b.WriteString("- Draw each sticker as one connected shape with a clear closed contour, thick even lines and flat colours. No gradients, glow, texture or soft shadows. A prop or small context element must stay attached to the sticker's subject.\n")
 	fmt.Fprintf(&b, "- Exactly %d stickers: do not add, merge, duplicate or leave out any.\n", total)
-	b.WriteString("- Do not draw grid lines, frames, numbers, text, captions, watermarks or signatures.\n")
+	if hasLabels {
+		b.WriteString("- Do not draw grid lines, frames, numbers, captions, watermarks or signatures.\n")
+	} else {
+		b.WriteString("- Do not draw grid lines, frames, numbers, text, captions, watermarks or signatures.\n")
+	}
 	return b.String()
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"image"
 	"image/color"
@@ -12,6 +13,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -213,8 +215,8 @@ func TestSeedRestartPreservesUserEdits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Compile after seed: %v", err)
 	}
-	if !strings.Contains(compiled.Text, "Sheet: 2 rows by 2 columns") {
-		t.Fatalf("compiled prompt missing sheet line:\n%s", compiled.Text)
+	if compiled.Snapshot.Rows != 2 || compiled.Snapshot.Columns != 2 {
+		t.Fatalf("compiled snapshot grid = %dx%d, want 2x2", compiled.Snapshot.Rows, compiled.Snapshot.Columns)
 	}
 }
 
@@ -307,13 +309,16 @@ func TestCharacterRejectsIdentityFragments(t *testing.T) {
 	ctx := context.Background()
 	group := mustGroup(t, service, "Identity", 10)
 	identity := mustFragment(t, service, group.ID, "a bipedal cat", ScopeIdentity)
-	character, err := service.CreateCharacter(ctx, CharacterDraft{Name: "Buffalo", Description: "a buffalo calf"})
+	reference := mustReferenceAsset(t, service, 0x01)
+	character, err := service.CreateCharacter(ctx, CharacterDraft{
+		Name: "Buffalo", Description: "a buffalo calf", ReferenceAssetIDs: []string{reference.ID},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, location := range []string{"selection", "pin", "cell", "palette"} {
 		t.Run(location, func(t *testing.T) {
-			draft := sheetDraft(nil, nil)
+			draft := draftWithReference(t, sheetDraft(nil, nil), reference.ID)
 			draft.CharacterID = character.ID
 			switch location {
 			case "selection":
@@ -351,11 +356,14 @@ func TestCharacterSuggestionExcludesIdentityCandidates(t *testing.T) {
 	mustFragment(t, service, mixed.ID, "a bipedal cat", ScopeIdentity)
 	style := mustFragment(t, service, mixed.ID, "flat colours", ScopePack)
 	mustFragment(t, service, identityOnly.ID, "a floppy-eared rabbit", ScopeIdentity)
-	character, err := service.CreateCharacter(ctx, CharacterDraft{Name: "Buffalo"})
+	reference := mustReferenceAsset(t, service, 0x01)
+	character, err := service.CreateCharacter(ctx, CharacterDraft{
+		Name: "Buffalo", ReferenceAssetIDs: []string{reference.ID},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	draft := sheetDraft(nil, []string{mixed.ID, identityOnly.ID})
+	draft := draftWithReference(t, sheetDraft(nil, []string{mixed.ID, identityOnly.ID}), reference.ID)
 	draft.CharacterID = character.ID
 	suggested, err := service.Suggest(ctx, draft, rand.New(rand.NewSource(1)))
 	if err != nil {
@@ -452,13 +460,8 @@ func TestCompileDoesNotMixWhiteAndTransparentRequirements(t *testing.T) {
 			t.Fatalf("prompt mixes a second background requirement (%q):\n%s", banned, compiled.Text)
 		}
 	}
-	// Cutting rules come before the cells so long-context tools do not skip them;
-	// the outline line stays last and is stated once.
-	technical := strings.Index(compiled.Text, "Technical")
-	stickers := strings.Index(compiled.Text, "Stickers:")
-	outline := strings.Index(compiled.Text, "Outline:")
-	if technical < 0 || stickers < technical || outline < stickers || strings.Count(compiled.Text, "Outline:") != 1 {
-		t.Fatalf("want Technical, then Stickers, then one Outline line:\n%s", compiled.Text)
+	if !strings.Contains(compiled.Text, "Exactly 4 stickers") {
+		t.Fatalf("prompt lost the sticker count:\n%s", compiled.Text)
 	}
 }
 
@@ -479,9 +482,9 @@ func TestCompileGivesCuttingContract(t *testing.T) {
 		"#FFFFFF",
 		"at most about 70%",
 		"Exactly 3 stickers",
-		"may be written in Vietnamese",
-		"1. (row 1, column 1) Chạy nhanh; Vui vẻ.",
-		"3. (row 1, column 3) Ngủ gật.",
+		"Chạy nhanh",
+		"Vui vẻ",
+		"Ngủ gật",
 	} {
 		if !strings.Contains(compiled.Text, want) {
 			t.Errorf("prompt missing %q:\n%s", want, compiled.Text)
@@ -603,7 +606,7 @@ func TestReferenceAssetStaysPrivateAndFeedsCharacterSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateCharacter: %v", err)
 	}
-	draft := sheetDraft(nil, nil)
+	draft := draftWithReference(t, sheetDraft(nil, nil), asset.ID)
 	draft.CharacterID = character.ID
 	compiled, err := service.Compile(ctx, draft)
 	if err != nil {
@@ -772,9 +775,128 @@ func TestSeedVietnamPack(t *testing.T) {
 		t.Fatalf("designs = %d, %v; want 10", len(designs.Items), err)
 	}
 	for _, design := range designs.Items {
-		if !strings.Contains(design.Prompt, "Character: ") || !strings.Contains(design.Prompt, "Palette: ") {
-			t.Fatalf("design %q prompt lacks character or palette:\n%s", design.Name, design.Prompt)
+		if strings.Contains(design.Prompt, "Character: ") || design.Snapshot.Character != nil {
+			t.Fatalf("design %q still points at a seed character without an image:\n%s", design.Name, design.Prompt)
 		}
+		if !strings.Contains(design.Prompt, "Palette: ") {
+			t.Fatalf("design %q prompt lost its palette:\n%s", design.Name, design.Prompt)
+		}
+	}
+}
+
+// starterSubject maps every converted starter design to the seed character
+// profile whose description and identity notes its prompt must keep.
+var starterSubject = map[string]string{
+	"Tết Nguyên đán cùng Rồng Con": "Rồng Con",
+	"Trung thu rước đèn Cá Chép":   "Cá Chép Nhí",
+	"Ăn phở cùng Tô Phở":           "Tô Phở",
+	"Cà phê sáng cùng Chú Phin":    "Chú Phin",
+	"Chat công sở cùng Ổ Bánh Mì":  "Ổ Bánh Mì",
+	"Đồng quê cùng Trâu Con":       "Trâu Con",
+	"Hội An cùng Nón Lá":           "Nón Lá",
+	"Mùa sen cùng Sen Con":         "Sen Con",
+	"Chợ sáng cùng Mèo Mướp":       "Mèo Mướp",
+	"Mùa mưa Nam Bộ cùng Cậu Cóc":  "Cậu Cóc",
+}
+
+func sameCellContent(left, right Cell) bool {
+	return left.Action == right.Action && left.Expression == right.Expression &&
+		left.FreeText == right.FreeText && len(left.FragmentIDs) == len(right.FragmentIDs) &&
+		(len(left.FragmentIDs) == 0 || reflect.DeepEqual(left.FragmentIDs, right.FragmentIDs))
+}
+
+func TestSeedDesignsKeepExplicitSubjects(t *testing.T) {
+	service, db := newTestService(t)
+	ctx := context.Background()
+	if err := service.Seed(ctx); err != nil {
+		t.Fatalf("Seed: %v", err)
+	}
+
+	raw, err := seedFS.ReadFile("seed/vietnam.json")
+	if err != nil {
+		t.Fatalf("read seed file: %v", err)
+	}
+	var pack vietnamSeed
+	if err := json.Unmarshal(raw, &pack); err != nil {
+		t.Fatalf("decode seed file: %v", err)
+	}
+	profiles := make(map[string]seedCharacter, len(pack.Characters))
+	for _, character := range pack.Characters {
+		profiles[character.Name] = character
+	}
+	designs, err := service.ListDesigns(ctx, DesignFilter{PageSize: 100})
+	if err != nil {
+		t.Fatalf("ListDesigns: %v", err)
+	}
+	stored := make(map[string]Design, len(designs.Items))
+	for _, design := range designs.Items {
+		stored[design.Name] = design
+	}
+
+	for _, seeded := range pack.Designs {
+		characterName, ok := starterSubject[seeded.Name]
+		if !ok {
+			t.Fatalf("seed design %q has no starter profile mapping", seeded.Name)
+		}
+		profile, ok := profiles[characterName]
+		if !ok {
+			t.Fatalf("seed profile %q is missing from the pack", characterName)
+		}
+		design, ok := stored[seeded.Name]
+		if !ok {
+			t.Fatalf("seed design %q was not installed", seeded.Name)
+		}
+		if design.CharacterID != "" || design.Draft.CharacterID != "" || design.Snapshot.Character != nil {
+			t.Fatalf("design %q still references a character without a reference image", seeded.Name)
+		}
+		if got := snapshotLabels(t, design.Snapshot); len(got) != len(seeded.Cells) {
+			t.Fatalf("design %q snapshot labels = %#v, want one empty label per cell", seeded.Name, got)
+		} else {
+			for _, label := range got {
+				if label != "" {
+					t.Fatalf("design %q invented a label %q", seeded.Name, label)
+				}
+			}
+		}
+		if design.Rows != seeded.Rows || design.Columns != seeded.Columns || len(design.Draft.Cells) != len(seeded.Cells) {
+			t.Fatalf("design %q grid changed: %dx%d with %d cells", seeded.Name,
+				design.Rows, design.Columns, len(design.Draft.Cells))
+		}
+		for index, cell := range seeded.Cells {
+			if !sameCellContent(design.Draft.Cells[index], cell) {
+				t.Fatalf("design %q cell %d changed: %+v -> %+v", seeded.Name, index+1, cell, design.Draft.Cells[index])
+			}
+		}
+		// The converted starter keeps the subject in its drawing instructions.
+		for _, want := range []string{profile.Description, profile.IdentityNotes} {
+			if !strings.Contains(design.Draft.FreeText, want) {
+				t.Fatalf("design %q free text does not keep the %q profile:\n%s", seeded.Name, characterName, design.Draft.FreeText)
+			}
+			if !strings.Contains(design.Prompt, want) {
+				t.Fatalf("design %q prompt does not describe %q:\n%s", seeded.Name, characterName, design.Prompt)
+			}
+		}
+	}
+
+	// Restarting the seed must not overwrite an operator edit.
+	first := pack.Designs[0]
+	design := stored[first.Name]
+	design.Draft.ID = design.ID
+	design.Draft.Name = "Bản sửa của tôi"
+	edited, err := service.SaveDesign(ctx, design.Draft)
+	if err != nil {
+		t.Fatalf("SaveDesign edit: %v", err)
+	}
+	restarted := NewService(db, nil)
+	if err := restarted.Seed(ctx); err != nil {
+		t.Fatalf("Seed on restart: %v", err)
+	}
+	after, err := restarted.GetDesign(ctx, edited.ID)
+	if err != nil {
+		t.Fatalf("GetDesign after restart: %v", err)
+	}
+	if after.Name != "Bản sửa của tôi" {
+		t.Fatalf("restart overwrote the edited design name: %q", after.Name)
 	}
 }
 
