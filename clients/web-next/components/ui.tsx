@@ -246,8 +246,8 @@ export function Section({ title, hint, actions, children, className }: { title: 
               <Icon name={SECTION_ICONS[title.length % SECTION_ICONS.length]} size={13} />
             </span>
             {title}
+            {hint && <Hint text={hint} />}
           </h2>
-          {hint && <p className="mt-0.5 text-xs text-ink-2">{hint}</p>}
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
@@ -407,15 +407,44 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[13px] font-medium text-ink">{label}</span>
+      <span className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium text-ink">
+        {label}
+        {hint && <Hint text={hint} />}
+      </span>
       {children}
-      {hint && !error && <span className="mt-1.5 block text-xs text-ink-2">{hint}</span>}
       {error && (
         <span role="alert" className="mt-1.5 block text-xs text-danger">
           {error}
         </span>
       )}
     </label>
+  );
+}
+
+/** Round "!" next to a label; the hint text lives in a hover/focus tooltip so
+ * forms keep one label baseline whether or not they have a hint. */
+export function Hint({ text }: { text: string }) {
+  return (
+    <span
+      className="group relative inline-flex shrink-0 items-center align-middle"
+      tabIndex={0}
+      role="note"
+      aria-label={text}
+      data-qa="hint"
+    >
+      <span
+        aria-hidden="true"
+        className="flex size-4 items-center justify-center rounded-full border border-line-strong text-[10px] font-semibold leading-none text-ink-2"
+      >
+        !
+      </span>
+      <span
+        role="tooltip"
+        className="pointer-events-none invisible absolute left-1/2 top-full z-30 mt-1.5 w-max max-w-[16rem] -translate-x-1/2 rounded-ctl border border-line bg-panel px-2.5 py-1.5 text-xs font-normal leading-5 text-ink-2 opacity-0 shadow-[var(--shadow-pop)] transition-opacity duration-150 group-focus-visible:visible group-focus-visible:opacity-100 group-hover:visible group-hover:opacity-100"
+      >
+        {text}
+      </span>
+    </span>
   );
 }
 
