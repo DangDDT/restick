@@ -110,6 +110,8 @@ export interface Cell {
   expression: string;
   fragment_ids?: string[];
   free_text: string;
+  /** Exact text the image agent writes on this sticker; omitted or empty means no text. */
+  label?: string;
 }
 
 // Server fields with `omitempty` are optional here: an omitted field is a real
@@ -118,6 +120,8 @@ export interface Draft {
   id?: string;
   name: string;
   character_id?: string;
+  /** One reference image of the selected character; required whenever character_id is set. */
+  reference_asset_id?: string;
   group_ids?: string[];
   fragment_ids?: string[];
   pinned_fragment_ids?: string[];
@@ -145,6 +149,7 @@ export interface SnapshotCell {
   action: string;
   expression: string;
   free_text: string;
+  label?: string;
   fragments: Selection[];
 }
 
@@ -155,6 +160,7 @@ export interface Snapshot {
     name: string;
     description: string;
     identity_notes: string;
+    reference_asset_id?: string;
   };
   selections: Selection[];
   palette?: {

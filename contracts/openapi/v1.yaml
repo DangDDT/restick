@@ -293,21 +293,42 @@ components:
         expression: { type: string }
         fragment_ids: { type: array, items: { type: string } }
         free_text: { type: string }
+        label:
+          type: string
+          description: >-
+            Optional exact text the external image agent writes on this sticker.
+            Trimmed at both ends like the other text fields, with inner spaces,
+            Vietnamese accents and content kept verbatim. Omitted or empty means
+            the sticker has no text; a label alone (no action, expression,
+            free_text or fragment) is still an empty cell and is rejected with 422.
       additionalProperties: false
 
     Draft:
       type: object
       description: >-
         With a non-empty character_id, the character profile is the sole identity
-        source. Compile, save and suggest reject identity-scoped fragments in
-        fragment_ids, pinned_fragment_ids, palette_id or any cell's fragment_ids
-        with 422. Without a character, identity fragments remain supported.
-        Previously saved snapshots and prompts are not rewritten by this rule.
+        source. Compile, Save (which compiles) and Suggest reject identity-scoped
+        fragments in fragment_ids, pinned_fragment_ids, palette_id or any cell's
+        fragment_ids with 422. Only Compile and Save validate reference_asset_id:
+        they reject a character without a chosen image, a reference of another or
+        unknown character, and a reference_asset_id without a character, all with
+        422. Suggest never compiles, so it performs no reference or character
+        membership validation and preserves reference_asset_id, even an orphaned
+        one, together with every label and text field. Without a character, Compile
+        and Save accept a design without any reference and identity fragments
+        remain supported. Previously saved snapshots and prompts are not rewritten
+        by these rules.
       required: [name, rows, columns, cells]
       properties:
         id: { type: string, description: Ignored on create and on compile/suggest. }
         name: { type: string }
         character_id: { type: string }
+        reference_asset_id:
+          type: string
+          description: >-
+            One reference image selected from the character's reference_asset_ids.
+            Compile and Save require it when character_id is set and reject it
+            without a character; Suggest only carries it through unchanged.
         group_ids: { type: array, items: { type: string } }
         fragment_ids: { type: array, items: { type: string } }
         pinned_fragment_ids: { type: array, items: { type: string } }
@@ -346,6 +367,12 @@ components:
         name: { type: string }
         description: { type: string }
         identity_notes: { type: string }
+        reference_asset_id:
+          type: string
+          description: >-
+            Reference image verified at compile time and frozen with this
+            snapshot. Optional so snapshots saved before the field existed still
+            decode; it is never rewritten from current selections.
 
     SnapshotPalette:
       type: object
@@ -367,6 +394,11 @@ components:
         action: { type: string }
         expression: { type: string }
         free_text: { type: string }
+        label:
+          type: string
+          description: >-
+            Exact visible label frozen at compile time; omitted or empty means
+            this sticker was compiled with no text.
         fragments:
           type: array
           items: { $ref: '#/components/schemas/Selection' }
