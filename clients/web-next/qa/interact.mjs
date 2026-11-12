@@ -17,6 +17,28 @@ const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64",
 );
+// Grant saves are PUTs; waiting for the response (not the optimistic count text)
+// keeps the assertions honest and never closes the dialog mid-save.
+const GRANT_PUT = (res) => res.request().method() === "PUT" && /\/api\/v1\/admin\/api-keys\/[^/]+\/packs$/.test(new URL(res.url()).pathname) && res.ok();
+async function setGrant(p, option, grant, expectedChecked) {
+  const saved = p.waitForResponse(GRANT_PUT, { timeout: 5000 });
+  if (grant) await option.check(); else await option.uncheck();
+  await saved;
+  const dialog = p.locator("dialog[open]");
+  await dialog.getByText("Đã lưu quyền pack.").waitFor({ timeout: 5000 });
+  const checked = await dialog.locator("[data-qa=key-pack-option]:checked").count();
+  if (checked !== expectedChecked) throw new Error(`checked=${checked} expected=${expectedChecked}`);
+}
+async function waitRowPackCount(p, name, expected) {
+  await p.waitForFunction(
+    ([rowName, want]) => {
+      const row = [...document.querySelectorAll("tbody tr")].find((tr) => tr.textContent.includes(rowName));
+      return row?.querySelector("[data-qa=key-pack-count]")?.textContent.trim() === want;
+    },
+    [name, expected],
+    { timeout: 5000 },
+  );
+}
 
 const browser = await chromium.launch();
 async function ctx(w, h, scheme = "light") {
@@ -98,6 +120,7 @@ await scenario("default");
     if ((await p.locator("[data-qa=sheet-option]").count()) < 2) throw new Error("sheet gallery missing");
     await form.getByLabel("Tên pack").fill("QA sheet pack");
     await form.getByLabel("Slug").fill("qa-sheet-pack");
+    await form.getByLabel("Tác giả").fill("QA Studio");
     await form.locator("button[type=submit]").click();
     const sheetAlert = p.locator("form [role=alert]");
     await sheetAlert.waitFor();
@@ -115,8 +138,8 @@ await scenario("default");
     await form.locator("button[type=submit]").click();
     await p.waitForURL("**/packs/detail?id=**");
     await p.waitForLoadState("networkidle");
-    if ((await p.locator("[data-qa=pack-sheet-image]").count()) === 0) throw new Error("pack sheet image missing");
-    if ((await p.locator("[data-qa=design-panel]").count()) === 0) throw new Error("pack design panel missing");
+    await p.locator("[data-qa=pack-sheet-image]").waitFor({ timeout: 5000 });
+    await p.locator("[data-qa=design-panel]").waitFor({ timeout: 5000 });
   });
   await step("pack detail: change the sheet through PUT", async () => {
     const before = await p.locator("[data-qa=pack-sheet-image]").getAttribute("src");
@@ -148,10 +171,8 @@ await scenario("default");
     await dialog.locator("[data-qa=key-pack-access]").waitFor();
     const options = dialog.locator("[data-qa=key-pack-option]");
     if ((await options.count()) < 3) throw new Error("packs missing");
-    await options.nth(0).check();
-    await dialog.getByText("Số pack: 1").waitFor();
-    await options.nth(1).check();
-    await dialog.getByText("Số pack: 2").waitFor();
+    await setGrant(p, options.nth(0), true, 1);
+    await setGrant(p, options.nth(1), true, 2);
     await p.screenshot({ path: join(OUT, "keys-access-1440.png") });
     await p.keyboard.press("Escape");
     await p.waitForSelector("dialog[open]", { state: "detached" });
@@ -161,13 +182,17 @@ await scenario("default");
     dialog = p.locator("dialog[open]");
     await dialog.locator("[data-qa=key-pack-option]:checked").first().waitFor();
     if ((await dialog.locator("[data-qa=key-pack-option]:checked").count()) !== 2) throw new Error("grants not persisted");
-    await dialog.locator("[data-qa=key-pack-option]:checked").first().uncheck();
-    await dialog.getByText("Số pack: 1").waitFor();
+    await setGrant(p, dialog.locator("[data-qa=key-pack-option]:checked").first(), false, 1);
+    // Clearing the filtered list is an explicit empty set, not a missing body.
+    const cleared = p.waitForResponse(GRANT_PUT, { timeout: 5000 });
+    await dialog.getByRole("button", { name: "Bỏ chọn tất cả" }).click();
+    await cleared;
+    await dialog.getByText("Đã lưu quyền pack.").waitFor({ timeout: 5000 });
+    if ((await dialog.locator("[data-qa=key-pack-option]:checked").count()) !== 0) throw new Error("clear did not persist");
+    await setGrant(p, dialog.locator("[data-qa=key-pack-option]").first(), true, 1);
     await p.keyboard.press("Escape");
     await p.waitForSelector("dialog[open]", { state: "detached" });
-    await p.waitForTimeout(400);
-    const count = await p.locator("tbody tr", { hasText: "QA grant key" }).first().locator("[data-qa=key-pack-count]").innerText();
-    if (count.trim() !== "1") throw new Error("pack_count=" + count);
+    await waitRowPackCount(p, "QA grant key", "1");
   });
   await step("keys: rotation carries the granted packs", async () => {
     await p.locator("tbody tr").first().getByRole("button", { name: "Xoay khóa" }).click();
@@ -175,12 +200,21 @@ await scenario("default");
     await p.locator("dialog[open]").getByRole("button", { name: "Xoay khóa", exact: true }).click();
     const dialog = p.locator("dialog[open]");
     await dialog.locator("[data-qa=key-pack-access]").waitFor();
-    await dialog.getByText("Số pack: 1").waitFor();
+    await dialog.locator("[data-qa=key-pack-option]:checked").first().waitFor();
+    if ((await dialog.locator("[data-qa=key-pack-option]:checked").count()) !== 1) throw new Error("rotated key lost its grant");
+    const raw = await dialog.locator("textarea").inputValue();
+    const prefix = raw.slice(0, 10);
     await p.keyboard.press("Escape");
     await p.waitForSelector("dialog[open]", { state: "detached" });
-    await p.waitForTimeout(400);
-    const count = await p.locator("tbody tr").first().locator("[data-qa=key-pack-count]").innerText();
-    if (count.trim() !== "1") throw new Error("rotated pack_count=" + count);
+    // The replacement key is the first row and must carry the grant from the old key.
+    await p.waitForFunction(
+      ([pfx]) => {
+        const row = document.querySelector("tbody tr");
+        return Boolean(row?.textContent.includes(pfx)) && row?.querySelector("[data-qa=key-pack-count]")?.textContent.trim() === "1";
+      },
+      [prefix],
+      { timeout: 5000 },
+    );
   });
   await c.close(); }
 

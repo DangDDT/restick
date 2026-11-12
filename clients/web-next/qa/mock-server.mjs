@@ -820,7 +820,9 @@ async function handleApi(req, res, url) {
       return send(res, 200, { ...pg, items: pg.items.map(packView) });
     }
     if (method === "POST") {
-      if (!json?.slug || !json?.name) return fail(res, 422, "unprocessable", "Thiếu slug hoặc tên.");
+      if (!json?.slug || !json?.name?.trim() || !json?.author?.trim()) {
+        return fail(res, 422, "unprocessable", "Name and author are required.");
+      }
       const sheet = store.sheets.find((s) => s.id === json.sheet_id && s.design_id === json.design_id);
       if (!json.design_id || !sheet) return fail(res, 422, "unprocessable", "Sheet phải thuộc thiết kế đã chọn.");
       if (store.packs.some((x) => x.slug === json.slug)) return fail(res, 409, "slug_taken", "Slug này đã được dùng. Chọn slug khác.");
@@ -837,6 +839,9 @@ async function handleApi(req, res, url) {
     if (!action) {
       if (method === "GET") return send(res, 200, packDetail(pk));
       if (method === "PUT") {
+        if (!String(json?.name ?? "").trim() || !String(json?.author ?? "").trim()) {
+          return fail(res, 422, "unprocessable", "Name and author are required.");
+        }
         if (pk.status === "revoked") return fail(res, 410, "pack_revoked", "Pack đã bị thu hồi; thao tác này không còn hiệu lực.");
         const designId = json.design_id ?? pk.design_id;
         const sheet = store.sheets.find((s) => s.id === json.sheet_id && s.design_id === designId);
@@ -893,8 +898,11 @@ async function handleApi(req, res, url) {
     if (!k || hidden()) return notFound();
     if (method === "GET") return send(res, 200, { pack_ids: grantIds(k.id) });
     if (method === "PUT") {
-      const ids = Array.isArray(json?.pack_ids) ? [...new Set(json.pack_ids.map(String))] : null;
-      if (!ids) return fail(res, 422, "unprocessable", "pack_ids phải là mảng.");
+      if (!json || json.pack_ids === undefined || json.pack_ids === null) {
+        return fail(res, 400, "bad_request", "pack_ids is required.");
+      }
+      if (!Array.isArray(json.pack_ids)) return fail(res, 400, "bad_request", "pack_ids must be an array.");
+      const ids = [...new Set(json.pack_ids.map(String))];
       if (ids.some((id) => !store.packs.some((pk) => pk.id === id))) return fail(res, 422, "unprocessable", "Pack không tồn tại.");
       store.keyPacks.set(k.id, new Set(ids));
       return send(res, 200, { pack_ids: grantIds(k.id) });
