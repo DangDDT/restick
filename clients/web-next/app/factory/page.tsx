@@ -1,11 +1,14 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RequireAuth } from "@/components/guards";
 import { AiProviderLinks } from "@/components/ai-provider-links";
 import { DesignSheets } from "@/components/design-sheets";
+import { CompiledReference } from "@/components/compiled-reference";
+import { PalettePicker } from "@/components/palette-picker";
+import { ReferencePreview } from "@/components/reference-preview";
 import { Icon } from "@/components/icons";
 import {
   Button,
@@ -30,6 +33,7 @@ import { formatDate } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import type {
   Cell,
+  Character,
   CharacterList,
   CompiledDesign,
   Design,
@@ -55,11 +59,12 @@ interface CellState {
   action: string;
   expression: string;
   free_text: string;
+  label: string;
   fragment_ids: string[];
 }
 
 function emptyCell(): CellState {
-  return { action: "", expression: "", free_text: "", fragment_ids: [] };
+  return { action: "", expression: "", free_text: "", label: "", fragment_ids: [] };
 }
 
 function resizeCells(cells: Cell[], count: number): CellState[] {
@@ -70,6 +75,7 @@ function resizeCells(cells: Cell[], count: number): CellState[] {
           action: cell.action,
           expression: cell.expression,
           free_text: cell.free_text,
+          label: cell.label ?? "",
           fragment_ids: cell.fragment_ids ?? [],
         }
       : emptyCell();
@@ -80,6 +86,7 @@ interface BuilderState {
   id: string | null;
   name: string;
   characterId: string;
+  referenceAssetId: string;
   paletteId: string;
   groupIds: string[];
   selections: Record<string, string>;
@@ -97,6 +104,7 @@ function blankState(): BuilderState {
     id: null,
     name: "",
     characterId: "",
+    referenceAssetId: "",
     paletteId: "",
     groupIds: [],
     selections: {},
@@ -145,6 +153,7 @@ function stateFromDesign(design: Design, fragmentsById: Map<string, Fragment>): 
     id: design.id,
     name: design.name,
     characterId: design.character_id || "",
+    referenceAssetId: draft.reference_asset_id ?? "",
     paletteId: draft.palette_id ?? "",
     groupIds,
     selections,
@@ -165,6 +174,7 @@ function draftFromState(state: BuilderState): Draft {
     id: state.id ?? undefined,
     name: state.name.trim(),
     character_id: state.characterId,
+    reference_asset_id: state.referenceAssetId || undefined,
     group_ids: state.groupIds,
     fragment_ids: Array.from(new Set(selected)),
     pinned_fragment_ids: state.pinned.filter((id) => selected.includes(id)),
@@ -177,18 +187,13 @@ function draftFromState(state: BuilderState): Draft {
       expression: cell.expression,
       fragment_ids: cell.fragment_ids,
       free_text: cell.free_text,
+      label: cell.label,
     })),
     outline_width: outlineWidthFromInput(state.outlineWidth),
     outline_color: state.outlineColor,
   };
 }
 
-const COLOR_ROLES = [
-  ["primary", "rolePrimary"],
-  ["secondary", "roleSecondary"],
-  ["accent", "roleAccent"],
-  ["line", "roleLine"],
-] as const;
 
 function FragmentPicker({
   fragments,
@@ -265,11 +270,10 @@ function Factory() {
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const sheetPromptRef = useRef<HTMLTextAreaElement>(null);
   const [state, setState] = useState<BuilderState>(blankState);
-  const [compiledPrompt, setCompiledPrompt] = useState("");
+  const [result, setResult] = useState<CompiledDesign | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [suggesting, setSuggesting] = useState(false);
-  const [compiling, setCompiling] = useState(false);
+  const [busy, setBusy] = useState<"compile" | "save" | "suggest" | "delete" | null>(null);
   const [pickerCell, setPickerCell] = useState<number | null>(null);
   const [addGroupId, setAddGroupId] = useState("");
   const [promptSheetOpen, setPromptSheetOpen] = useState(false);
@@ -295,51 +299,26 @@ function Factory() {
     state.paletteId,
   ])).filter((id) => fragmentsById.get(id)?.scope === "identity") : [];
   const hasIdentityConflict = identityConflictIds.length > 0;
-  const palettes = (fragments.data ?? []).filter(
-    (f) => f.colors && (!f.archived || f.id === state.paletteId) &&
-      (!state.characterId || f.scope !== "identity" || f.id === state.paletteId),
-  );
-  const charactersById = new Map((characters.data?.items ?? []).map((c) => [c.id, c]));
-  const selectedPalette = state.paletteId ? fragmentsById.get(state.paletteId) : undefined;
-  const paletteColors = selectedPalette?.colors;
-
-  const saveDesign = useMutation({
-    mutationFn: (draft: Draft) =>
-      draft.id
-        ? api<Design>(`/api/v1/admin/designs/${draft.id}`, { method: "PUT", json: draft })
-        : api<Design>("/api/v1/admin/designs", { method: "POST", json: draft }),
-    onSuccess: (saved) => {
-      setError(null);
-      setNotice(t("designSaved"));
-      setState((current) => ({ ...current, id: saved.id, name: saved.name }));
-      setCompiledPrompt(saved.compiled_prompt);
-      qc.invalidateQueries({ queryKey: ["designs-all"] });
-    },
-    onError: (err) => setError(errorText(err)),
+  const activeCharacters = (characters.data?.items ?? []).filter((character) => !character.archived);
+  const charactersById = new Map(activeCharacters.map((character) => [character.id, character]));
+  const savedCharacter = useQuery({
+    queryKey: ["characters", state.characterId],
+    queryFn: () => api<Character>(`/api/v1/admin/characters/${encodeURIComponent(state.characterId)}`),
+    enabled: Boolean(state.characterId) && characters.isSuccess && !charactersById.has(state.characterId),
   });
-
-  const deleteDesign = useMutation({
-    mutationFn: (id: string) => api<void>(`/api/v1/admin/designs/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      setError(null);
-      setNotice(t("designDeleted"));
-      setCompiledPrompt("");
-      setState(blankState());
-      qc.invalidateQueries({ queryKey: ["designs-all"] });
-    },
-    onError: (err) => setError(errorText(err)),
-  });
-
-  const editorBusy = saveDesign.isPending || deleteDesign.isPending;
-  const loadError = groups.error ?? fragments.error ?? characters.error;
+  const selectedCharacter = charactersById.get(state.characterId) ?? savedCharacter.data;
+  const editorBusy = busy !== null;
+  const loadError = groups.error ?? fragments.error ?? characters.error ?? savedCharacter.error;
 
   function retryLoads() {
     void groups.refetch();
     void fragments.refetch();
     void characters.refetch();
+    if (state.characterId && !charactersById.has(state.characterId)) void savedCharacter.refetch();
   }
 
   function update(patch: Partial<BuilderState>) {
+    if (editorBusy) return;
     setState((current) => ({ ...current, ...patch }));
   }
 
@@ -347,11 +326,12 @@ function Factory() {
     if (editorBusy) return;
     setError(null);
     setNotice(null);
-    setCompiledPrompt(design.compiled_prompt);
+    setResult({ compiled_prompt: design.compiled_prompt, snapshot: design.snapshot });
     setState(stateFromDesign(design, fragmentsById));
   }
 
   function setGrid(nextRows: number, nextColumns: number) {
+    if (editorBusy) return;
     const rows = Math.min(8, Math.max(1, nextRows || 1));
     const columns = Math.min(8, Math.max(1, nextColumns || 1));
     setState((current) => ({
@@ -363,6 +343,7 @@ function Factory() {
   }
 
   function togglePin(fragmentId: string) {
+    if (editorBusy) return;
     setState((current) => ({
       ...current,
       pinned: current.pinned.includes(fragmentId)
@@ -372,6 +353,7 @@ function Factory() {
   }
 
   function selectFragment(groupId: string, fragmentId: string) {
+    if (editorBusy) return;
     setState((current) => ({
       ...current,
       selections: { ...current.selections, [groupId]: fragmentId },
@@ -382,6 +364,7 @@ function Factory() {
   }
 
   function removeGroup(groupId: string) {
+    if (editorBusy) return;
     setState((current) => {
       const selections = { ...current.selections };
       const removed = selections[groupId];
@@ -396,6 +379,7 @@ function Factory() {
   }
 
   function removeIdentityFragments() {
+    if (editorBusy) return;
     const identityIds = new Set(identityConflictIds);
     setState((current) => ({
       ...current,
@@ -411,7 +395,8 @@ function Factory() {
   }
 
   async function suggest() {
-    setSuggesting(true);
+    if (editorBusy) return;
+    setBusy("suggest");
     setError(null);
     setNotice(null);
     try {
@@ -433,40 +418,90 @@ function Factory() {
     } catch (err) {
       setError(errorText(err));
     } finally {
-      setSuggesting(false);
+      setBusy(null);
     }
+  }
+
+  function validReference(): boolean {
+    if (!state.characterId) {
+      if (!state.referenceAssetId) return true;
+      setError(t("compositionReferenceInvalid"));
+    } else if (!state.referenceAssetId) {
+      setError(t("compositionReferenceRequired"));
+    } else if (!selectedCharacter?.reference_asset_ids.includes(state.referenceAssetId)) {
+      setError(t("compositionReferenceInvalid"));
+    } else {
+      return true;
+    }
+    return false;
   }
 
   async function compile() {
-    setCompiling(true);
-    setError(null);
+    if (editorBusy) return;
     setNotice(null);
+    if (!validReference()) return;
+    setBusy("compile");
+    setError(null);
     try {
-      const result = await api<CompiledDesign>("/api/v1/admin/designs/compile", {
+      const compiled = await api<CompiledDesign>("/api/v1/admin/designs/compile", {
         method: "POST",
         json: draftFromState(state),
       });
-      setCompiledPrompt(result.compiled_prompt);
+      setResult(compiled);
     } catch (err) {
       setError(errorText(err));
     } finally {
-      setCompiling(false);
+      setBusy(null);
     }
   }
 
-  function save() {
+  async function save(asCopy = false) {
+    if (editorBusy) return;
     setNotice(null);
-    if (!state.name.trim()) {
+    if (!asCopy && !state.name.trim()) {
       setError(t("designNameRequired"));
       return;
     }
-    saveDesign.mutate(draftFromState(state));
+    if (!validReference()) return;
+    const draft = draftFromState(state);
+    if (asCopy) {
+      draft.id = undefined;
+      draft.name = `${state.name.trim() || t("newDesign")} (${t("copySuffix")})`;
+    }
+    setBusy("save");
+    setError(null);
+    try {
+      const saved = await api<Design>(draft.id ? `/api/v1/admin/designs/${draft.id}` : "/api/v1/admin/designs", {
+        method: draft.id ? "PUT" : "POST",
+        json: draft,
+      });
+      setState(stateFromDesign(saved, fragmentsById));
+      setResult({ compiled_prompt: saved.compiled_prompt, snapshot: saved.snapshot });
+      setNotice(t("designSaved"));
+      void qc.invalidateQueries({ queryKey: ["designs-all"] });
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
   }
 
-  // Dropping the id makes the POST path create a new design, leaving the template intact.
-  function saveCopy() {
+  async function deleteDesign() {
+    if (editorBusy || !state.id) return;
+    setBusy("delete");
+    setError(null);
     setNotice(null);
-    saveDesign.mutate({ ...draftFromState(state), id: undefined, name: `${state.name.trim() || t("newDesign")} (${t("copySuffix")})` });
+    try {
+      await api<void>(`/api/v1/admin/designs/${state.id}`, { method: "DELETE" });
+      setState(blankState());
+      setResult(null);
+      setNotice(t("designDeleted"));
+      void qc.invalidateQueries({ queryKey: ["designs-all"] });
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
   }
 
   const availableGroups = (groups.data?.items ?? []).filter(
@@ -493,8 +528,9 @@ function Factory() {
             icon="plus"
             disabled={editorBusy}
             onClick={() => {
+              if (editorBusy) return;
               setState(blankState());
-              setCompiledPrompt("");
+              setResult(null);
               setError(null);
               setNotice(null);
             }}
@@ -573,7 +609,7 @@ function Factory() {
         </div>
       ) : (
         <div className="grid gap-x-10 lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
-          <div className="min-w-0">
+          <fieldset disabled={editorBusy} aria-busy={editorBusy} className="min-w-0">
             {loadError && (
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <ErrorBanner message={errorText(loadError)} />
@@ -593,54 +629,57 @@ function Factory() {
                     className={inputClass}
                   />
                 </Field>
-                <Field label={t("character")} hint={state.characterId ? t("characterIdentitySource") : undefined}>
+                <Field label={t("character")} hint={state.characterId ? t(selectedCharacter?.archived ? "archived" : "characterIdentitySource") : undefined}>
                   <select
                     value={state.characterId}
-                    onChange={(e) => update({ characterId: e.target.value })}
+                    onChange={(e) => update({ characterId: e.target.value, referenceAssetId: "" })}
                     className={selectClass}
                   >
                     <option value="">{t("characterNone")}</option>
-                    {characters.data?.items.map((character) => (
+                    {activeCharacters.map((character) => (
                       <option key={character.id} value={character.id}>
                         {character.name}
                       </option>
                     ))}
                     {state.characterId && !charactersById.has(state.characterId) && (
-                      <option value={state.characterId}>{state.characterId}</option>
+                      <option value={state.characterId}>{selectedCharacter?.name ?? state.characterId} {selectedCharacter?.archived ? `(${t("archived")})` : ""}</option>
                     )}
                   </select>
                 </Field>
-                <Field label={t("palette")}>
-                  <select
-                    value={state.paletteId}
-                    onChange={(e) => update({ paletteId: e.target.value })}
-                    className={selectClass}
-                  >
-                    <option value="">{t("paletteNone")}</option>
-                    {palettes.map((palette) => (
-                      <option key={palette.id} value={palette.id} disabled={Boolean(state.characterId) && palette.scope === "identity"}>
-                        {palette.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                {paletteColors && (
-                  <div className="sm:col-span-3">
-                    <p className="mb-1.5 text-[13px] font-medium text-ink">{t("paletteRoles")}</p>
-                    <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-ink-2">
-                      {COLOR_ROLES.map(([role, label]) => (
-                        <li key={role} className="inline-flex items-center gap-1.5">
-                          <span
-                            aria-hidden="true"
-                            className="size-4 rounded-[3px] border border-line-strong"
-                            style={{ backgroundColor: paletteColors[role] }}
-                          />
-                          {t(label)} <span className="mono text-ink-3">{paletteColors[role]}</span>
-                        </li>
-                      ))}
-                    </ul>
+                {state.characterId && (
+                  <div className="space-y-3 sm:col-span-3">
+                    <fieldset>
+                      <legend className="mb-2 text-[13px] font-medium text-ink">{t("compositionReference")}</legend>
+                      <p className="mb-3 text-xs text-ink-2">{t("compositionReferenceHint")}</p>
+                      {!selectedCharacter ? (
+                        <p className="text-sm text-ink-2">{savedCharacter.isError ? t("loadFailed") : t("loading")}</p>
+                      ) : selectedCharacter.reference_asset_ids.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                          {selectedCharacter.reference_asset_ids.map((assetId, index) => (
+                            <label key={assetId} className={cx("min-w-0 rounded-panel border p-2 focus-within:ring-2 focus-within:ring-cut", state.referenceAssetId === assetId ? "border-cut bg-cut-soft" : "border-line")}>
+                              <ReferencePreview assetId={assetId} className="aspect-square w-full" />
+                              <span className="mt-2 flex min-h-9 items-center gap-2 text-xs text-ink">
+                                <input type="radio" name="composition-reference" value={assetId} checked={state.referenceAssetId === assetId} onChange={() => update({ referenceAssetId: assetId })} className={checkClass} />
+                                {t("referenceImage")} {index + 1}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : selectedCharacter.archived ? (
+                        <WarnBanner message={t("archivedReferenceMissing")} />
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="text-sm text-ink-2">{t("compositionReferenceMissing")}</p>
+                          <Button variant="secondary" href="/characters" disabled={editorBusy}>{t("prepareCharacter")}</Button>
+                        </div>
+                      )}
+                    </fieldset>
+                    {state.referenceAssetId && selectedCharacter && !selectedCharacter.reference_asset_ids.includes(state.referenceAssetId) && <WarnBanner message={t("compositionReferenceInvalid")} />}
                   </div>
                 )}
+                <div className="sm:col-span-3">
+                  <PalettePicker palettes={fragments.data ?? []} value={state.paletteId} onChange={(paletteId) => update({ paletteId })} disabled={editorBusy} characterSelected={Boolean(state.characterId)} />
+                </div>
                 <div className="sm:col-span-3">
                   <Field label={t("designFreeText")} hint={t("freeTextHint")}>
                     <textarea
@@ -830,12 +869,24 @@ function Factory() {
                             className={inputClass}
                           />
                         </Field>
-                        <Field label={t("cellFreeText")}>
+                        <Field label={t("cellFreeText")} hint={t("cellDrawingHint")}>
                           <textarea
                             value={cell.free_text}
                             onChange={(e) => {
                               const cells = [...state.cells];
                               cells[index] = { ...cell, free_text: e.target.value };
+                              update({ cells });
+                            }}
+                            rows={2}
+                            className={inputClass}
+                          />
+                        </Field>
+                        <Field label={t("cellLabel")} hint={t("cellLabelHint")}>
+                          <textarea
+                            value={cell.label}
+                            onChange={(e) => {
+                              const cells = [...state.cells];
+                              cells[index] = { ...cell, label: e.target.value };
                               update({ cells });
                             }}
                             rows={2}
@@ -885,22 +936,22 @@ function Factory() {
 
             <Section title={t("actions")}>
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" loading={suggesting} disabled={hasIdentityConflict} onClick={() => void suggest()}>
-                  {suggesting ? t("suggesting") : t("suggest")}
+                <Button variant="secondary" loading={busy === "suggest"} disabled={editorBusy || hasIdentityConflict} onClick={() => void suggest()}>
+                  {busy === "suggest" ? t("suggesting") : t("suggest")}
                 </Button>
-                <Button variant="secondary" loading={compiling} disabled={hasIdentityConflict} onClick={() => void compile()}>
-                  {compiling ? t("compiling") : t("compile")}
+                <Button variant="secondary" loading={busy === "compile"} disabled={editorBusy || hasIdentityConflict} onClick={() => void compile()}>
+                  {busy === "compile" ? t("compiling") : t("compile")}
                 </Button>
                 <Button
                   variant="secondary"
-                  loading={saveDesign.isPending}
+                  loading={busy === "save"}
                   disabled={editorBusy || hasIdentityConflict}
-                  onClick={save}
+                  onClick={() => void save()}
                 >
-                  {saveDesign.isPending ? t("saving") : state.id ? t("updateDesign") : t("saveDesign")}
+                  {busy === "save" ? t("saving") : state.id ? t("updateDesign") : t("saveDesign")}
                 </Button>
                 {state.id && (
-                  <Button variant="secondary" icon="copy" disabled={editorBusy || hasIdentityConflict} onClick={saveCopy}>
+                  <Button variant="secondary" icon="copy" disabled={editorBusy || hasIdentityConflict} onClick={() => void save(true)}>
                     {t("saveCopy")}
                   </Button>
                 )}
@@ -922,25 +973,26 @@ function Factory() {
                 <DesignSheets designId={state.id} />
               </Section>
             )}
-          </div>
+          </fieldset>
 
           {/* Desktop: prompt output pinned beside the composition. */}
           <aside className="hidden py-5 lg:sticky lg:top-6 lg:block lg:self-start">
             <Panel
               title={t("compiledPrompt")}
-              actions={<CopyButton text={compiledPrompt} selectRef={promptRef} variant="primary" />}
+              actions={<CopyButton text={result?.compiled_prompt ?? ""} selectRef={promptRef} variant="primary" />}
             >
               <p className="mb-3 text-xs text-ink-2">{t("compiledPromptHint")}</p>
               <textarea
                 ref={promptRef}
                 readOnly
-                value={compiledPrompt}
+                value={result?.compiled_prompt ?? ""}
                 placeholder={t("noPrompt")}
                 rows={12}
                 aria-label={t("compiledPrompt")}
                 className={cx(inputClass, "mono text-xs leading-5")}
               />
-              <AiProviderLinks prompt={compiledPrompt} />
+              <CompiledReference character={result?.snapshot.character} />
+              <AiProviderLinks prompt={result?.compiled_prompt ?? ""} />
             </Panel>
           </aside>
         </div>
@@ -951,7 +1003,7 @@ function Factory() {
         <Button variant="secondary" icon="docs" onClick={() => setPromptSheetOpen(true)}>
           {t("facViewPrompt")}
         </Button>
-        <CopyButton text={compiledPrompt} variant="primary" />
+        <CopyButton text={result?.compiled_prompt ?? ""} variant="primary" />
       </div>
       <div aria-hidden="true" className="h-24 lg:hidden" />
 
@@ -959,19 +1011,20 @@ function Factory() {
         <Dialog
           title={t("compiledPrompt")}
           onClose={() => setPromptSheetOpen(false)}
-          footer={<CopyButton text={compiledPrompt} selectRef={sheetPromptRef} variant="primary" />}
+          footer={<CopyButton text={result?.compiled_prompt ?? ""} selectRef={sheetPromptRef} variant="primary" />}
         >
           <p className="mb-3 text-xs text-ink-2">{t("compiledPromptHint")}</p>
           <textarea
             ref={sheetPromptRef}
             readOnly
-            value={compiledPrompt}
+            value={result?.compiled_prompt ?? ""}
             placeholder={t("noPrompt")}
             rows={12}
             aria-label={t("compiledPrompt")}
             className={cx(inputClass, "mono text-xs leading-5")}
           />
-          <AiProviderLinks prompt={compiledPrompt} />
+          <CompiledReference character={result?.snapshot.character} />
+          <AiProviderLinks prompt={result?.compiled_prompt ?? ""} />
         </Dialog>
       )}
 
@@ -982,9 +1035,9 @@ function Factory() {
           confirmLabel={t("deleteDesign")}
           onClose={() => setConfirmDelete(false)}
           onConfirm={() => {
-            const id = state.id;
+            if (editorBusy) return;
             setConfirmDelete(false);
-            if (id) deleteDesign.mutate(id);
+            void deleteDesign();
           }}
         />
       )}
@@ -994,6 +1047,7 @@ function Factory() {
           fragments={pickerFragments}
           selected={activeCell.fragment_ids}
           onToggle={(fragmentId) => {
+            if (editorBusy) return;
             const index = pickerCell;
             if (index === null) return;
             setState((current) => {

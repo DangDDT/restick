@@ -20,9 +20,9 @@ job runs. There is no Node runtime, PostgreSQL, MinIO, gRPC mesh or FTP service.
 Pack detail discovers the latest durable processing attempt on ordinary entry
 from `/packs`, including queued/running status and the latest terminal error;
 explicit `?job=…` links remain reloadable. Revoking a ready pack prevents a
-claimed replacement from starting or cancels its active child. Saving a design
-temporarily disables switching designs so a late response cannot retarget the
-editor. Replacing a fragment selection clears its old pin; removing a group
+claimed replacement from starting or cancels its active child. Composition
+temporarily disables editing and switching designs during compile/save/suggest/delete
+so a late response cannot retarget the editor. Replacing a fragment selection clears its old pin; removing a group
 removes its pins. A failed logout leaves the studio authenticated and displays
 the failure rather than claiming the session ended.
 
@@ -35,6 +35,54 @@ and compile/save/suggest reject conflicting fragment references. Existing saved
 prompts remain readable and unchanged; editing a conflicting old design requires
 explicitly removing its identity fragments after preserving any wanted features
 in the character profile. Designs without a character can still use identity fragments.
+
+### Character-first and themed composition
+
+For a recurring character, open **Nhân vật** first. Author the description and
+identity notes, copy its live character-study prompt, create/review the appearance
+in an external tool, then upload one or more PNG/JPEG/WebP references. Restick
+does not generate images or submit to any AI provider. In **Bàn ghép**, select
+the profile and explicitly choose one of its images (even if only one exists).
+Changing/removing the character clears that choice. Compile and Save require
+current membership; Suggest can run before an image is selected and preserves
+references, labels and authored text.
+
+The prompt and reference shown below it are one frozen compilation snapshot.
+Changing the editor to image B does not replace image A beneath an older prompt;
+only a successful compile/save/load replaces that pair. Failed requests keep the
+old result; New/delete clears it. Detaching an image from a character does not
+delete the private asset or change historical snapshots. Archived saved profiles
+remain readable: if an archived profile has no images, keep/copy the old result,
+or explicitly choose a prepared active profile/no character before recompiling.
+
+For a themed pack without a recurring character, choose **Không dùng nhân vật**.
+Each cell's drawing description can name a different subject. For example, a
+1×3 food set can use separate dish descriptions and the exact optional labels
+“Bún bò Huế”, “Phở Hà Nội”, “Bánh xèo miền Tây”. Empty labels mean no lettering;
+a label alone is not a drawing description. Labels keep Unicode and internal
+whitespace. The external agent draws both art and lettering as one connected
+shape (for example on an attached ribbon); inspect spelling/diacritics and
+regenerate if needed. Restick adds no typography engine and cannot guarantee
+AI lettering. Palette cards expose all four colors before selection; palettes
+support the composition, never override identity/natural dish colors.
+
+**Sao chép ảnh** writes PNG image bytes, independently of prompt copy, from the
+displayed snapshot's private same-origin asset. JPEG/WebP are decoded to PNG
+without resizing. Binary clipboard requires a secure context, browser support
+and permission. On failure no URL/text is copied and no success is reported;
+use the private-image link to open/copy/save manually and attach it yourself.
+
+Admin contract cutover: characters now use ordered `reference_asset_ids: string[]`
+(including `[]`), not the removed singular character field. Drafts use optional
+`reference_asset_id` for their explicit selection; snapshot characters freeze
+that ID; cells/snapshot cells add optional `label`. Schema version stays 1.
+Migration 0003 backfills existing character references into the relation without
+rewriting historical designs/prompts/sheets/jobs. Legacy designs without a frozen
+reference retain their old prompt, but must explicitly select a valid reference
+before compile/save. Restore accepts version-2 backups and migrates the staging
+copy; a version-3 backup missing the relation is rejected. Public/Flutter APIs
+and sheet-upload prompt snapshots are unchanged.
+
 
 The design is in
 [`docs/specs/2026-11-10-single-operator-sticker-factory-design.md`](docs/specs/2026-11-10-single-operator-sticker-factory-design.md).

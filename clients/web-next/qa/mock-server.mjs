@@ -211,6 +211,7 @@ function buildCharacters() {
     { id: "char-bong", name: "Gấu Bông", description: "Gấu tím hiền lành, thích ôm.", identity_notes: "Thân tròn, tai nhỏ, màu tím pastel.", rights_notes: "Đã có giấy phép sử dụng đến 2027.", reference_asset_ids: ["ref-bong"], archived: false, created_at: ts(1), updated_at: ts(11) },
     { id: "char-bo", name: "Cún Bơ", description: "Cún xanh năng động, hay đi học.", identity_notes: "Tai cụp, áo đồng phục xanh.", rights_notes: "Chờ xác nhận quyền từ đối tác.", reference_asset_ids: ["ref-bo"], archived: true, created_at: ts(2), updated_at: ts(12) },
     { id: "char-tho", name: "Thỏ Tí", description: "Thỏ nhỏ nhút nhát, chưa có ảnh tham chiếu.", identity_notes: "Tai dài, má hồng.", rights_notes: "", reference_asset_ids: [], archived: false, created_at: ts(3), updated_at: ts(13) },
+    { id: "char-old", name: "Hồ sơ cũ không ảnh", description: "Nhân vật lịch sử đã lưu trữ.", identity_notes: "Giữ prompt cũ.", rights_notes: "", reference_asset_ids: [], archived: true, created_at: ts(4), updated_at: ts(14) },
   ];
 }
 
@@ -231,10 +232,11 @@ function buildDesigns(fragments, groups, characters) {
   const mk = (id, name, charId, draftPart, minute) => {
     const draft = {
       id, name, character_id: charId, rows: draftPart.rows, columns: draftPart.columns,
+      reference_asset_id: draftPart.reference_asset_id ?? characters.find((c) => c.id === charId)?.reference_asset_ids[0],
       group_ids: draftPart.group_ids, fragment_ids: draftPart.fragment_ids,
       pinned_fragment_ids: draftPart.pinned_fragment_ids ?? [], palette_id: draftPart.palette_id,
       free_text: draftPart.free_text, outline_width: 12, outline_color: "#1F2937",
-      cells: draftPart.cells,
+      cells: draftPart.cells.map((cell) => ({ ...cell, label: cell.label ?? "" })),
     };
     return { id, name, character_id: charId, rows: draft.rows, columns: draft.columns, outline_width: 12, outline_color: "#1F2937", draft, ...compileDesign(draft, byId, gById, characters), created_at: ts(minute), updated_at: ts(minute + 30) };
   };
@@ -269,6 +271,22 @@ function buildDesigns(fragments, groups, characters) {
         { action: "", expression: "", fragment_ids: [], free_text: "" },
       ],
     }, 120),
+    mk("design-food", "Ba món Việt có chữ", "", {
+      rows: 1, columns: 3, group_ids: [], fragment_ids: [], palette_id: "f-pal-1", free_text: "Phong cách sticker đồng bộ, giữ màu tự nhiên của món ăn.",
+      cells: [
+        { action: "", expression: "", fragment_ids: [], free_text: "Bowl of spicy beef noodle soup", label: "Bún bò Huế" },
+        { action: "", expression: "", fragment_ids: [], free_text: "Bowl of flat rice noodles and herbs", label: "Phở Hà Nội" },
+        { action: "", expression: "", fragment_ids: [], free_text: "Crisp golden rice pancake with vegetables", label: "Bánh xèo miền Tây" },
+      ],
+    }, 150),
+    mk("design-legacy", "Thiết kế cũ chưa chọn ảnh", "char-mi", {
+      rows: 1, columns: 1, group_ids: [], fragment_ids: [], palette_id: "", reference_asset_id: "", free_text: "",
+      cells: [{ action: "Vẫy tay", expression: "", fragment_ids: [], free_text: "" }],
+    }, 180),
+    mk("design-archived-empty", "Hồ sơ lưu trữ không ảnh", "char-old", {
+      rows: 1, columns: 1, group_ids: [], fragment_ids: [], palette_id: "", reference_asset_id: "", free_text: "",
+      cells: [{ action: "Vẫy tay", expression: "", fragment_ids: [], free_text: "" }],
+    }, 210),
   ];
 }
 
@@ -283,11 +301,12 @@ function compileDesign(draft, byId, gById, characters) {
     action: cell.action,
     expression: cell.expression,
     free_text: cell.free_text,
+    label: String(cell.label ?? "").trim(),
     fragments: (cell.fragment_ids ?? []).map((id) => byId.get(id)).filter(Boolean).map((f) => snapshotSelection(f, gById)),
   }));
   const snapshot = {
     schema_version: 1,
-    character: character ? { id: character.id, name: character.name, description: character.description, identity_notes: character.identity_notes } : undefined,
+    character: character ? { id: character.id, name: character.name, description: character.description, identity_notes: character.identity_notes, reference_asset_id: draft.reference_asset_id || undefined } : undefined,
     selections,
     palette: palette?.colors ? { fragment_id: palette.id, name: palette.name, prompt: palette.prompt, ...palette.colors } : undefined,
     free_text: draft.free_text ?? "",
@@ -299,11 +318,13 @@ function compileDesign(draft, byId, gById, characters) {
     compiled_at: ts(999),
   };
   const lines = [
-    character ? `Nhân vật: ${character.name}. ${character.identity_notes}` : "Không có nhân vật.",
+    character ? `Use the same character: ${character.name}. ${character.identity_notes}. Attach the selected reference image manually.` : "Draw the subjects described separately in each cell, with one consistent style.",
     ...selections.map((s) => `- [${s.group_name}] ${s.prompt}`),
     palette ? `Bảng màu: ${palette.name}` : "",
     draft.free_text ? `Ghi chú: ${draft.free_text}` : "",
     `Lưới ${draft.rows}x${draft.columns}, viền ${snapshot.outline_width}px ${snapshot.outline_color}.`,
+    ...cells.map((cell) => `Cell ${cell.row}.${cell.column}: drawing description ${JSON.stringify([cell.action, cell.expression, cell.free_text, ...cell.fragments.map((f) => f.prompt)].filter(Boolean).join("; "))}. ${cell.label ? `Exact visible label: ${JSON.stringify(cell.label)}. Preserve spelling and accents; join the lettering to the artwork on a connected ribbon.` : "No lettering in this cell."}`),
+    "Flat white #FFFFFF background, exact grid and count, clear margins, no grid lines, watermark or frames. Render only the requested labels, never drawing instructions as lettering.",
   ].filter(Boolean);
   return { compiled_prompt: lines.join("\n"), snapshot };
 }
@@ -569,6 +590,32 @@ function fragmentPayload(body, existing) {
   return { ...existing, ...f, colors: body.colors ?? undefined };
 }
 
+function characterReferenceIds(body) {
+  if (body.reference_asset_ids === undefined) return [];
+  if (!Array.isArray(body.reference_asset_ids) || body.reference_asset_ids.some((id) => typeof id !== "string")) return null;
+  const ids = [...new Set(body.reference_asset_ids.map((id) => id.trim()).filter(Boolean))];
+  return ids.every((id) => store.assets.some((asset) => asset.id === id)) ? ids : null;
+}
+
+function validateDraft(draft, compile = true, requireName = false) {
+  if (!draft) return "Thiếu thiết kế.";
+  if (requireName && !draft.name?.trim()) return "Thiếu tên thiết kế.";
+  const character = store.characters.find((item) => item.id === draft.character_id);
+  if (draft.character_id && !character) return "Nhân vật không tồn tại.";
+  const selected = [...(draft.fragment_ids ?? []), ...(draft.pinned_fragment_ids ?? []), draft.palette_id, ...(draft.cells ?? []).flatMap((cell) => cell.fragment_ids ?? [])];
+  if (character && selected.some((id) => store.fragments.find((fragment) => fragment.id === id)?.scope === "identity")) return "Hồ sơ nhân vật không dùng chung mảnh Nhận diện.";
+  if (!compile) return null;
+  if (!character && draft.reference_asset_id) return "Ảnh tham chiếu cần một nhân vật.";
+  if (character && (!draft.reference_asset_id || !character.reference_asset_ids.includes(draft.reference_asset_id) || !store.assets.some((asset) => asset.id === draft.reference_asset_id))) return "Chọn một ảnh thuộc hồ sơ nhân vật trước khi biên dịch hoặc lưu.";
+  if (!Number.isInteger(draft.rows) || !Number.isInteger(draft.columns) || draft.rows < 1 || draft.rows > 8 || draft.columns < 1 || draft.columns > 8 || !Array.isArray(draft.cells) || draft.cells.length !== draft.rows * draft.columns) return "Lưới cần đúng số ô, từ 1–8 hàng/cột.";
+  if (draft.cells.some((cell) => ![cell.action, cell.expression, cell.free_text].some((text) => text?.trim()) && !(cell.fragment_ids ?? []).length)) return "Mỗi ô cần mô tả hình, hành động, biểu cảm hoặc mảnh ghép; chỉ có chữ là chưa đủ.";
+  return null;
+}
+
+function normalizeDraft(draft) {
+  return { ...draft, reference_asset_id: draft.reference_asset_id || undefined, cells: (draft.cells ?? []).map((cell) => ({ ...cell, label: String(cell.label ?? "").trim() })) };
+}
+
 async function handleApi(req, res, url) {
   const p = url.pathname;
   const method = req.method;
@@ -664,10 +711,12 @@ async function handleApi(req, res, url) {
 
   // ----- characters -----
   if (p === "/api/v1/admin/characters") {
-    if (method === "GET") return send(res, 200, { items: hidden() ? [] : store.characters });
+    if (method === "GET") return send(res, 200, { items: hidden() ? [] : store.characters.filter((character) => !character.archived) });
     if (method === "POST") {
       if (!json?.name?.trim()) return fail(res, 422, "unprocessable", "Thiếu tên nhân vật.");
-      const c = { id: nextId("char"), name: json.name.trim(), description: json.description ?? "", identity_notes: json.identity_notes ?? "", rights_notes: json.rights_notes ?? "", reference_asset_ids: Array.isArray(json.reference_asset_ids) ? json.reference_asset_ids : [], archived: false, created_at: nowIso(), updated_at: nowIso() };
+      const references = characterReferenceIds(json);
+      if (!references) return fail(res, 422, "unprocessable", "Ảnh tham chiếu không tồn tại.");
+      const c = { id: nextId("char"), name: json.name.trim(), description: json.description ?? "", identity_notes: json.identity_notes ?? "", rights_notes: json.rights_notes ?? "", reference_asset_ids: references, archived: false, created_at: nowIso(), updated_at: nowIso() };
       store.characters.push(c);
       return send(res, 201, c);
     }
@@ -678,11 +727,14 @@ async function handleApi(req, res, url) {
     if (!c || hidden()) return notFound();
     if (method === "GET") return send(res, 200, c);
     if (method === "PUT") {
-      Object.assign(c, { name: json.name?.trim() ?? c.name, description: json.description ?? "", identity_notes: json.identity_notes ?? "", rights_notes: json.rights_notes ?? "", reference_asset_ids: Array.isArray(json.reference_asset_ids) ? json.reference_asset_ids : [], updated_at: nowIso() });
+      const references = characterReferenceIds(json);
+      if (!references) return fail(res, 422, "unprocessable", "Ảnh tham chiếu không tồn tại.");
+      Object.assign(c, { name: json.name?.trim() ?? c.name, description: json.description ?? "", identity_notes: json.identity_notes ?? "", rights_notes: json.rights_notes ?? "", reference_asset_ids: references, updated_at: nowIso() });
       return send(res, 200, c);
     }
     if (method === "DELETE") {
-      store.characters = store.characters.filter((x) => x.id !== c.id);
+      c.archived = true;
+      c.updated_at = nowIso();
       return send(res, 204);
     }
   }
@@ -711,6 +763,8 @@ async function handleApi(req, res, url) {
   if (p === "/api/v1/admin/designs") {
     if (method === "GET") return send(res, 200, pageOf(store.designs, url));
     if (method === "POST") {
+      const validation = validateDraft(json, true, true);
+      if (validation) return fail(res, 422, "unprocessable", validation);
       const d = buildDesignFromDraft(json, `design-${nextId("d")}`);
       if (!d) return fail(res, 422, "unprocessable", "Thiếu tên thiết kế.");
       store.designs.unshift(d);
@@ -718,17 +772,22 @@ async function handleApi(req, res, url) {
     }
   }
   if (p === "/api/v1/admin/designs/suggest" && method === "POST") {
-    const groupIds = json?.group_ids ?? [];
+    const validation = validateDraft(json, false);
+    if (validation) return fail(res, 422, "unprocessable", validation);
+    const groupIds = json.group_ids ?? [];
+    const pinned = json.pinned_fragment_ids ?? [];
     const fragment_ids = groupIds
-      .map((gid) => store.fragments.find((f) => f.group_id === gid && !f.archived))
+      .map((gid) => store.fragments.find((fragment) => fragment.group_id === gid && pinned.includes(fragment.id)) ?? store.fragments.find((fragment) => fragment.group_id === gid && !fragment.archived && (!json.character_id || fragment.scope !== "identity")))
       .filter(Boolean)
-      .map((f) => f.id);
-    return send(res, 200, { ...json, fragment_ids, pinned_fragment_ids: fragment_ids.slice(0, 1) });
+      .map((fragment) => fragment.id);
+    return send(res, 200, { ...json, fragment_ids, pinned_fragment_ids: pinned });
   }
   if (p === "/api/v1/admin/designs/compile" && method === "POST") {
+    const validation = validateDraft(json);
+    if (validation) return fail(res, 422, "unprocessable", validation);
     const byId = new Map(store.fragments.map((f) => [f.id, f]));
     const gById = new Map(store.groups.map((g) => [g.id, g]));
-    return send(res, 200, compileDesign(json ?? {}, byId, gById, store.characters));
+    return send(res, 200, compileDesign(normalizeDraft(json), byId, gById, store.characters));
   }
   m = /^\/api\/v1\/admin\/designs\/([^/]+)$/.exec(p);
   if (m) {
@@ -736,6 +795,8 @@ async function handleApi(req, res, url) {
     if (!d || hidden()) return notFound();
     if (method === "GET") return send(res, 200, d);
     if (method === "PUT") {
+      const validation = validateDraft(json, true, true);
+      if (validation) return fail(res, 422, "unprocessable", validation);
       const updated = buildDesignFromDraft(json, d.id, d.created_at);
       if (!updated) return fail(res, 422, "unprocessable", "Thiếu tên thiết kế.");
       Object.assign(d, updated);
@@ -945,7 +1006,7 @@ function buildDesignFromDraft(draft, id, createdAt = nowIso()) {
   if (!draft?.name?.trim()) return null;
   const byId = new Map(store.fragments.map((f) => [f.id, f]));
   const gById = new Map(store.groups.map((g) => [g.id, g]));
-  const d = { ...draft, id, name: draft.name.trim(), outline_width: draft.outline_width ?? 12, outline_color: draft.outline_color ?? "#1F2937" };
+  const d = { ...normalizeDraft(draft), id, name: draft.name.trim(), outline_width: draft.outline_width ?? 4, outline_color: draft.outline_color ?? "#FFFFFF" };
   const compiled = compileDesign(d, byId, gById, store.characters);
   return { id, name: d.name, character_id: d.character_id ?? "", rows: d.rows, columns: d.columns, outline_width: d.outline_width, outline_color: d.outline_color, draft: d, snapshot: compiled.snapshot, compiled_prompt: compiled.compiled_prompt, created_at: createdAt, updated_at: nowIso() };
 }
