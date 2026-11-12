@@ -53,13 +53,17 @@ func (a *admin) keyPacks(w http.ResponseWriter, r *http.Request) {
 
 func (a *admin) setKeyPacks(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		PackIDs []string `json:"pack_ids"`
+		PackIDs *[]string `json:"pack_ids"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	if body.PackIDs == nil || *body.PackIDs == nil {
+		publicError(w, http.StatusBadRequest, "bad_request", "pack_ids is required")
+		return
+	}
 	id := r.PathValue("id")
-	if err := a.auth.SetKeyPacks(r.Context(), id, body.PackIDs); err != nil {
+	if err := a.auth.SetKeyPacks(r.Context(), id, *body.PackIDs); err != nil {
 		writeKeyError(w, err)
 		return
 	}

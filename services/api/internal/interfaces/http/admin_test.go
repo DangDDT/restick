@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -1572,5 +1573,70 @@ func TestAdminKeyPackGrants(t *testing.T) {
 	decodeInto(t, rec, &rotated)
 	if got := grants("/api/v1/admin/api-keys/" + rotated.ID + "/packs"); len(got) != 2 {
 		t.Fatalf("rotated key grants = %v", got)
+	}
+}
+
+func TestAdminKeyPackGrantBodyRequired(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		body   string
+		status int
+	}{
+		{"missing pack_ids", `{}`, http.StatusBadRequest},
+		{"null pack_ids", `{"pack_ids":null}`, http.StatusBadRequest},
+		{"null document", `null`, http.StatusBadRequest},
+		{"explicit clear", `{"pack_ids":[]}`, http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newAdminFixture(t)
+			f.login()
+			ctx := context.Background()
+			a, b := f.readyPack("alpha"), f.readyPack("beta")
+			key, err := f.auth.CreateKey(ctx, "grants", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := f.auth.SetKeyPacks(ctx, key.ID, []string{a.ID, b.ID}); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.auth.SetKeyPacks(ctx, key.ID, []string{a.ID}); err != nil {
+				t.Fatal(err)
+			}
+			before, err := f.auth.KeyRemovals(ctx, key.ID, time.Time{})
+			if err != nil || len(before) != 1 {
+				t.Fatalf("initial removals = %v, %v", before, err)
+			}
+			rec := f.request(http.MethodPut, "/api/v1/admin/api-keys/"+key.ID+"/packs", []byte(tc.body), f.adminHeaders())
+			if rec.Code != tc.status {
+				t.Errorf("PUT = %d %s, want %d", rec.Code, rec.Body.String(), tc.status)
+			}
+			grants, err := f.auth.KeyPacks(ctx, key.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			removals, err := f.auth.KeyRemovals(ctx, key.ID, time.Time{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.status == http.StatusBadRequest {
+				if errorCode(t, rec) != "bad_request" {
+					t.Errorf("error = %s, want bad_request", rec.Body.String())
+				}
+				if !reflect.DeepEqual(grants, []string{a.ID}) || !reflect.DeepEqual(removals, before) {
+					t.Errorf("rejected PUT changed grants/removals: grants %v, removals %v; previous removals %v", grants, removals, before)
+				}
+			} else {
+				if len(grants) != 0 || len(removals) != 2 {
+					t.Errorf("explicit clear: grants %v, removals %v", grants, removals)
+				}
+				var out struct {
+					PackIDs []string `json:"pack_ids"`
+				}
+				decodeInto(t, rec, &out)
+				if out.PackIDs == nil || len(out.PackIDs) != 0 {
+					t.Errorf("explicit clear response = %s, want empty array", rec.Body.String())
+				}
+			}
+		})
 	}
 }

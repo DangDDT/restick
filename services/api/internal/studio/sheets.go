@@ -64,6 +64,11 @@ func (s *Service) SaveSheet(ctx context.Context, designID string, r io.Reader, f
 		var affected int64
 		if affected, err = result.RowsAffected(); err == nil && affected == 0 {
 			_ = s.files.RemoveSource(source.ID)
+			if winner, err := s.sheetByChecksum(ctx, designID, source.ChecksumSHA256); err == nil {
+				return winner, nil
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				return Sheet{}, fmt.Errorf("studio: find duplicate sheet: %w", err)
+			}
 			return Sheet{}, ErrSheetLimit
 		}
 	}
