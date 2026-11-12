@@ -876,6 +876,12 @@ func TestSeedDesignsKeepExplicitSubjects(t *testing.T) {
 				t.Fatalf("design %q prompt does not describe %q:\n%s", seeded.Name, characterName, design.Prompt)
 			}
 		}
+		// The Theme now carries the converted subject, so the prompt must bind it
+		// while still letting a cell description name a different subject.
+		lower := strings.ToLower(design.Prompt)
+		if !strings.Contains(lower, "unless") || !strings.Contains(lower, "different subject") {
+			t.Fatalf("design %q prompt does not bind the Theme subject or allow explicit overrides:\n%s", seeded.Name, design.Prompt)
+		}
 	}
 
 	// Restarting the seed must not overwrite an operator edit.

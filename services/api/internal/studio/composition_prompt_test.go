@@ -169,8 +169,9 @@ func TestCompileReferenceMembership(t *testing.T) {
 	if strings.Contains(compiled.Text, refB.ID) || strings.Contains(compiled.Text, "/api/") {
 		t.Fatalf("prompt leaks a private asset id or URL:\n%s", compiled.Text)
 	}
-	if !strings.Contains(strings.ToLower(compiled.Text), "reference image") {
-		t.Fatalf("character prompt does not ask for the selected image:\n%s", compiled.Text)
+	if lower := strings.ToLower(compiled.Text); !strings.Contains(lower, "reference image") ||
+		!strings.Contains(lower, "identity source") {
+		t.Fatalf("character prompt does not make the selected image the identity source:\n%s", compiled.Text)
 	}
 
 	saved, err := service.SaveDesign(ctx, draft(charA.ID, refB.ID))
@@ -209,7 +210,8 @@ func TestCompileReferenceMembership(t *testing.T) {
 	if _, ok := snapshotWire(t, plain.Snapshot)["character"]; ok {
 		t.Fatalf("no-character snapshot carries a character block: %v", snapshotWire(t, plain.Snapshot))
 	}
-	if strings.Contains(strings.ToLower(plain.Text), "reference image") {
+	if lower := strings.ToLower(plain.Text); strings.Contains(lower, "reference image") ||
+		strings.Contains(lower, "identity source") {
 		t.Fatalf("no-character prompt asks for a reference image:\n%s", plain.Text)
 	}
 }

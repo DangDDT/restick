@@ -307,16 +307,17 @@ components:
       type: object
       description: >-
         With a non-empty character_id, the character profile is the sole identity
-        source and reference_asset_id must name one of that character's current
-        reference_asset_ids; Compile, Save (which compiles) and Suggest reject
-        identity-scoped fragments in fragment_ids, pinned_fragment_ids, palette_id
-        or any cell's fragment_ids with 422. Compile and Save also reject a
-        character without a chosen reference_asset_id, a reference of another or
+        source. Compile, Save (which compiles) and Suggest reject identity-scoped
+        fragments in fragment_ids, pinned_fragment_ids, palette_id or any cell's
+        fragment_ids with 422. Only Compile and Save validate reference_asset_id:
+        they reject a character without a chosen image, a reference of another or
         unknown character, and a reference_asset_id without a character, all with
-        422. Suggest never compiles, so it may run before an image is chosen and
-        keeps reference_asset_id and every label unchanged. Without a character,
-        identity fragments remain supported and a reference_asset_id is rejected.
-        Previously saved snapshots and prompts are not rewritten by these rules.
+        422. Suggest never compiles, so it performs no reference or character
+        membership validation and preserves reference_asset_id, even an orphaned
+        one, together with every label and text field. Without a character, Compile
+        and Save accept a design without any reference and identity fragments
+        remain supported. Previously saved snapshots and prompts are not rewritten
+        by these rules.
       required: [name, rows, columns, cells]
       properties:
         id: { type: string, description: Ignored on create and on compile/suggest. }
@@ -326,7 +327,8 @@ components:
           type: string
           description: >-
             One reference image selected from the character's reference_asset_ids.
-            Required when character_id is set and forbidden without it.
+            Compile and Save require it when character_id is set and reject it
+            without a character; Suggest only carries it through unchanged.
         group_ids: { type: array, items: { type: string } }
         fragment_ids: { type: array, items: { type: string } }
         pinned_fragment_ids: { type: array, items: { type: string } }

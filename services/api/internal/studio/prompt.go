@@ -333,7 +333,7 @@ func renderPrompt(draft Draft, snapshot Snapshot) string {
 		b.WriteString("Reference image: attach the reference image selected for this design to the request and use it as the identity source. It is private and is not linked in this prompt. Keep the same proportions, colours, face design and line weight on every sticker; only pose, expression and props change.\n")
 	} else {
 		fmt.Fprintf(&b, "Task: draw one sticker sheet containing exactly %d separate sticker illustrations, laid out in a regular grid. Software will cut the sheet automatically, so the Technical rules below matter as much as the artwork.\n", total)
-		b.WriteString("Subjects: each sticker is described separately below and the stickers may show different subjects, objects or dishes, while line weight, rendering and presentation stay consistent across the whole sheet.\n")
+		b.WriteString("Subjects: each sticker is described separately below and the stickers may show different subjects, objects or dishes, while line weight, rendering and presentation stay consistent across the whole sheet. When the Theme specifies a subject, use it for each sticker unless that sticker's drawing description explicitly specifies a different subject.\n")
 	}
 
 	identity := make([]string, 0, len(snapshot.Selections))
