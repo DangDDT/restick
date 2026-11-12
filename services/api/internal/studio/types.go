@@ -84,24 +84,24 @@ type ReferenceAsset struct {
 
 // Character is a reusable identity: what must stay the same across packs.
 type Character struct {
-	ID               string    `json:"id"`
-	Name             string    `json:"name"`
-	Description      string    `json:"description"`
-	IdentityNotes    string    `json:"identity_notes"`
-	RightsNotes      string    `json:"rights_notes"`
-	ReferenceAssetID string    `json:"reference_asset_id,omitempty"`
-	Archived         bool      `json:"archived"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Description       string    `json:"description"`
+	IdentityNotes     string    `json:"identity_notes"`
+	RightsNotes       string    `json:"rights_notes"`
+	ReferenceAssetIDs []string  `json:"reference_asset_ids"`
+	Archived          bool      `json:"archived"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // CharacterDraft is the writable part of a character.
 type CharacterDraft struct {
-	Name             string `json:"name"`
-	Description      string `json:"description"`
-	IdentityNotes    string `json:"identity_notes"`
-	RightsNotes      string `json:"rights_notes"`
-	ReferenceAssetID string `json:"reference_asset_id"`
+	Name              string   `json:"name"`
+	Description       string   `json:"description"`
+	IdentityNotes     string   `json:"identity_notes"`
+	RightsNotes       string   `json:"rights_notes"`
+	ReferenceAssetIDs []string `json:"reference_asset_ids"`
 }
 
 // Cell describes one sticker of the sheet.

@@ -1011,15 +1011,15 @@ func TestAdminFactoryLifecycle(t *testing.T) {
 
 	rec = f.mutate(http.MethodPost, "/api/v1/admin/characters", map[string]any{
 		"name": "Mèo Mun", "description": "black cat", "identity_notes": "white whiskers; " + fragment.Prompt,
-		"reference_asset_id": reference.ID,
+		"reference_asset_ids": []string{reference.ID},
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create character = %d: %s", rec.Code, rec.Body.String())
 	}
 	var character studio.Character
 	decodeInto(t, rec, &character)
-	if character.ReferenceAssetID != reference.ID {
-		t.Fatalf("character reference = %q", character.ReferenceAssetID)
+	if len(character.ReferenceAssetIDs) != 1 || character.ReferenceAssetIDs[0] != reference.ID {
+		t.Fatalf("character references = %v", character.ReferenceAssetIDs)
 	}
 	if rec := f.get("/api/v1/admin/characters/" + character.ID); rec.Code != http.StatusOK {
 		t.Fatalf("get character = %d", rec.Code)

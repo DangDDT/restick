@@ -594,11 +594,11 @@ func TestReferenceAssetStaysPrivateAndFeedsCharacterSnapshot(t *testing.T) {
 	}
 
 	character, err := service.CreateCharacter(ctx, CharacterDraft{
-		Name:             "Bé Mực",
-		Description:      "a small ink-drop character",
-		IdentityNotes:    "one white hair streak, always a red scarf",
-		RightsNotes:      "own artwork, no third-party reference",
-		ReferenceAssetID: asset.ID,
+		Name:              "Bé Mực",
+		Description:       "a small ink-drop character",
+		IdentityNotes:     "one white hair streak, always a red scarf",
+		RightsNotes:       "own artwork, no third-party reference",
+		ReferenceAssetIDs: []string{asset.ID},
 	})
 	if err != nil {
 		t.Fatalf("CreateCharacter: %v", err)
@@ -636,7 +636,7 @@ func TestReferenceAssetStaysPrivateAndFeedsCharacterSnapshot(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM reference_assets WHERE id = ?`, asset.ID).Scan(&stored); err != nil || stored != 1 {
 		t.Fatalf("reference_assets row = %d (%v)", stored, err)
 	}
-	if _, err := service.CreateCharacter(ctx, CharacterDraft{Name: "No asset", ReferenceAssetID: "missing"}); !errors.Is(err, ErrInvalid) {
+	if _, err := service.CreateCharacter(ctx, CharacterDraft{Name: "No asset", ReferenceAssetIDs: []string{"missing"}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("character with unknown asset = %v, want ErrInvalid", err)
 	}
 }

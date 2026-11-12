@@ -234,14 +234,17 @@ components:
 
     Character:
       type: object
-      required: [id, name, description, identity_notes, rights_notes, archived, created_at, updated_at]
+      required: [id, name, description, identity_notes, rights_notes, reference_asset_ids, archived, created_at, updated_at]
       properties:
         id: { type: string }
         name: { type: string }
         description: { type: string }
         identity_notes: { type: string }
         rights_notes: { type: string }
-        reference_asset_id: { type: string }
+        reference_asset_ids:
+          type: array
+          description: Ordered private reference image ids; always present, empty when the character has no references.
+          items: { type: string }
         archived: { type: boolean }
         created_at: { $ref: '#/components/schemas/Timestamp' }
         updated_at: { $ref: '#/components/schemas/Timestamp' }
@@ -256,7 +259,10 @@ components:
           type: string
           description: Independent identity text. The studio can copy identity fragment prompts here; later fragment edits or archival do not change the profile.
         rights_notes: { type: string }
-        reference_asset_id: { type: string }
+        reference_asset_ids:
+          type: array
+          description: Ordered reference image ids. Omitted or empty means no references.
+          items: { type: string }
       additionalProperties: false
 
     CharacterList:

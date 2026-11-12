@@ -207,10 +207,10 @@ function buildAssets() {
 
 function buildCharacters() {
   return [
-    { id: "char-mi", name: "Mèo Mi", description: "Mèo vàng tinh nghịch, hay cười híp mắt.", identity_notes: "Lông vàng, đuôi dài, luôn đeo nơ đỏ.", rights_notes: "Nội bộ Restick. Không dùng cho sản phẩm bên ngoài.", reference_asset_id: "ref-mi", archived: false, created_at: ts(0), updated_at: ts(10) },
-    { id: "char-bong", name: "Gấu Bông", description: "Gấu tím hiền lành, thích ôm.", identity_notes: "Thân tròn, tai nhỏ, màu tím pastel.", rights_notes: "Đã có giấy phép sử dụng đến 2027.", reference_asset_id: "ref-bong", archived: false, created_at: ts(1), updated_at: ts(11) },
-    { id: "char-bo", name: "Cún Bơ", description: "Cún xanh năng động, hay đi học.", identity_notes: "Tai cụp, áo đồng phục xanh.", rights_notes: "Chờ xác nhận quyền từ đối tác.", reference_asset_id: "ref-bo", archived: true, created_at: ts(2), updated_at: ts(12) },
-    { id: "char-tho", name: "Thỏ Tí", description: "Thỏ nhỏ nhút nhát, chưa có ảnh tham chiếu.", identity_notes: "Tai dài, má hồng.", rights_notes: "", archived: false, created_at: ts(3), updated_at: ts(13) },
+    { id: "char-mi", name: "Mèo Mi", description: "Mèo vàng tinh nghịch, hay cười híp mắt.", identity_notes: "Lông vàng, đuôi dài, luôn đeo nơ đỏ.", rights_notes: "Nội bộ Restick. Không dùng cho sản phẩm bên ngoài.", reference_asset_ids: ["ref-mi"], archived: false, created_at: ts(0), updated_at: ts(10) },
+    { id: "char-bong", name: "Gấu Bông", description: "Gấu tím hiền lành, thích ôm.", identity_notes: "Thân tròn, tai nhỏ, màu tím pastel.", rights_notes: "Đã có giấy phép sử dụng đến 2027.", reference_asset_ids: ["ref-bong"], archived: false, created_at: ts(1), updated_at: ts(11) },
+    { id: "char-bo", name: "Cún Bơ", description: "Cún xanh năng động, hay đi học.", identity_notes: "Tai cụp, áo đồng phục xanh.", rights_notes: "Chờ xác nhận quyền từ đối tác.", reference_asset_ids: ["ref-bo"], archived: true, created_at: ts(2), updated_at: ts(12) },
+    { id: "char-tho", name: "Thỏ Tí", description: "Thỏ nhỏ nhút nhát, chưa có ảnh tham chiếu.", identity_notes: "Tai dài, má hồng.", rights_notes: "", reference_asset_ids: [], archived: false, created_at: ts(3), updated_at: ts(13) },
   ];
 }
 
@@ -667,7 +667,7 @@ async function handleApi(req, res, url) {
     if (method === "GET") return send(res, 200, { items: hidden() ? [] : store.characters });
     if (method === "POST") {
       if (!json?.name?.trim()) return fail(res, 422, "unprocessable", "Thiếu tên nhân vật.");
-      const c = { id: nextId("char"), name: json.name.trim(), description: json.description ?? "", identity_notes: json.identity_notes ?? "", rights_notes: json.rights_notes ?? "", reference_asset_id: json.reference_asset_id || undefined, archived: false, created_at: nowIso(), updated_at: nowIso() };
+      const c = { id: nextId("char"), name: json.name.trim(), description: json.description ?? "", identity_notes: json.identity_notes ?? "", rights_notes: json.rights_notes ?? "", reference_asset_ids: Array.isArray(json.reference_asset_ids) ? json.reference_asset_ids : [], archived: false, created_at: nowIso(), updated_at: nowIso() };
       store.characters.push(c);
       return send(res, 201, c);
     }
@@ -678,7 +678,7 @@ async function handleApi(req, res, url) {
     if (!c || hidden()) return notFound();
     if (method === "GET") return send(res, 200, c);
     if (method === "PUT") {
-      Object.assign(c, { name: json.name?.trim() ?? c.name, description: json.description ?? "", identity_notes: json.identity_notes ?? "", rights_notes: json.rights_notes ?? "", reference_asset_id: json.reference_asset_id || undefined, updated_at: nowIso() });
+      Object.assign(c, { name: json.name?.trim() ?? c.name, description: json.description ?? "", identity_notes: json.identity_notes ?? "", rights_notes: json.rights_notes ?? "", reference_asset_ids: Array.isArray(json.reference_asset_ids) ? json.reference_asset_ids : [], updated_at: nowIso() });
       return send(res, 200, c);
     }
     if (method === "DELETE") {

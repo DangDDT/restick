@@ -76,7 +76,7 @@ export interface Character {
   description: string;
   identity_notes: string;
   rights_notes: string;
-  reference_asset_id?: string;
+  reference_asset_ids: string[];
   archived: boolean;
   created_at: string;
   updated_at: string;
@@ -87,7 +87,7 @@ export interface CharacterDraft {
   description: string;
   identity_notes: string;
   rights_notes: string;
-  reference_asset_id: string;
+  reference_asset_ids: string[];
 }
 
 export interface CharacterList {

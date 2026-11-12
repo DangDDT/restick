@@ -276,6 +276,15 @@ func checkSchema(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("%w: schema is missing table %s", ErrBackupInvalid, table)
 		}
 	}
+	// character_reference_assets arrives with schema 3; schema-2 backups are
+	// migrated in staging after this read-only validation.
+	var version int
+	if err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
+		return fmt.Errorf("%w: read schema version: %v", ErrBackupInvalid, err)
+	}
+	if version >= 3 && !present["character_reference_assets"] {
+		return fmt.Errorf("%w: schema is missing table character_reference_assets", ErrBackupInvalid)
+	}
 	return nil
 }
 

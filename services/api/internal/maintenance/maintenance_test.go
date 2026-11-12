@@ -88,7 +88,8 @@ func buildFixture(t *testing.T) fixture {
 		execSQL(t, db, `INSERT INTO reference_assets (id, filename, content_type, byte_size, width, height, checksum_sha256)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			asset.ID, asset.Filename, asset.MediaType, asset.ByteSize, asset.Width, asset.Height, asset.ChecksumSHA256)
-		execSQL(t, db, `INSERT INTO characters (id, name, reference_asset_id) VALUES (?, ?, ?)`, id, id, asset.ID)
+		execSQL(t, db, `INSERT INTO characters (id, name) VALUES (?, ?)`, id, id)
+		execSQL(t, db, `INSERT INTO character_reference_assets (character_id, asset_id, position) VALUES (?, ?, 0)`, id, asset.ID)
 	}
 	// Archived characters keep their source file; restore must still validate it.
 	execSQL(t, db, `UPDATE characters SET archived_at = '2026-11-10T00:00:00Z' WHERE id = 'char-archived'`)

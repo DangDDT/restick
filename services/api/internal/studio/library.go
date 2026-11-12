@@ -326,44 +326,82 @@ func (s *Service) OpenReferenceAsset(ctx context.Context, id string) (ReferenceA
 }
 
 const characterColumns = `id, name, description, identity_notes, rights_notes,
-	COALESCE(reference_asset_id, ''), archived_at IS NOT NULL, created_at, updated_at`
+	archived_at IS NOT NULL, created_at, updated_at`
 
-// CreateCharacter inserts a character profile.
+// CreateCharacter inserts a character profile and its ordered references.
 func (s *Service) CreateCharacter(ctx context.Context, draft CharacterDraft) (Character, error) {
 	normalized, err := s.normalizeCharacter(ctx, draft)
 	if err != nil {
 		return Character{}, err
 	}
 	id := uuid.NewString()
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO characters
-		(id, name, description, identity_notes, rights_notes, reference_asset_id)
-		VALUES (?, ?, ?, ?, ?, ?)`,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Character{}, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO characters
+		(id, name, description, identity_notes, rights_notes)
+		VALUES (?, ?, ?, ?, ?)`,
 		id, normalized.Name, normalized.Description, normalized.IdentityNotes,
-		normalized.RightsNotes, nullable(normalized.ReferenceAssetID)); err != nil {
+		normalized.RightsNotes); err != nil {
+		return Character{}, fmt.Errorf("studio: insert character: %w", err)
+	}
+	if err := insertCharacterReferences(ctx, tx, id, normalized.ReferenceAssetIDs); err != nil {
+		return Character{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return Character{}, fmt.Errorf("studio: insert character: %w", err)
 	}
 	return s.GetCharacter(ctx, id)
 }
 
-// UpdateCharacter rewrites a character profile.
+// UpdateCharacter rewrites a character profile and replaces its reference list
+// in one transaction.
 func (s *Service) UpdateCharacter(ctx context.Context, id string, draft CharacterDraft) (Character, error) {
 	normalized, err := s.normalizeCharacter(ctx, draft)
 	if err != nil {
 		return Character{}, err
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE characters SET
-		name = ?, description = ?, identity_notes = ?, rights_notes = ?, reference_asset_id = ?,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Character{}, err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE characters SET
+		name = ?, description = ?, identity_notes = ?, rights_notes = ?,
 		updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 		WHERE id = ?`,
 		normalized.Name, normalized.Description, normalized.IdentityNotes,
-		normalized.RightsNotes, nullable(normalized.ReferenceAssetID), id)
+		normalized.RightsNotes, id)
 	if err != nil {
 		return Character{}, fmt.Errorf("studio: update character: %w", err)
 	}
-	if err := requireRow(ctx, s.db, result, "characters", id); err != nil {
+	if err := requireRow(ctx, tx, result, "characters", id); err != nil {
 		return Character{}, err
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM character_reference_assets WHERE character_id = ?`, id); err != nil {
+		return Character{}, fmt.Errorf("studio: clear character references: %w", err)
+	}
+	if err := insertCharacterReferences(ctx, tx, id, normalized.ReferenceAssetIDs); err != nil {
+		return Character{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Character{}, fmt.Errorf("studio: update character: %w", err)
+	}
 	return s.GetCharacter(ctx, id)
+}
+
+// insertCharacterReferences records the ordered association rows.
+func insertCharacterReferences(ctx context.Context, tx *sql.Tx, characterID string, assetIDs []string) error {
+	for position, assetID := range assetIDs {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO character_reference_assets
+			(character_id, asset_id, position) VALUES (?, ?, ?)`,
+			characterID, assetID, position); err != nil {
+			return fmt.Errorf("studio: insert character reference: %w", err)
+		}
+	}
+	return nil
 }
 
 // ArchiveCharacter hides a character from new drafts; saved designs keep the
@@ -388,7 +426,32 @@ func (s *Service) GetCharacter(ctx context.Context, id string) (Character, error
 	if err != nil {
 		return Character{}, fmt.Errorf("studio: get character: %w", err)
 	}
+	if item.ReferenceAssetIDs, err = s.characterReferenceIDs(ctx, id); err != nil {
+		return Character{}, err
+	}
 	return item, nil
+}
+
+// characterReferenceIDs returns one character's ordered reference assets.
+func (s *Service) characterReferenceIDs(ctx context.Context, id string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT asset_id FROM character_reference_assets
+		WHERE character_id = ? ORDER BY position`, id)
+	if err != nil {
+		return nil, fmt.Errorf("studio: get character references: %w", err)
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var assetID string
+		if err := rows.Scan(&assetID); err != nil {
+			return nil, fmt.Errorf("studio: scan character reference: %w", err)
+		}
+		ids = append(ids, assetID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("studio: read character references: %w", err)
+	}
+	return ids, nil
 }
 
 // ListCharacters returns the active characters in name order.
@@ -398,16 +461,69 @@ func (s *Service) ListCharacters(ctx context.Context) ([]Character, error) {
 	if err != nil {
 		return nil, fmt.Errorf("studio: list characters: %w", err)
 	}
-	defer rows.Close()
 	items := []Character{}
 	for rows.Next() {
 		item, err := scanCharacter(rows)
 		if err != nil {
+			rows.Close()
 			return nil, fmt.Errorf("studio: scan character: %w", err)
 		}
 		items = append(items, item)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("studio: list characters: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("studio: list characters: %w", err)
+	}
+	if err := s.attachCharacterReferences(ctx, items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// attachCharacterReferences loads every list in one query after the character
+// rows are closed, because the factory database has a single connection.
+func (s *Service) attachCharacterReferences(ctx context.Context, items []Character) error {
+	for index := range items {
+		items[index].ReferenceAssetIDs = []string{}
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	args := make([]any, len(items))
+	placeholders := make([]string, len(items))
+	for index, item := range items {
+		args[index] = item.ID
+		placeholders[index] = "?"
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT character_id, asset_id FROM character_reference_assets
+		WHERE character_id IN (`+strings.Join(placeholders, ", ")+`)
+		ORDER BY character_id, position`, args...)
+	if err != nil {
+		return fmt.Errorf("studio: list character references: %w", err)
+	}
+	byCharacter := make(map[string][]string, len(items))
+	for rows.Next() {
+		var characterID, assetID string
+		if err := rows.Scan(&characterID, &assetID); err != nil {
+			rows.Close()
+			return fmt.Errorf("studio: scan character reference: %w", err)
+		}
+		byCharacter[characterID] = append(byCharacter[characterID], assetID)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("studio: list character references: %w", err)
+	}
+	rows.Close()
+	for index, item := range items {
+		if ids, ok := byCharacter[item.ID]; ok {
+			items[index].ReferenceAssetIDs = ids
+		}
+	}
+	return nil
 }
 
 type scanner interface {
@@ -453,7 +569,7 @@ func scanCharacter(row scanner) (Character, error) {
 	var archived bool
 	var createdAt, updatedAt string
 	if err := row.Scan(&item.ID, &item.Name, &item.Description, &item.IdentityNotes, &item.RightsNotes,
-		&item.ReferenceAssetID, &archived, &createdAt, &updatedAt); err != nil {
+		&archived, &createdAt, &updatedAt); err != nil {
 		return Character{}, err
 	}
 	item.Archived = archived
@@ -509,15 +625,16 @@ func (s *Service) normalizeCharacter(ctx context.Context, draft CharacterDraft) 
 	draft.Description = strings.TrimSpace(draft.Description)
 	draft.IdentityNotes = strings.TrimSpace(draft.IdentityNotes)
 	draft.RightsNotes = strings.TrimSpace(draft.RightsNotes)
-	draft.ReferenceAssetID = strings.TrimSpace(draft.ReferenceAssetID)
+	draft.ReferenceAssetIDs = uniqueStrings(draft.ReferenceAssetIDs)
 	switch {
 	case draft.Name == "":
 		return CharacterDraft{}, fmt.Errorf("%w: character name is required", ErrInvalid)
 	case len(draft.Name) > 200 || len(draft.Description) > 4000 ||
 		len(draft.IdentityNotes) > 4000 || len(draft.RightsNotes) > 4000:
 		return CharacterDraft{}, fmt.Errorf("%w: character text is too long", ErrInvalid)
-	case draft.ReferenceAssetID != "":
-		if _, err := s.GetReferenceAsset(ctx, draft.ReferenceAssetID); err != nil {
+	}
+	for _, assetID := range draft.ReferenceAssetIDs {
+		if _, err := s.GetReferenceAsset(ctx, assetID); err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return CharacterDraft{}, fmt.Errorf("%w: unknown reference asset", ErrInvalid)
 			}
