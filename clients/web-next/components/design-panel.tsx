@@ -46,7 +46,11 @@ export function DesignPanel({ design }: { design: Design | DesignSummary }) {
           <p className="text-xs font-medium text-ink-2">{t("compiledPrompt")}</p>
           <CopyButton text={design.compiled_prompt} variant="secondary" />
         </div>
-        <pre className="mono mt-1.5 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-ctl bg-sunk p-2.5 text-xs leading-5 text-ink-2">
+        <pre
+          tabIndex={0}
+          aria-label={t("compiledPrompt")}
+          className="mono mt-1.5 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-ctl bg-sunk p-2.5 text-xs leading-5 text-ink-2"
+        >
           {design.compiled_prompt || t("noPrompt")}
         </pre>
       </div>

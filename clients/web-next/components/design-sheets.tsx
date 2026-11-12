@@ -207,7 +207,11 @@ export function DesignSheets({ designId }: { designId: string }) {
               {sheet.prompt_snapshot && (
                 <details data-qa="sheet-prompt" className="mt-1.5">
                   <summary className="cursor-pointer text-xs text-ink-2">{t("sheetPromptSnapshot")}</summary>
-                  <pre className="mono mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-ctl bg-sunk p-2 text-[11px] leading-4 text-ink-2">
+                  <pre
+                    tabIndex={0}
+                    aria-label={t("sheetPromptSnapshot")}
+                    className="mono mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-ctl bg-sunk p-2 text-[11px] leading-4 text-ink-2"
+                  >
                     {sheet.prompt_snapshot}
                   </pre>
                 </details>
