@@ -486,21 +486,18 @@ func (s *Service) ListCharacters(ctx context.Context) ([]Character, error) {
 // attachCharacterReferences loads every list in one query after the character
 // rows are closed, because the factory database has a single connection.
 func (s *Service) attachCharacterReferences(ctx context.Context, items []Character) error {
+	wanted := make(map[string]bool, len(items))
 	for index := range items {
 		items[index].ReferenceAssetIDs = []string{}
+		wanted[items[index].ID] = true
 	}
 	if len(items) == 0 {
 		return nil
 	}
-	args := make([]any, len(items))
-	placeholders := make([]string, len(items))
-	for index, item := range items {
-		args[index] = item.ID
-		placeholders[index] = "?"
-	}
+	// Unparameterized so an arbitrary number of listed characters cannot hit
+	// SQLite's host-parameter limit; listing has no page cap.
 	rows, err := s.db.QueryContext(ctx, `SELECT character_id, asset_id FROM character_reference_assets
-		WHERE character_id IN (`+strings.Join(placeholders, ", ")+`)
-		ORDER BY character_id, position`, args...)
+		ORDER BY character_id, position`)
 	if err != nil {
 		return fmt.Errorf("studio: list character references: %w", err)
 	}
@@ -511,7 +508,9 @@ func (s *Service) attachCharacterReferences(ctx context.Context, items []Charact
 			rows.Close()
 			return fmt.Errorf("studio: scan character reference: %w", err)
 		}
-		byCharacter[characterID] = append(byCharacter[characterID], assetID)
+		if wanted[characterID] {
+			byCharacter[characterID] = append(byCharacter[characterID], assetID)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()

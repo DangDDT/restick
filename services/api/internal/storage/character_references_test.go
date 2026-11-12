@@ -84,7 +84,6 @@ func TestCharacterReferencesMigrationPreservesData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upgrade from schema 2: %v", err)
 	}
-	defer reopened.Close()
 
 	if got := characterReferenceIDs(t, reopened, "char-ref"); !reflect.DeepEqual(got, []string{"ref-a"}) {
 		t.Fatalf("char-ref references = %v, want [ref-a]", got)
