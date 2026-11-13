@@ -385,6 +385,24 @@ func (s *Store) SaveAnimated(id string, data []byte) (string, error) {
 	return path.Join("animations", id+".webp"), nil
 }
 
+// OpenAnimated opens a draft animated WebP by the data-root-relative path
+// SaveAnimated returned, without following a symlink.
+func (s *Store) OpenAnimated(relativePath string) (*os.File, error) {
+	dir, name := path.Split(relativePath)
+	id := strings.TrimSuffix(name, ".webp")
+	if dir != "animations/" || id == name || !idPattern.MatchString(id) {
+		return nil, ErrUnsafePath
+	}
+	p, err := s.path("animations", name)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.verifyParent(p); err != nil {
+		return nil, err
+	}
+	return openNoFollow(p)
+}
+
 // PruneDrafts removes the regular files directly inside clips/ and
 // animations/ that keep rejects. Symlinks, subdirectories and every other
 // directory are never touched, and a symlinked draft directory is refused.

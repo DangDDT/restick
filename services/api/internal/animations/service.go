@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/eykh/restick/api_svc/internal/assets"
+	"github.com/eykh/restick/api_svc/internal/jobs"
 	"github.com/google/uuid"
 )
 
@@ -225,6 +226,35 @@ func (s *Service) Busy(ctx context.Context, packID string) (bool, error) {
 		return false, fmt.Errorf("animations: check busy: %w", err)
 	}
 	return busy, nil
+}
+
+// Publishable returns the drafts a publish job copies: ready, enabled and not
+// stale against the current version, by sticker index.
+func (s *Service) Publishable(ctx context.Context, packID string) ([]jobs.PublishableAnimation, error) {
+	rows, err := s.db.QueryContext(ctx, selectAnimation+` WHERE a.pack_id = ? AND a.status = 'ready'
+		AND a.use_animated = 1 ORDER BY a.sticker_index`, packID)
+	if err != nil {
+		return nil, fmt.Errorf("animations: list publishable: %w", err)
+	}
+	defer rows.Close()
+	items := []jobs.PublishableAnimation{}
+	for rows.Next() {
+		item, err := scanAnimation(rows)
+		if err != nil {
+			return nil, fmt.Errorf("animations: scan: %w", err)
+		}
+		if item.Stale {
+			continue
+		}
+		items = append(items, jobs.PublishableAnimation{
+			StickerIndex: item.StickerIndex, Path: item.AnimatedPath, Checksum: item.AnimatedChecksum,
+			Frames: item.Frames, DurationMS: item.DurationMS, Width: item.Width, Height: item.Height,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("animations: list publishable: %w", err)
+	}
+	return items, nil
 }
 
 func (s *Service) get(ctx context.Context, packID string, index int) (Animation, error) {

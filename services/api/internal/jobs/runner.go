@@ -29,11 +29,12 @@ const (
 // runs exactly one processor child and publishes through packs. Transactions are
 // only held for the short claim/commit writes, never while the child runs.
 type Runner struct {
-	db        *sql.DB
-	files     *assets.Store
-	processor Processor
-	timeout   time.Duration
-	wake      chan struct{}
+	db         *sql.DB
+	files      *assets.Store
+	processor  Processor
+	animations AnimationSource
+	timeout    time.Duration
+	wake       chan struct{}
 
 	// childMu serializes processor runs so there is never more than one child.
 	childMu sync.Mutex
@@ -46,18 +47,30 @@ type Runner struct {
 	recoverErr  error
 }
 
+// Option configures a Runner.
+type Option func(*Runner)
+
+// WithAnimations gives the runner the animated drafts publish jobs read.
+func WithAnimations(src AnimationSource) Option {
+	return func(r *Runner) { r.animations = src }
+}
+
 // NewRunner builds the worker for the single factory instance.
-func NewRunner(db *sql.DB, files *assets.Store, processor Processor, timeout time.Duration) *Runner {
+func NewRunner(db *sql.DB, files *assets.Store, processor Processor, timeout time.Duration, opts ...Option) *Runner {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
-	return &Runner{
+	r := &Runner{
 		db:        db,
 		files:     files,
 		processor: processor,
 		timeout:   timeout,
 		wake:      make(chan struct{}, 1),
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 // ChildLock returns the lock that serializes processor children, so another
@@ -345,6 +358,27 @@ func (r *Runner) execute(ctx context.Context, job Job) {
 		return
 	}
 
+	switch job.Request.Kind {
+	case "":
+	case KindPublish:
+		// Go-only: no processor child; the output is copied from committed files.
+		request, err := r.prepare(job)
+		if err != nil {
+			r.fail(ctx, job, CodeStageFailed, err.Error())
+			return
+		}
+		manifest, err := r.preparePublish(runCtx, request)
+		if err != nil {
+			r.failRun(ctx, runCtx, job, CodeStageFailed, err)
+			return
+		}
+		r.publish(ctx, job, manifest, "")
+		return
+	default:
+		r.fail(ctx, job, CodeProcessorFailed, fmt.Sprintf("unknown job kind %q", job.Request.Kind))
+		return
+	}
+
 	request, err := r.prepare(job)
 	if err != nil {
 		r.fail(ctx, job, CodeProcessorFailed, err.Error())
@@ -352,14 +386,7 @@ func (r *Runner) execute(ctx context.Context, job Job) {
 	}
 	result, err := r.processor.Process(runCtx, request)
 	if err != nil {
-		switch {
-		case errors.Is(runCtx.Err(), context.DeadlineExceeded):
-			r.fail(ctx, job, CodeTimeout, fmt.Sprintf("processing did not finish within %s", r.timeout))
-		case ctx.Err() != nil:
-			r.finish(ctx, job, StatusInterrupted, CodeShutdown, "the server stopped while this job was running")
-		default:
-			r.fail(ctx, job, CodeProcessorFailed, err.Error())
-		}
+		r.failRun(ctx, runCtx, job, CodeProcessorFailed, err)
 		return
 	}
 	manifest, err := jobManifest(request, result)
@@ -367,6 +394,25 @@ func (r *Runner) execute(ctx context.Context, job Job) {
 		r.fail(ctx, job, CodeResultInvalid, err.Error())
 		return
 	}
+	r.publish(ctx, job, manifest, result.Diagnostics)
+}
+
+// failRun maps an error of a running job: a timeout or shutdown wins over the
+// error itself, which is reported under code.
+func (r *Runner) failRun(ctx, runCtx context.Context, job Job, code string, err error) {
+	switch {
+	case errors.Is(runCtx.Err(), context.DeadlineExceeded):
+		r.fail(ctx, job, CodeTimeout, fmt.Sprintf("processing did not finish within %s", r.timeout))
+	case ctx.Err() != nil:
+		r.finish(ctx, job, StatusInterrupted, CodeShutdown, "the server stopped while this job was running")
+	default:
+		r.fail(ctx, job, code, err.Error())
+	}
+}
+
+// publish stages, renames and commits a validated manifest from the job's
+// output directory.
+func (r *Runner) publish(ctx context.Context, job Job, manifest assets.PackManifest, diagnostics string) {
 	staged, err := r.files.StageBundle(ctx, job.ID, manifest)
 	if err != nil {
 		r.fail(ctx, job, CodeStageFailed, err.Error())
@@ -383,7 +429,7 @@ func (r *Runner) execute(ctx context.Context, job Job) {
 		Version:     job.Version,
 		Manifest:    manifest,
 		Files:       committed,
-		Diagnostics: result.Diagnostics,
+		Diagnostics: diagnostics,
 	})
 	if err != nil {
 		// A revoke or an earlier terminal state wins: the conditional update
@@ -396,12 +442,16 @@ func (r *Runner) execute(ctx context.Context, job Job) {
 // directory, so a stale artifact can never be interpreted as a result.
 func (r *Runner) prepare(job Job) (JobRequest, error) {
 	request := job.Request
-	if !isUUID(request.Source.ID) {
-		return JobRequest{}, fmt.Errorf("%w: request has no source", ErrInvalid)
-	}
-	sheetPath, err := r.files.SourcePath(request.Source.ID)
-	if err != nil {
-		return JobRequest{}, fmt.Errorf("resolve source sheet: %w", err)
+	// A publish job copies committed files and never reads the source sheet.
+	if request.Kind != KindPublish {
+		if !isUUID(request.Source.ID) {
+			return JobRequest{}, fmt.Errorf("%w: request has no source", ErrInvalid)
+		}
+		sheetPath, err := r.files.SourcePath(request.Source.ID)
+		if err != nil {
+			return JobRequest{}, fmt.Errorf("resolve source sheet: %w", err)
+		}
+		request.SheetPath = sheetPath
 	}
 	workDir, err := r.files.WorkDir(job.ID)
 	if err != nil {
@@ -414,7 +464,6 @@ func (r *Runner) prepare(job Job) (JobRequest, error) {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return JobRequest{}, fmt.Errorf("create job output: %w", err)
 	}
-	request.SheetPath = sheetPath
 	request.WorkDir = workDir
 	return request, nil
 }

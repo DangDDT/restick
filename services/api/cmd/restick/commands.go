@@ -95,12 +95,12 @@ func serveWith(ctx context.Context, cfg config.FactoryConfig, processor jobs.Pro
 	if err := studioSvc.Seed(ctx); err != nil {
 		return err
 	}
-	runner := jobs.NewRunner(db, files, processor, cfg.ProcessTimeout)
+	animationSvc := animations.NewService(db, files)
+	runner := jobs.NewRunner(db, files, processor, cfg.ProcessTimeout, jobs.WithAnimations(animationSvc))
 	if err := runner.Recover(ctx); err != nil {
 		return err
 	}
 	// Before HTTP starts: clip recovery prunes clips no row references yet.
-	animationSvc := animations.NewService(db, files)
 	if err := animationSvc.Recover(ctx); err != nil {
 		return err
 	}
