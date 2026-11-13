@@ -269,28 +269,49 @@ func TestUploadWakesIdleWorker(t *testing.T) {
 	stop()
 }
 
-func TestStartupRequeuesRunningRows(t *testing.T) {
+func TestStartupRecoveryOnlyRequeuesGracefulShutdown(t *testing.T) {
 	h := newHarness(t)
-	packID := h.newPack(sum('a'), sum('b'))
+	packID := h.newPack(sum('a'), sum('b'), sum('c'))
 	running := h.upload(packID, 0)
-	interrupted := h.upload(packID, 1)
+	shutdown := h.upload(packID, 1)
+	crashed := h.upload(packID, 2)
 	h.exec(`UPDATE sticker_animations SET status = 'running', started_at = '2026-01-01T00:00:00Z' WHERE id = ?`, running.ID)
-	h.exec(`UPDATE sticker_animations SET status = 'interrupted', error_code = 'shutdown' WHERE id = ?`, interrupted.ID)
+	h.exec(`UPDATE sticker_animations SET status = 'interrupted', error_code = 'shutdown' WHERE id = ?`, shutdown.ID)
+	h.exec(`UPDATE sticker_animations SET status = 'interrupted', error_code = 'startup_recovery' WHERE id = ?`, crashed.ID)
 
 	if err := h.service.Recover(context.Background()); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	for _, id := range []string{running.ID, interrupted.ID} {
-		var startedAt *string
-		var code string
-		var status string
-		if err := h.db.QueryRow(`SELECT status, error_code, started_at FROM sticker_animations WHERE id = ?`, id).
-			Scan(&status, &code, &startedAt); err != nil {
-			t.Fatal(err)
-		}
-		if status != string(StatusQueued) || code != "" || startedAt != nil {
-			t.Fatalf("row %s = %s/%q/%v, want queued and cleared", id, status, code, startedAt)
-		}
+	// A clip found running is terminal: retrying whatever crashed the server
+	// on every restart would block publishing forever.
+	status, code := h.status(running.ID)
+	var finishedAt *string
+	if err := h.db.QueryRow(`SELECT finished_at FROM sticker_animations WHERE id = ?`, running.ID).Scan(&finishedAt); err != nil {
+		t.Fatal(err)
+	}
+	if status != string(StatusInterrupted) || code != jobs.CodeStartupRecovery || finishedAt == nil {
+		t.Fatalf("running row = %s/%s finished %v, want interrupted/%s and finished", status, code, finishedAt, jobs.CodeStartupRecovery)
+	}
+	if status, code := h.status(crashed.ID); status != string(StatusInterrupted) || code != jobs.CodeStartupRecovery {
+		t.Fatalf("crashed row = %s/%s, want terminal interrupted/%s", status, code, jobs.CodeStartupRecovery)
+	}
+	// A graceful shutdown proves nothing about the clip: it resumes.
+	var startedAt *string
+	var queuedCode string
+	if err := h.db.QueryRow(`SELECT status, error_code, started_at FROM sticker_animations WHERE id = ?`, shutdown.ID).
+		Scan(&status, &queuedCode, &startedAt); err != nil {
+		t.Fatal(err)
+	}
+	if status != string(StatusQueued) || queuedCode != "" || startedAt != nil {
+		t.Fatalf("shutdown row = %s/%q/%v, want queued and cleared", status, queuedCode, startedAt)
+	}
+
+	// Recovery is idempotent: a second start keeps the terminal rows terminal.
+	if err := NewService(h.db, h.service.files).Recover(context.Background()); err != nil {
+		t.Fatalf("second Recover: %v", err)
+	}
+	if status, code := h.status(running.ID); status != string(StatusInterrupted) || code != jobs.CodeStartupRecovery {
+		t.Fatalf("after a second start running row = %s/%s, want terminal interrupted", status, code)
 	}
 }
 

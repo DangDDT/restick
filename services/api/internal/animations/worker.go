@@ -279,9 +279,11 @@ func (s *Service) update(ctx context.Context, id, set string, args ...any) (bool
 	return affected == 1, err
 }
 
-// Recover is the idempotent startup step: drafts left running become
-// interrupted, every interrupted draft is queued again, and regular files in
-// clips/ and animations/ that no draft references are removed. It must run
+// Recover is the idempotent startup step: drafts left running become terminal
+// interrupted/startup_recovery like sheet jobs (a crash is not evidence of
+// completion, and retrying a clip that crashes the server would loop), only
+// rows interrupted by a graceful shutdown are queued again, and regular files
+// in clips/ and animations/ that no draft references are removed. It must run
 // before the HTTP server starts: an upload writes its clip before its row.
 func (s *Service) Recover(ctx context.Context) error {
 	s.recoverOnce.Do(func() { s.recoverErr = s.recover(ctx) })
@@ -291,14 +293,18 @@ func (s *Service) Recover(ctx context.Context) error {
 func (s *Service) recover(ctx context.Context) error {
 	// A dead process is never evidence of completion.
 	if _, err := s.db.ExecContext(ctx, `UPDATE sticker_animations SET status = 'interrupted',
-		error_code = ?, error_message = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+		error_code = ?, error_message = ?,
+		finished_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+		updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 		WHERE status = 'running'`, jobs.CodeStartupRecovery, "the server stopped while this clip was running"); err != nil {
 		return fmt.Errorf("animations: interrupt stale clips: %w", err)
 	}
+	// Only a graceful shutdown proves the clip was interrupted, not the clip
+	// itself: anything else stays terminal so the owner can reupload it.
 	if _, err := s.db.ExecContext(ctx, `UPDATE sticker_animations SET status = 'queued',
 		error_code = '', error_message = '', started_at = NULL, finished_at = NULL,
 		updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-		WHERE status = 'interrupted'`); err != nil {
+		WHERE status = 'interrupted' AND error_code = ?`, jobs.CodeShutdown); err != nil {
 		return fmt.Errorf("animations: requeue clips: %w", err)
 	}
 	s.pruneOrphans(ctx)
