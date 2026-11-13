@@ -869,3 +869,10 @@ func tombstone(t *testing.T, db *sql.DB, packID string) (count, version int, che
 	}
 	return count, version, checksum
 }
+
+func TestChildLockIsTheProcessorLock(t *testing.T) {
+	runner := NewRunner(nil, nil, nil, 0)
+	if runner.ChildLock() != &runner.childMu {
+		t.Fatal("ChildLock does not return the lock execute holds around the child")
+	}
+}

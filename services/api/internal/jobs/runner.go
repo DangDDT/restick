@@ -60,6 +60,12 @@ func NewRunner(db *sql.DB, files *assets.Store, processor Processor, timeout tim
 	}
 }
 
+// ChildLock returns the lock that serializes processor children, so another
+// worker (the clip queue) can share the one-Python-child-at-a-time rule.
+func (r *Runner) ChildLock() *sync.Mutex {
+	return &r.childMu
+}
+
 // Enqueue snapshots the pack, design, source and catalog and reserves the next
 // version in one short transaction. Only one job per pack may be queued or
 // running, enforced by the database.

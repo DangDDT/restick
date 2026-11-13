@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eykh/restick/api_svc/internal/animations"
 	"github.com/eykh/restick/api_svc/internal/assets"
 	"github.com/eykh/restick/api_svc/internal/auth"
 	"github.com/eykh/restick/api_svc/internal/infrastructure/config"
@@ -34,8 +35,9 @@ func serve(ctx context.Context, cfg config.FactoryConfig) error {
 
 // serveWith wires the single factory runtime. Startup order is fixed:
 // app lock -> partial-restore guard -> database/schema -> owner bootstrap
-// (only when absent) -> seed -> recovery -> HTTP + job runner. On shutdown the
-// runner child is cancelled and waited for before the database and lock close.
+// (only when absent) -> seed -> recovery -> HTTP + job runner + clip worker. On
+// shutdown both children are cancelled and waited for before the database and
+// lock close.
 func serveWith(ctx context.Context, cfg config.FactoryConfig, processor jobs.Processor) error {
 	release, err := storage.AcquireAppLock(cfg.DataDir)
 	if err != nil {
@@ -97,6 +99,11 @@ func serveWith(ctx context.Context, cfg config.FactoryConfig, processor jobs.Pro
 	if err := runner.Recover(ctx); err != nil {
 		return err
 	}
+	// Before HTTP starts: clip recovery prunes clips no row references yet.
+	animationSvc := animations.NewService(db, files)
+	if err := animationSvc.Recover(ctx); err != nil {
+		return err
+	}
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -115,15 +122,19 @@ func serveWith(ctx context.Context, cfg config.FactoryConfig, processor jobs.Pro
 	})
 
 	runnerErr := make(chan error, 1)
+	clipErr := make(chan error, 1)
 	httpErr := make(chan error, 1)
 	go func() { runnerErr <- runner.Run(runCtx) }()
+	go func() {
+		clipErr <- animationSvc.RunWorker(runCtx, animations.PythonClipProcessor{}, runner.ChildLock())
+	}()
 	go func() { httpErr <- httpx.Listen(runCtx, cfg.HTTPAddr, handler) }()
 	slog.Info("restick listening", "http", cfg.HTTPAddr, "data", cfg.DataDir)
 
 	// Whichever side stops first cancels the other; a parent cancel is a
 	// graceful shutdown. Both are awaited before the deferred DB/lock close.
 	var serveErr error
-	remaining := 2
+	remaining := 3
 	parentDone := ctx.Done()
 	for remaining > 0 {
 		select {
@@ -132,6 +143,12 @@ func serveWith(ctx context.Context, cfg config.FactoryConfig, processor jobs.Pro
 			cancel()
 			if err != nil && serveErr == nil {
 				serveErr = fmt.Errorf("restick: job runner: %w", err)
+			}
+		case err := <-clipErr:
+			remaining--
+			cancel()
+			if err != nil && serveErr == nil {
+				serveErr = fmt.Errorf("restick: clip worker: %w", err)
 			}
 		case err := <-httpErr:
 			remaining--

@@ -351,6 +351,82 @@ func (s *Store) RemoveAnimated(id string) error {
 	return s.removeFile("animations", id+".webp")
 }
 
+// SaveAnimated atomically writes the draft animated WebP animations/<id>.webp
+// and returns that data-root-relative path.
+func (s *Store) SaveAnimated(id string, data []byte) (string, error) {
+	if !idPattern.MatchString(id) {
+		return "", ErrInvalidClipID
+	}
+	final, err := s.path("animations", id+".webp")
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Dir(final)
+	if err := s.verifyDir(dir); err != nil {
+		return "", err
+	}
+	tmp := filepath.Join(dir, "."+id+".webp.tmp")
+	// A temp file left by a crash would make the exclusive create fail.
+	if err := os.Remove(tmp); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", fmt.Errorf("assets: clear animated temp: %w", err)
+	}
+	if err := writeFileSync(tmp, data); err != nil {
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("assets: commit animated: %w", err)
+	}
+	if err := syncDir(dir); err != nil {
+		_ = os.Remove(final)
+		return "", err
+	}
+	return path.Join("animations", id+".webp"), nil
+}
+
+// PruneDrafts removes the regular files directly inside clips/ and
+// animations/ that keep rejects. Symlinks, subdirectories and every other
+// directory are never touched, and a symlinked draft directory is refused.
+func (s *Store) PruneDrafts(keep func(dir, name string) bool) error {
+	var errs []error
+	for _, sub := range []string{"clips", "animations"} {
+		dir, err := s.path(sub)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		info, err := os.Lstat(dir)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("assets: inspect %s: %w", sub, err))
+			continue
+		}
+		if !info.IsDir() {
+			errs = append(errs, fmt.Errorf("assets: %s: %w", sub, ErrUnsafePath))
+			continue
+		}
+		if err := s.verifyDir(dir); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("assets: list %s: %w", sub, err))
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.Type().IsRegular() || keep(sub, entry.Name()) {
+				continue
+			}
+			// os.Remove never follows a symlink swapped in after ReadDir.
+			if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				errs = append(errs, fmt.Errorf("assets: prune %s/%s: %w", sub, entry.Name(), err))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
 func (s *Store) removeFile(parts ...string) error {
 	p, err := s.path(parts...)
 	if err != nil {

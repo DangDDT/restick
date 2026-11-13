@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/eykh/restick/api_svc/internal/assets"
@@ -29,11 +31,18 @@ const selectAnimation = `SELECT a.id, a.pack_id, a.sticker_index, a.static_check
 type Service struct {
 	db    *sql.DB
 	files *assets.Store
+
+	// Clip worker state: wake is signalled after an upload commits; timeout
+	// bounds one clip child.
+	wake        chan struct{}
+	timeout     time.Duration
+	recoverOnce sync.Once
+	recoverErr  error
 }
 
 // NewService wires drafts to the database and the data-root file store.
 func NewService(db *sql.DB, files *assets.Store) *Service {
-	return &Service{db: db, files: files}
+	return &Service{db: db, files: files, wake: make(chan struct{}, 1), timeout: ClipTimeout}
 }
 
 // Upload stores a clip for sticker index of the pack's current version and
@@ -63,6 +72,7 @@ func (s *Service) Upload(ctx context.Context, packID string, index int, clip io.
 		_ = s.files.RemoveClip(saved.ID)
 		return Animation{}, err
 	}
+	s.signal()
 	if old.id != "" {
 		_ = s.files.RemoveClip(old.clipID)
 		_ = s.files.RemoveAnimated(old.id)
