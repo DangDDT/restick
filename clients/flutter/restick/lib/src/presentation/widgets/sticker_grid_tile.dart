@@ -13,11 +13,13 @@ class StickerGridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool playAnimated =
+        asset.isAnimated && !MediaQuery.disableAnimationsOf(context);
     return InkWell(
       key: ValueKey('sticker.grid.tile.${asset.file.path}'),
       onTap: () => onSelected(asset),
       child: Image.file(
-        asset.preview,
+        playAnimated ? asset.animatedFile! : asset.preview,
         cacheWidth: 128,
         cacheHeight: 128,
         fit: BoxFit.contain,

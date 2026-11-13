@@ -14,8 +14,10 @@ class PackDownloader {
     required Directory dest,
     required String expectedChecksum,
   }) async {
-    final Archive archive = ZipDecoder().decodeBytes(zipBytes);
-    final Map<String, ArchiveFile> members = _validateMembers(zipBytes, archive);
+    final ZipDecoder decoder = ZipDecoder();
+    final Archive archive = decoder.decodeBytes(zipBytes);
+    final Map<String, ArchiveFile> members =
+        _validateMembers(archive, decoder.directory);
     final ArchiveFile packEntry = members["pack.json"] ??
         (throw const FormatException("missing pack.json"));
     final Map<String, Object?> pack = asJsonMap(
@@ -49,13 +51,11 @@ class PackDownloader {
   }
 
   Map<String, ArchiveFile> _validateMembers(
-    List<int> zipBytes,
     Archive archive,
+    ZipDirectory directory,
   ) {
-    // The central directory keeps raw names and external attributes, so
-    // duplicates and Unix symlinks are rejected before the decoder collapses
-    // duplicate names or resolves links.
-    final ZipDirectory directory = ZipDirectory.read(InputStream(zipBytes));
+    // The decoder's central directory keeps the raw names and Unix modes, so
+    // duplicates and symlinks are rejected before anything is written.
     final Set<String> rawNames = <String>{};
     for (final ZipFileHeader header in directory.fileHeaders) {
       final String name = header.filename;
@@ -65,8 +65,10 @@ class PackDownloader {
       if (!rawNames.add(name)) {
         throw FormatException("duplicate archive member: $name");
       }
-      final int external = header.externalFileAttributes ?? 0;
-      if (header.versionMadeBy >> 8 == 3 && (external >> 16) & 0xF000 == 0xA000) {
+      final int? external = header.externalFileAttributes;
+      if (header.versionMadeBy >> 8 == 3 &&
+          external != null &&
+          (external >> 16) & 0xF000 == 0xA000) {
         throw FormatException("symbolic link member: $name");
       }
     }
@@ -103,6 +105,17 @@ class PackDownloader {
         if (!members.containsKey(reference)) {
           throw FormatException("manifest reference missing: $reference");
         }
+      }
+      final Object? animated = sticker["animated"];
+      if (animated == null) {
+        continue;
+      }
+      final Object? reference = asJsonMap(animated)["file"];
+      if (reference is! String || !_isSafePath(reference)) {
+        throw FormatException("unsafe manifest reference: $reference");
+      }
+      if (!members.containsKey(reference)) {
+        throw FormatException("manifest reference missing: $reference");
       }
     }
   }
@@ -145,6 +158,14 @@ Future<String> checksumOfPack(Directory dest) async {
     final Map<String, Object?> sticker = asJsonMap(item);
     final File webp = File(p.join(dest.path, sticker["file"]! as String));
     joined.addAll(await webp.readAsBytes());
+    // The server hashes each static file followed by its animation.
+    final Object? animated = sticker["animated"];
+    if (animated != null) {
+      final File animatedFile = File(
+        p.join(dest.path, asJsonMap(animated)["file"]! as String),
+      );
+      joined.addAll(await animatedFile.readAsBytes());
+    }
   }
   return sha256.convert(joined).toString();
 }

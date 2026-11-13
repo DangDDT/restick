@@ -10,6 +10,7 @@ class StickerAsset extends Equatable {
     required this.emojiHint,
     required this.width,
     required this.height,
+    this.animatedFile,
   });
 
   final String packId;
@@ -18,6 +19,12 @@ class StickerAsset extends Equatable {
   final String emojiHint;
   final int width;
   final int height;
+
+  /// Animated WebP variant, null for a static-only sticker or when the local
+  /// file is gone.
+  final File? animatedFile;
+
+  bool get isAnimated => animatedFile != null;
 
   File get preview => thumb.existsSync() ? thumb : file;
 
@@ -29,5 +36,6 @@ class StickerAsset extends Equatable {
         emojiHint,
         width,
         height,
+        animatedFile?.path,
       ];
 }

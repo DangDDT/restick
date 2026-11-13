@@ -196,6 +196,12 @@ class PackRepositoryImpl implements PackRepository {
       final Map<String, Object?> sticker = asJsonMap(item);
       final String fileName = sticker["file"]! as String;
       final String thumbName = (sticker["thumb"] as String?) ?? "thumbs/thumb_$fileName";
+      final Object? animated = sticker["animated"];
+      final Object? animatedName =
+          animated == null ? null : asJsonMap(animated)["file"];
+      final File? animatedFile = animatedName is String
+          ? File(p.join(cached.localDir, animatedName))
+          : null;
       return StickerAsset(
         packId: packId,
         file: File(p.join(cached.localDir, fileName)),
@@ -208,6 +214,8 @@ class PackRepositoryImpl implements PackRepository {
         emojiHint: (sticker["emoji_hint"] as String?) ?? "",
         width: (sticker["width"]! as num).toInt(),
         height: (sticker["height"]! as num).toInt(),
+        animatedFile:
+            animatedFile != null && animatedFile.existsSync() ? animatedFile : null,
       );
     }).toList();
   }
