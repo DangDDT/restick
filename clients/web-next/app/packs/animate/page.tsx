@@ -265,7 +265,10 @@ function AnimateView({ id, stickerIndex }: { id: string; stickerIndex: number })
     (!animation ||
       animation.status !== "ready" ||
       animation.animated_checksum_sha256 === sticker.animated?.checksum_sha256);
-  const pendingStatic = committed && Boolean(animation && animation.status === "ready" && !animation.use_animated);
+  // Only a ready, enabled, non-stale draft is publishable, so any other state
+  // (failed, stale, disabled, or absent) leaves a committed animation pending removal.
+  const effective = Boolean(animation && animation.status === "ready" && animation.use_animated && !animation.stale);
+  const pendingStatic = committed && !effective;
   const active = animation?.status === "queued" || animation?.status === "running";
   const pollStopped = pollExpired && active;
 

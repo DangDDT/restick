@@ -45,25 +45,25 @@ function isTerminal(status: JobStatus): boolean {
 
 type VariantChange = { index: number; filename: string; kind: "animated" | "static" };
 
-// The effective draft variant is the ready, enabled, non-stale animation; it is
-// compared with the committed checksum so the dialog lists real changes only.
+// Only a ready, enabled, non-stale draft is publishable; every other draft state
+// (absent, failed, stale, disabled) contributes no animation, so a committed
+// animation is removed by the batch.
+function effectiveAnimatedChecksum(sticker: AdminPackSticker): string | undefined {
+  const draft = sticker.animation;
+  return draft?.status === "ready" && draft.use_animated && !draft.stale
+    ? draft.animated_checksum_sha256
+    : undefined;
+}
+
+// The dialog lists the variants the batch will actually commit: an effective
+// animation that differs from the committed one, or the removal of a committed
+// animation that no longer has an effective draft.
 function unpublishedChanges(stickers: AdminPackSticker[]): VariantChange[] {
-  const changes: VariantChange[] = [];
-  stickers.forEach((sticker, index) => {
-    const draft = sticker.animation;
-    if (!draft) return;
-    const active = draft.status === "ready" && draft.use_animated && !draft.stale;
-    if (active) {
-      if (draft.animated_checksum_sha256 !== sticker.animated?.checksum_sha256) {
-        changes.push({ index, filename: sticker.filename, kind: "animated" });
-      }
-      return;
-    }
-    if (!draft.use_animated && sticker.animated) {
-      changes.push({ index, filename: sticker.filename, kind: "static" });
-    }
+  return stickers.flatMap((sticker, index) => {
+    const effective = effectiveAnimatedChecksum(sticker);
+    if (effective === sticker.animated?.checksum_sha256) return [];
+    return [{ index, filename: sticker.filename, kind: effective ? "animated" : "static" }];
   });
-  return changes;
 }
 
 function CatalogForm({ pack, onDone }: { pack: AdminPackDetail; onDone: (message: string | null) => void }) {
@@ -637,7 +637,7 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
                     <div className="flex flex-wrap items-center gap-1 pt-0.5">
                       {sticker.animated && <Stamp tone="ok">{t("animateCommitted")}</Stamp>}
                       {sticker.animation && <StatusPill status={sticker.animation.status} />}
-                      {sticker.animated && sticker.animation && !sticker.animation.use_animated && (
+                      {sticker.animated && !effectiveAnimatedChecksum(sticker) && (
                         <Stamp tone="warn">{t("animatePendingStatic")}</Stamp>
                       )}
                     </div>

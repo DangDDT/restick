@@ -476,19 +476,18 @@ function animationSummaryView(item) {
   };
 }
 
-// Mirrors the web's unpublishedChanges: the effective draft is ready, enabled
-// and not stale; a disabled draft reverts an already committed animation.
+// Mirrors the server's publishable set and the web's unpublishedChanges: only a
+// ready, enabled, non-stale draft is publishable, so every other draft state
+// (absent, failed, stale, disabled) removes an already committed animation.
 function animationChanges(pack, animations) {
   return pack.stickers.flatMap((sticker, index) => {
     const draft = animations.get(animationKey(pack.id, index));
-    if (!draft) return [];
-    const active = draft.status === "ready" && draft.use_animated && !draft.stale;
-    if (active) {
-      return draft.animated_checksum_sha256 !== sticker.animated?.checksum_sha256
-        ? [{ index, kind: "animated" }]
-        : [];
-    }
-    return !draft.use_animated && sticker.animated ? [{ index, kind: "static" }] : [];
+    const effective =
+      draft?.status === "ready" && draft.use_animated && !draft.stale
+        ? draft.animated_checksum_sha256
+        : undefined;
+    if (effective === sticker.animated?.checksum_sha256) return [];
+    return [{ index, kind: effective ? "animated" : "static" }];
   });
 }
 
@@ -1177,14 +1176,20 @@ async function handleApi(req, res, url) {
       if (!clip || !clip.data.length) return fail(res, 400, "bad_request", "Thiếu clip.");
       const motionText = (parts.motion_text?.data.toString("utf8") ?? "").trim();
       if (!motionText) return fail(res, 422, "unprocessable", "Thiếu mô tả chuyển động.");
+      // Fixture hook: a clip named *fail* settles as failed, so QA can drive a
+      // terminal replacement without a real decoder. The real worker can fail
+      // any undecodable clip the same way.
+      const fails = /fail/i.test(clip.filename ?? "");
       const item = {
         id: existing?.id ?? nextId("anim"), pack_id: pk.id, sticker_index: index,
         motion_text: motionText, static_checksum_sha256: sticker.checksum_sha256,
-        clip_byte_size: clip.data.length, clip_checksum: sha(clip.data), status: "queued",
+        clip_byte_size: clip.data.length, clip_checksum: sha(clip.data), status: fails ? "failed" : "queued",
         use_animated: true, stale: false, animated_checksum_sha256: undefined,
         animated_byte_size: undefined, frames: undefined, fps: undefined, duration_ms: undefined,
-        quality: undefined, width: undefined, height: undefined, error_code: undefined,
-        error_message: undefined, created_at: nowIso(), static: false,
+        quality: undefined, width: undefined, height: undefined,
+        error_code: fails ? "decode_failed" : undefined,
+        error_message: fails ? "Clip không giải mã được." : undefined,
+        created_at: nowIso(), static: false,
       };
       store.animations.set(key, item);
       return send(res, 202, animationView(item));

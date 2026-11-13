@@ -277,6 +277,100 @@ for (const [width, height] of [
   await context.close();
 }
 
+// Regression: a committed animation whose replacement is not publishable
+// (failed or no draft at all) is removed by the batch. The confirmation must
+// list that revert to static before publishing, and publishing must apply it.
+async function committedSticker(page, index) {
+  return page.evaluate(async (i) => {
+    const res = await fetch("/api/v1/admin/packs/pk-ready-1", { credentials: "same-origin" });
+    const body = await res.json();
+    return body.stickers[i];
+  }, index);
+}
+
+async function expectStaticRevert(page) {
+  await page.goto(`${BASE}/packs/detail?id=pk-ready-1`);
+  await page.waitForLoadState("networkidle");
+  const count = page.locator("[data-qa=unpublished-count]");
+  await count.waitFor();
+  const shown = (await count.innerText()).trim();
+  if (shown !== "3") throw new Error(`pending=${shown}`);
+  const card = page.locator("li").filter({ has: page.locator("[data-testid=animate-button-0]") });
+  const cardText = await card.innerText();
+  if (!cardText.includes("Đã phát hành") || !cardText.includes("Chờ về tĩnh")) {
+    throw new Error("revert card missing published/pending badges");
+  }
+  await page.locator("[data-testid=publish-animations] button").click();
+  const dialog = page.locator("dialog[open]");
+  await dialog.waitFor();
+  const entries = await dialog.locator("li").allInnerTexts();
+  const revert = entries.find((text) => text.includes("01-chúc-tết.png"));
+  if (entries.length !== 3 || !revert?.includes("Bỏ bản động")) {
+    throw new Error(`dialog=${JSON.stringify(entries)}`);
+  }
+  const started = page.waitForResponse(
+    (res) => res.url().endsWith("/publish-animations") && res.status() === 202,
+    { timeout: 5000 },
+  );
+  await dialog.getByRole("button", { name: "Phát hành animation" }).click();
+  await started;
+  await page.waitForFunction(
+    () => document.querySelector("[data-qa=unpublished-count]")?.textContent.trim() === "0",
+    undefined,
+    { timeout: 20000 },
+  );
+  const sticker = await committedSticker(page, 0);
+  if (sticker.animated) throw new Error("publication kept the committed animation");
+  return `pending ${shown}, dialog listed ${entries.length}`;
+}
+
+{
+  await scenario("default");
+  const { context, page, errors } = await ctx(1440, 900);
+  await login(page);
+  await step("revert: a failed replacement of a committed animation lists a static revert", async () => {
+    await page.goto(`${BASE}/packs/animate?id=pk-ready-1&index=0`);
+    await page.waitForLoadState("networkidle");
+    await page.locator("figcaption").filter({ hasText: "Đã phát hành" }).first().waitFor();
+    await page
+      .locator("input[type=file]")
+      .setInputFiles({ name: "fail.mp4", mimeType: "video/mp4", buffer: clip });
+    const uploaded = page.waitForResponse(
+      (res) => res.request().method() === "POST" && /\/stickers\/0\/animation$/.test(new URL(res.url()).pathname),
+      { timeout: 10000 },
+    );
+    await page.locator("[data-testid=animate-upload] button").click();
+    const response = await uploaded;
+    if (response.status() !== 202) throw new Error(`upload=${response.status()}`);
+    await page.getByText(/decode_failed/).first().waitFor({ timeout: 20000 });
+    return expectStaticRevert(page);
+  });
+  await step("revert: failed-replacement flow has no console errors", async () => {
+    if (errors.length) throw new Error(errors[0]);
+  });
+  await context.close();
+}
+
+{
+  await scenario("default");
+  const { context, page, errors } = await ctx(1440, 900);
+  await login(page);
+  await step("revert: a committed animation with no draft at all lists a static revert", async () => {
+    await page.goto(`${BASE}/packs/detail?id=pk-ready-1`);
+    await page.waitForLoadState("networkidle");
+    const deleted = await page.evaluate(async () => {
+      const res = await fetch("/api/v1/admin/packs/pk-ready-1/stickers/0/animation", { method: "DELETE" });
+      return res.status;
+    });
+    if (deleted !== 204) throw new Error(`delete=${deleted}`);
+    return expectStaticRevert(page);
+  });
+  await step("revert: absent-draft flow has no console errors", async () => {
+    if (errors.length) throw new Error(errors[0]);
+  });
+  await context.close();
+}
+
 await browser.close();
 const failed = results.filter((result) => !result.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
