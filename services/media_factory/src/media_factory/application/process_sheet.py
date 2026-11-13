@@ -35,6 +35,27 @@ def execute_process(
     padding: int,
     lossless: bool,
 ) -> Pack:
+    """Pipeline CLI: tạo thư mục pack (sticker, thumbnail, pack.json) từ sheet hoặc file đã cắt.
+
+    Algorithm:
+        1. Kiểm tra slug (regex) và padding (8-16).
+        2. Tạo out_dir, dựng danh sách canvas qua _load_canvases.
+        3. Mỗi canvas: encode WebP và thumbnail, ghi ra đĩa, tạo Sticker.
+        4. Dựng Pack, tính checksum SHA-256 trên bytes sticker, ghi pack.json.
+        5. Sao chép thumbnail đầu tiên thành thumb.webp.
+
+    Techniques:
+        - Pipeline orchestration
+        - SHA-256 checksum
+        - Input validation
+
+    Keywords: pack, sticker, pipeline, checksum, pack.json, thumbnail
+
+    References:
+        - https://en.wikipedia.org/wiki/Input_validation
+        - https://en.wikipedia.org/wiki/SHA-2
+        - https://en.wikipedia.org/wiki/JSON
+    """
     if not SLUG_PATTERN.match(slug):
         raise ValueError("invalid slug")
     if padding < 8 or padding > 16:
@@ -86,6 +107,26 @@ def _load_canvases(
     min_area: int,
     padding: int,
 ) -> list[Image.Image]:
+    """Dựng danh sách canvas 512 từ file đã cắt hoặc từ một tờ sheet.
+
+    Algorithm:
+        1. Có files: với mỗi file load, upscale, cắt nền, fit vào canvas.
+        2. Không files và không sheet: báo lỗi.
+        3. Sheet: load, upscale, cắt nền, tìm box, lọc outlier, sắp thứ tự đọc.
+        4. Crop từng box rồi fit vào canvas.
+
+    Techniques:
+        - Connected-region detection
+        - Outlier filtering
+        - Reading-order sorting
+
+    Keywords: sheet, cutout, boxes, canvas, crop
+
+    References:
+        - https://en.wikipedia.org/wiki/Connected-component_labeling
+        - https://en.wikipedia.org/wiki/Minimum_bounding_box
+        - https://en.wikipedia.org/wiki/Sorting_algorithm
+    """
     if len(files) > 0:
         return [fit_on_canvas(execute_cutout(upscale_source(load_image(path)))) for path in files]
     if sheet is None:

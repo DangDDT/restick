@@ -12,12 +12,42 @@ MAX_SHEET_SIDE: int = 4096
 
 
 def sort_boxes(boxes: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int, int]]:
+    """Sắp các box theo thứ tự đọc: trên xuống dưới, trái sang phải.
+
+    Algorithm:
+        1. Sắp theo khóa (top, left).
+
+    Techniques:
+        - Sorting với khóa tuple
+
+    Keywords: reading order, sort, bounding box
+
+    References:
+        - https://en.wikipedia.org/wiki/Sorting_algorithm
+        - https://en.wikipedia.org/wiki/Minimum_bounding_box
+    """
     return sorted(boxes, key=lambda box: (box[1], box[0]))
 
 
 def filter_outlier_boxes(
     boxes: list[tuple[int, int, int, int]],
 ) -> list[tuple[int, int, int, int]]:
+    """Loại các box nhỏ bất thường (nhiễu).
+
+    Algorithm:
+        1. Tính diện tích từng box.
+        2. Lấy median diện tích.
+        3. Giữ box có diện tích >= 25% median.
+
+    Techniques:
+        - Median-based outlier filter
+
+    Keywords: outlier, median, area filter, noise
+
+    References:
+        - https://en.wikipedia.org/wiki/Median
+        - https://en.wikipedia.org/wiki/Minimum_bounding_box
+    """
     if len(boxes) < 2:
         return boxes
     areas: list[int] = [(box[2] - box[0]) * (box[3] - box[1]) for box in boxes]
@@ -28,6 +58,24 @@ def filter_outlier_boxes(
 
 
 def upscale_source(image: Image.Image) -> Image.Image:
+    """Phóng to ảnh dạng dải (strip) quá mảnh trước khi tách nền.
+
+    Algorithm:
+        1. Dải = cạnh dài > 2.5 lần cạnh ngắn.
+        2. Không phải dải hoặc cạnh ngắn >= CANVAS_SIZE thì giữ nguyên.
+        3. Ngược lại scale để cạnh ngắn = CANVAS_SIZE, cạnh dài không vượt MAX_SHEET_SIDE.
+        4. Resize bằng _resize_rgba (premultiplied alpha).
+
+    Techniques:
+        - Aspect-preserving upscaling
+        - Image resampling
+
+    Keywords: upscale, strip image, aspect ratio, resampling
+
+    References:
+        - https://en.wikipedia.org/wiki/Image_scaling
+        - https://en.wikipedia.org/wiki/Aspect_ratio_(image)
+    """
     width, height = image.size
     is_strip: bool = width > int(2.5 * height) or height > int(2.5 * width)
     short: int = min(width, height)
@@ -43,10 +91,24 @@ def upscale_source(image: Image.Image) -> Image.Image:
 
 
 def fit_in_square(image: Image.Image, size: int, margin: int = 0) -> Image.Image:
-    """Center the image in a transparent square, keeping `margin` px free on each side.
+    """Đặt ảnh vào giữa canvas vuông trong suốt, chừa lề margin mỗi bên.
 
-    alpha_composite keeps alpha truthful; pasting with the image as its own mask
-    squares the alpha channel of semi-transparent pixels.
+    Algorithm:
+        1. Tính vùng trong = size - 2*margin.
+        2. Co ảnh vừa vùng trong, giữ tỉ lệ (_scale_to_fit).
+        3. Tạo canvas RGBA trong suốt, tính tọa độ căn giữa.
+        4. alpha_composite ảnh lên canvas (không dùng paste với mask vì làm bình phương alpha).
+
+    Techniques:
+        - Aspect-preserving fit
+        - Alpha compositing (Porter-Duff over)
+
+    Keywords: fit, letterbox, center, aspect ratio, alpha composite
+
+    References:
+        - https://en.wikipedia.org/wiki/Aspect_ratio_(image)
+        - https://en.wikipedia.org/wiki/Alpha_compositing
+        - https://en.wikipedia.org/wiki/Image_scaling
     """
     inner: int = max(1, size - 2 * margin)
     scaled: Image.Image = _scale_to_fit(image.convert("RGBA"), inner)
@@ -58,10 +120,39 @@ def fit_in_square(image: Image.Image, size: int, margin: int = 0) -> Image.Image
 
 
 def fit_on_canvas(image: Image.Image) -> Image.Image:
+    """Đặt ảnh vào canvas sticker 512x512.
+
+    Algorithm:
+        1. Gọi fit_in_square với CANVAS_SIZE, không lề.
+
+    Techniques:
+        - Aspect-preserving fit
+
+    Keywords: canvas, 512, fit, sticker
+
+    References:
+        - https://en.wikipedia.org/wiki/Aspect_ratio_(image)
+        - https://en.wikipedia.org/wiki/Image_scaling
+    """
     return fit_in_square(image, CANVAS_SIZE)
 
 
 def make_thumb(image: Image.Image) -> Image.Image:
+    """Tạo thumbnail sticker 128x128.
+
+    Algorithm:
+        1. Gọi fit_in_square với THUMB_SIZE (resize co ảnh, giữ tỉ lệ).
+
+    Techniques:
+        - Thumbnail resize
+        - Aspect-preserving fit
+
+    Keywords: thumbnail, resize, 128
+
+    References:
+        - https://en.wikipedia.org/wiki/Thumbnail
+        - https://en.wikipedia.org/wiki/Image_scaling
+    """
     return fit_in_square(image, THUMB_SIZE)
 
 
@@ -71,10 +162,26 @@ def assign_boxes(
     columns: int,
     size: tuple[int, int],
 ) -> list[tuple[int, int, int, int]]:
-    """Map each box to the grid cell containing its centroid; return them row-major.
+    """Gán mỗi box vào ô lưới (rows x columns) chứa tâm của nó, trả về theo thứ tự row-major.
 
-    A cell must hold exactly one box and a box may not bleed into another cell:
-    an off-grid sheet fails loudly instead of being silently regrouped.
+    Algorithm:
+        1. Với mỗi box tính centroid rồi suy ra cột/hàng trong lưới đều.
+        2. Báo lỗi nếu hai box vào cùng một ô.
+        3. Báo lỗi nếu box tràn sang ô khác (so với biên ô từ _cell_bounds).
+        4. Báo lỗi nếu còn ô thiếu box.
+        5. Trả danh sách theo chỉ số row*columns+column.
+
+    Techniques:
+        - Grid binning theo centroid
+        - Row-major ordering
+        - Fail-fast validation
+
+    Keywords: grid, centroid, row-major, cell assignment, layout validation
+
+    References:
+        - https://en.wikipedia.org/wiki/Centroid
+        - https://en.wikipedia.org/wiki/Row-_and_column-major_order
+        - https://en.wikipedia.org/wiki/Fail-fast_system
     """
     width, height = size
     cells: dict[int, tuple[int, int, int, int]] = {}
@@ -110,6 +217,21 @@ def _cell_bounds(
     columns: int,
     size: tuple[int, int],
 ) -> tuple[float, float, float, float]:
+    """Trả biên (left, top, right, bottom) của một ô lưới.
+
+    Algorithm:
+        1. Chia đều chiều rộng cho columns và chiều cao cho rows.
+        2. Nhân với chỉ số cột/hàng.
+
+    Techniques:
+        - Phép chia lưới đều
+
+    Keywords: grid cell, bounds, uniform grid
+
+    References:
+        - https://en.wikipedia.org/wiki/Row-_and_column-major_order
+        - https://en.wikipedia.org/wiki/Minimum_bounding_box
+    """
     width, height = size
     return (
         column * width / columns,
@@ -120,6 +242,23 @@ def _cell_bounds(
 
 
 def load_image(path: Path) -> Image.Image:
+    """Đọc ảnh từ đĩa, kiểm tra kích thước, đổi sang RGBA.
+
+    Algorithm:
+        1. Image.open rồi load() để giải mã hẳn.
+        2. Từ chối nếu cạnh dài > MAX_SHEET_SIDE.
+        3. convert('RGBA').
+
+    Techniques:
+        - Image decoding bằng Pillow
+        - Input validation
+
+    Keywords: load image, decode, size limit, RGBA
+
+    References:
+        - https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html
+        - https://en.wikipedia.org/wiki/Input_validation
+    """
     image = Image.open(path)
     image.load()
     if max(image.size) > MAX_SHEET_SIDE:
@@ -128,6 +267,22 @@ def load_image(path: Path) -> Image.Image:
 
 
 def _scale_to_fit(image: Image.Image, size: int) -> Image.Image:
+    """Co/giãn ảnh vừa hình vuông size, giữ tỉ lệ.
+
+    Algorithm:
+        1. scale = min(size/width, size/height).
+        2. Làm tròn kích thước mới, tối thiểu 1 px.
+        3. Bỏ qua nếu kích thước không đổi; ngược lại _resize_rgba.
+
+    Techniques:
+        - Aspect-preserving scaling
+
+    Keywords: scale to fit, aspect ratio, resize
+
+    References:
+        - https://en.wikipedia.org/wiki/Image_scaling
+        - https://en.wikipedia.org/wiki/Aspect_ratio_(image)
+    """
     width, height = image.size
     if width <= 0 or height <= 0:
         return image
@@ -140,6 +295,25 @@ def _scale_to_fit(image: Image.Image, size: int) -> Image.Image:
 
 
 def _resize_rgba(image: Image.Image, width: int, height: int) -> Image.Image:
+    """Resize ảnh RGBA đúng chuẩn alpha (premultiplied) để viền không bị quầng.
+
+    Algorithm:
+        1. Chuyển sang float, nhân RGB với alpha (premultiply).
+        2. cv2.resize: INTER_AREA khi thu nhỏ, INTER_LANCZOS4 khi phóng to.
+        3. Chia lại RGB cho alpha (un-premultiply), xóa RGB nơi alpha = 0.
+        4. Phóng to thì làm nét nhẹ bằng _sharpen_rgb.
+
+    Techniques:
+        - Premultiplied alpha
+        - Area/Lanczos resampling
+
+    Keywords: premultiplied alpha, resize, INTER_AREA, Lanczos, resampling
+
+    References:
+        - https://en.wikipedia.org/wiki/Alpha_compositing
+        - https://en.wikipedia.org/wiki/Lanczos_resampling
+        - https://en.wikipedia.org/wiki/Interpolation
+    """
     source = np.array(image.convert("RGBA")).astype(np.float32)
     alpha = np.clip(source[:, :, 3:4] / 255.0, 0.0, 1.0)
     source[:, :, :3] *= alpha
@@ -160,6 +334,21 @@ def _resize_rgba(image: Image.Image, width: int, height: int) -> Image.Image:
 
 
 def _sharpen_rgb(image: Image.Image) -> Image.Image:
+    """Làm nét kênh RGB, giữ nguyên alpha.
+
+    Algorithm:
+        1. Tách RGB và áp UnsharpMask(radius=1, percent=55, threshold=2).
+        2. Ghép lại với kênh alpha gốc.
+
+    Techniques:
+        - Unsharp masking
+
+    Keywords: unsharp mask, sharpen, alpha preserved
+
+    References:
+        - https://en.wikipedia.org/wiki/Unsharp_masking
+        - https://en.wikipedia.org/wiki/Image_scaling
+    """
     rgb = image.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.0, percent=55, threshold=2))
     sharpened = rgb.convert("RGBA")
     sharpened.putalpha(image.getchannel("A"))

@@ -51,7 +51,27 @@ class JobRequest:
 
 
 def process_job(request_path: Path, result_path: Path) -> None:
-    """Process one sheet job and write `restick.job-result.v1`; raise on failure."""
+    """Chạy một job sheet theo giao thức restick.job.v1 và ghi restick.job-result.v1.
+
+    Algorithm:
+        1. Khởi tạo identity rỗng để luôn có thứ gì đó trả về.
+        2. read_request rồi _render.
+        3. ProcessingError: ghi kết quả lỗi rồi raise lại.
+        4. Lỗi bất ngờ: bọc thành internal_error, ghi kết quả lỗi.
+        5. Thành công: ghi kết quả qua _write_result (ghi nguyên tử).
+
+    Techniques:
+        - Request/result file protocol (JSON)
+        - Atomic write (temp file + rename)
+        - Coded error handling
+
+    Keywords: machine job, protocol, restick.job.v1, atomic write, error code
+
+    References:
+        - https://en.wikipedia.org/wiki/JSON
+        - https://en.wikipedia.org/wiki/Atomicity_(database_systems)
+        - https://en.wikipedia.org/wiki/Error_code
+    """
     identity: dict[str, object] = {
         "schema": RESULT_SCHEMA,
         "job_id": "",
@@ -75,6 +95,27 @@ def process_job(request_path: Path, result_path: Path) -> None:
 
 
 def read_request(request_path: Path, identity: dict[str, object]) -> JobRequest:
+    """Đọc và kiểm tra request JSON, trả JobRequest.
+
+    Algorithm:
+        1. Kiểm tra file tồn tại và <= 1 MiB.
+        2. Parse JSON, yêu cầu là object.
+        3. Ghi sớm job_id/pack_id/version vào identity để Go loại kết quả cũ.
+        4. Kiểm tra schema, rows/columns (1-8), outline_color, outline_width.
+        5. Kiểm tra sheet_path và output_dir (tuyệt đối, tồn tại, không '..', không symlink).
+
+    Techniques:
+        - Input validation tại trust boundary
+        - JSON parsing
+        - Regular expression
+
+    Keywords: request validation, JSON, schema, path validation
+
+    References:
+        - https://en.wikipedia.org/wiki/Input_validation
+        - https://en.wikipedia.org/wiki/JSON
+        - https://en.wikipedia.org/wiki/Regular_expression
+    """
     if not request_path.is_file():
         raise ProcessingError("invalid_request", "request file is missing")
     if request_path.stat().st_size > MAX_REQUEST_BYTES:
@@ -120,6 +161,27 @@ def read_request(request_path: Path, identity: dict[str, object]) -> JobRequest:
 
 
 def _render(request: JobRequest) -> tuple[list[dict[str, object]], dict[str, object]]:
+    """Cắt nền tờ sheet, tách từng ô, dựng sticker và ghi file.
+
+    Algorithm:
+        1. Mở sheet an toàn (_open_sheet), đọc engine từ biến môi trường.
+        2. execute_cutout; tính tỉ lệ foreground, ngoài [0.005, 0.995] thì lỗi no_foreground.
+        3. Tính min_area theo ô; find_sticker_boxes rồi assign_boxes (lỗi: layout_invalid).
+        4. Mỗi box: crop, compose_sticker (viền), encode WebP lossless và thumbnail.
+        5. Lỗi OSError: xóa các file đã ghi rồi báo output_failed.
+
+    Techniques:
+        - Foreground-ratio sanity check
+        - Grid layout assignment
+        - Cleanup on failure (rollback)
+
+    Keywords: sheet job, cutout, foreground ratio, grid, outline, WebP
+
+    References:
+        - https://en.wikipedia.org/wiki/Connected-component_labeling
+        - https://en.wikipedia.org/wiki/Row-_and_column-major_order
+        - https://en.wikipedia.org/wiki/Exception_handling
+    """
     sheet = _open_sheet(request.sheet_path)
     engine: str = (os.getenv("IMG_TOOL_ENGINE", "simple").strip().lower() or "simple")
     cutout = execute_cutout(sheet)
@@ -170,6 +232,24 @@ def _render(request: JobRequest) -> tuple[list[dict[str, object]], dict[str, obj
 
 
 def _open_sheet(path: Path) -> Image.Image:
+    """Mở và kiểm tra ảnh sheet, trả RGBA.
+
+    Algorithm:
+        1. Từ chối file > 8 MiB.
+        2. Mở bằng context manager (đóng file ở mọi nhánh lỗi).
+        3. Chỉ nhận PNG/JPEG/WEBP, cạnh <= MAX_SHEET_SIDE, không animated.
+        4. load() và convert RGBA; mọi lỗi decoder thành decode_failed.
+
+    Techniques:
+        - Input validation
+        - Whitelist định dạng
+
+    Keywords: image validation, format whitelist, size limit, decode
+
+    References:
+        - https://en.wikipedia.org/wiki/Input_validation
+        - https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html
+    """
     if path.stat().st_size > MAX_SHEET_BYTES:
         raise ProcessingError("image_too_large", "sheet exceeds 8 MiB")
     try:
@@ -195,6 +275,20 @@ def _open_sheet(path: Path) -> Image.Image:
 
 
 def _text(payload: dict[str, object], key: str, limit: int = 200) -> str:
+    """Lấy trường chuỗi không rỗng từ payload.
+
+    Algorithm:
+        1. Kiểm tra kiểu str và không rỗng sau strip.
+        2. Kiểm tra độ dài <= limit.
+
+    Techniques:
+        - Input validation
+
+    Keywords: string field, validation, limit
+
+    References:
+        - https://en.wikipedia.org/wiki/Input_validation
+    """
     value = payload.get(key)
     if not isinstance(value, str) or value.strip() == "":
         raise ProcessingError("invalid_field", f"{key} must be a non-empty string")
@@ -204,6 +298,20 @@ def _text(payload: dict[str, object], key: str, limit: int = 200) -> str:
 
 
 def _integer(payload: dict[str, object], key: str, low: int, high: int) -> int:
+    """Lấy trường số nguyên trong khoảng [low, high].
+
+    Algorithm:
+        1. Kiểm tra là int và không phải bool (bool là subclass của int).
+        2. Kiểm tra low <= value <= high.
+
+    Techniques:
+        - Input validation
+
+    Keywords: integer field, range check, bool pitfall
+
+    References:
+        - https://en.wikipedia.org/wiki/Input_validation
+    """
     value = payload.get(key)
     if not isinstance(value, int) or isinstance(value, bool) or not low <= value <= high:
         raise ProcessingError("invalid_field", f"{key} must be an integer {low}-{high}")
@@ -211,6 +319,23 @@ def _integer(payload: dict[str, object], key: str, low: int, high: int) -> int:
 
 
 def _absolute_path(payload: dict[str, object], key: str) -> Path:
+    """Lấy đường dẫn an toàn từ payload.
+
+    Algorithm:
+        1. Lấy chuỗi bằng _text (tối đa 4096).
+        2. Từ chối đường dẫn tương đối, có '..', hoặc là symlink.
+
+    Techniques:
+        - Path validation
+        - Symlink rejection
+
+    Keywords: absolute path, path traversal, symlink, validation
+
+    References:
+        - https://en.wikipedia.org/wiki/Path_(computing)
+        - https://en.wikipedia.org/wiki/Symbolic_link
+        - https://en.wikipedia.org/wiki/Input_validation
+    """
     path = Path(_text(payload, key, limit=4096))
     if not path.is_absolute():
         raise ProcessingError("invalid_path", f"{key} must be absolute")
@@ -226,6 +351,23 @@ def _write_error_result(
     identity: dict[str, object],
     error: ProcessingError,
 ) -> None:
+    """Ghi kết quả lỗi, nuốt lỗi ghi phụ.
+
+    Algorithm:
+        1. Gộp identity với {error: code, message}.
+        2. Nếu ghi thất bại thì bỏ qua; exit code vẫn báo lỗi cho caller.
+
+    Techniques:
+        - Best-effort error reporting
+        - Atomic write
+
+    Keywords: error result, best effort, protocol
+
+    References:
+        - https://en.wikipedia.org/wiki/Exception_handling
+        - https://en.wikipedia.org/wiki/Error_code
+        - https://en.wikipedia.org/wiki/Atomicity_(database_systems)
+    """
     try:
         _write_result(
             result_path,
@@ -236,6 +378,24 @@ def _write_error_result(
 
 
 def _write_result(result_path: Path, payload: dict[str, object]) -> None:
+    """Ghi payload JSON nguyên tử ra result_path.
+
+    Algorithm:
+        1. Serialize JSON (sort_keys) kèm xuống dòng.
+        2. Từ chối nếu > 1 MiB.
+        3. Ghi file .tmp rồi os.replace sang đích (nguyên tử trên cùng filesystem).
+        4. Lỗi OSError: xóa file tạm và báo output_failed.
+
+    Techniques:
+        - Atomic write (temp file + rename)
+        - JSON serialization
+
+    Keywords: atomic write, os.replace, temp file, JSON
+
+    References:
+        - https://en.wikipedia.org/wiki/Atomicity_(database_systems)
+        - https://en.wikipedia.org/wiki/JSON
+    """
     text = json.dumps(payload, sort_keys=True) + "\n"
     if len(text.encode("utf-8")) > MAX_RESULT_BYTES:
         raise ProcessingError("output_failed", "result exceeds 1 MiB")

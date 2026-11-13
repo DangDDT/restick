@@ -15,6 +15,19 @@ app: typer.Typer = typer.Typer(
 
 @app.command("version")
 def version_command() -> None:
+    """In phiên bản của công cụ.
+
+    Algorithm:
+        1. Ghi '0.0.1' ra stdout.
+
+    Techniques:
+        - CLI command (Typer)
+
+    Keywords: version, CLI, typer
+
+    References:
+        - https://en.wikipedia.org/wiki/Command-line_interface
+    """
     typer.echo("0.0.1")
 
 
@@ -31,6 +44,23 @@ def process_command(
     padding: int = typer.Option(12, "--padding"),
     lossless: bool = typer.Option(True, "--lossless/--lossy"),
 ) -> None:
+    """Lệnh CLI 'process': dựng pack từ sheet hoặc danh sách file.
+
+    Algorithm:
+        1. Tách --files theo dấu phẩy; mỗi file phải tồn tại.
+        2. Sinh pack_id (uuid4), tách --tags.
+        3. Gọi execute_process và in đường dẫn cùng số sticker.
+
+    Techniques:
+        - CLI argument parsing (Typer)
+        - Input validation
+
+    Keywords: CLI, typer, process, pack, arguments
+
+    References:
+        - https://en.wikipedia.org/wiki/Command-line_interface
+        - https://en.wikipedia.org/wiki/Input_validation
+    """
     file_paths: list[Path] = []
     if files.strip() != "":
         file_paths = [Path(part.strip()) for part in files.split(",") if part.strip() != ""]
@@ -57,6 +87,19 @@ def process_command(
 
 
 def main() -> None:
+    """Điểm vào của CLI.
+
+    Algorithm:
+        1. Chạy ứng dụng Typer.
+
+    Techniques:
+        - CLI entrypoint
+
+    Keywords: entrypoint, typer, main
+
+    References:
+        - https://en.wikipedia.org/wiki/Command-line_interface
+    """
     app()
 
 

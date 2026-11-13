@@ -15,7 +15,27 @@ _COLOR_PATTERN: re.Pattern[str] = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
 def compose_sticker(image: Image.Image, outline_width: int, outline_color: str) -> Image.Image:
-    """Fit the cutout into the 512 canvas, then draw a solid outline from its alpha mask."""
+    """Đặt cutout vào canvas 512 rồi vẽ viền đặc quanh vùng alpha.
+
+    Algorithm:
+        1. Kiểm tra outline_width (0-16) và outline_color (#RRGGBB).
+        2. fit_in_square với lề outline_width + OUTLINE_SLACK để viền không chạm mép.
+        3. Nếu width = 0 trả ngay canvas.
+        4. Dilate kênh alpha bằng elliptical structuring element (2w+1).
+        5. Dải viền = pixel alpha 0 mà sau dilation > 0 (chỉ nằm ngoài vật thể).
+        6. Tô màu viền, alpha_composite viền xuống dưới ảnh gốc.
+
+    Techniques:
+        - Morphological dilation với elliptical structuring element
+        - Alpha compositing (over)
+
+    Keywords: outline, stroke, dilation, structuring element, alpha composite, sticker border
+
+    References:
+        - https://en.wikipedia.org/wiki/Dilation_(morphology)
+        - https://en.wikipedia.org/wiki/Structuring_element
+        - https://en.wikipedia.org/wiki/Alpha_compositing
+    """
     if outline_width < 0 or outline_width > MAX_OUTLINE_WIDTH:
         raise ValueError(f"outline_width must be 0-{MAX_OUTLINE_WIDTH}")
     if not _COLOR_PATTERN.match(outline_color):
