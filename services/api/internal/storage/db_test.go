@@ -381,3 +381,41 @@ func TestMigration0002Schema(t *testing.T) {
 		t.Error("deleting a design with a sheet succeeded")
 	}
 }
+
+func TestMigration0004AppliesOnFreshDatabase(t *testing.T) {
+	db, _ := openTemp(t)
+
+	var version int
+	if err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil || version != 4 {
+		t.Fatalf("schema version = %d (err %v), want 4", version, err)
+	}
+	for _, col := range []string{"animated_path", "animated_checksum_sha256", "animated_byte_size", "animated_frames", "animated_duration_ms"} {
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('stickers') WHERE name = ?`, col).Scan(&n); err != nil || n != 1 {
+			t.Errorf("stickers.%s missing (n=%d err=%v)", col, n, err)
+		}
+	}
+
+	execSQL(t, db, `INSERT INTO packs (id, slug, name, author) VALUES ('p1', 'pack', 'Pack', 'Restick')`)
+	const ins = `INSERT INTO sticker_animations (id, pack_id, sticker_index, static_checksum_sha256, clip_id, clip_path, clip_byte_size, clip_checksum_sha256, status)
+		VALUES (?, 'p1', ?, ?, 'c', 'clips/c.mp4', 10, ?, ?)`
+	execSQL(t, db, ins, "a1", 0, checksum, checksum, "queued")
+	var use int
+	if err := db.QueryRow(`SELECT use_animated FROM sticker_animations WHERE id = 'a1'`).Scan(&use); err != nil || use != 1 {
+		t.Errorf("use_animated default = %d (err %v), want 1", use, err)
+	}
+	if _, err := db.Exec(ins, "a2", 0, checksum, checksum, "queued"); err == nil {
+		t.Error("second draft for the same sticker accepted")
+	}
+	if _, err := db.Exec(ins, "a3", 1, checksum, checksum, "done"); err == nil {
+		t.Error("unknown status accepted")
+	}
+	if _, err := db.Exec(ins, "a4", -1, checksum, checksum, "queued"); err == nil {
+		t.Error("negative sticker index accepted")
+	}
+	execSQL(t, db, `DELETE FROM packs WHERE id = 'p1'`)
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM sticker_animations`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("drafts survived pack delete (n=%d err=%v)", n, err)
+	}
+}

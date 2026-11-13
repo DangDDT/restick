@@ -36,6 +36,8 @@ const (
 	MaxBundleBytes = 32 << 20
 	// MaxStickers is the largest accepted sticker count.
 	MaxStickers = 64
+	// MaxClipBytes is the largest accepted animation clip upload.
+	MaxClipBytes = 20 << 20
 )
 
 var (
@@ -51,7 +53,13 @@ var (
 	ErrInvalidManifest  = errors.New("assets: invalid pack manifest")
 	ErrBundleTooLarge   = errors.New("assets: bundle exceeds 32 MiB")
 	ErrAlreadyCommitted = errors.New("assets: version is already committed")
+	ErrInvalidClip      = errors.New("assets: unsupported or invalid clip")
+	ErrClipTooLarge     = errors.New("assets: clip exceeds 20 MiB")
+	ErrInvalidClipID    = errors.New("assets: invalid clip id")
 )
+
+// clipExts are the stored clip extensions, one per sniffed container.
+var clipExts = []string{"mp4", "mov", "webm"}
 
 var (
 	idPattern        = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -72,12 +80,23 @@ type Source struct {
 	RelativePath   string
 }
 
+// Clip is a persisted animation clip. RelativePath is clips/<ID>.<ext>; the
+// extension comes from the sniffed container, never from the filename.
+type Clip struct {
+	ID             string
+	Filename       string
+	MediaType      string
+	ByteSize       int64
+	ChecksumSHA256 string
+	RelativePath   string
+}
+
 // Store maps the data root to the layout in spec §8.1.
 type Store struct {
 	dataDir string
 }
 
-// NewStore prepares the data root and the four top-level resource directories.
+// NewStore prepares the data root and the top-level resource directories.
 func NewStore(dataDir string) (*Store, error) {
 	if strings.TrimSpace(dataDir) == "" {
 		return nil, errors.New("assets: data dir is required")
@@ -94,7 +113,7 @@ func NewStore(dataDir string) (*Store, error) {
 		return nil, fmt.Errorf("assets: resolve data dir: %w", err)
 	}
 	abs = resolved
-	for _, sub := range []string{"sources", "work", "packs", "bundles"} {
+	for _, sub := range []string{"sources", "work", "packs", "bundles", "clips", "animations"} {
 		if err := os.MkdirAll(filepath.Join(abs, sub), 0o755); err != nil {
 			return nil, fmt.Errorf("assets: create %s: %w", sub, err)
 		}
@@ -231,6 +250,121 @@ func (s *Store) RemoveSource(id string) error {
 	return os.RemoveAll(dir)
 }
 
+// SaveClip validates one mp4/mov/webm clip by its container magic and stores
+// it under a server-generated id. Frames are only decoded later by the
+// processor; this check keeps arbitrary files out of the clip queue.
+func (s *Store) SaveClip(ctx context.Context, r io.Reader, filename string) (Clip, error) {
+	if err := ctx.Err(); err != nil {
+		return Clip{}, err
+	}
+	data, err := io.ReadAll(io.LimitReader(r, MaxClipBytes+1))
+	if err != nil {
+		return Clip{}, fmt.Errorf("assets: read clip: %w", err)
+	}
+	if len(data) > MaxClipBytes {
+		return Clip{}, ErrClipTooLarge
+	}
+	mediaType, ext, err := sniffClip(data)
+	if err != nil {
+		return Clip{}, err
+	}
+	name, err := cleanFilename(filename)
+	if err != nil {
+		return Clip{}, err
+	}
+
+	id := uuid.NewString()
+	dir, err := s.path("clips")
+	if err != nil {
+		return Clip{}, err
+	}
+	tmp := filepath.Join(dir, "."+id+".tmp")
+	final := filepath.Join(dir, id+"."+ext)
+	if err := writeFileSync(tmp, data); err != nil {
+		_ = os.Remove(tmp)
+		return Clip{}, err
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		_ = os.Remove(tmp)
+		return Clip{}, fmt.Errorf("assets: commit clip: %w", err)
+	}
+	if err := syncDir(dir); err != nil {
+		_ = os.Remove(final)
+		return Clip{}, err
+	}
+	sum := sha256.Sum256(data)
+	return Clip{
+		ID:             id,
+		Filename:       name,
+		MediaType:      mediaType,
+		ByteSize:       int64(len(data)),
+		ChecksumSHA256: hex.EncodeToString(sum[:]),
+		RelativePath:   path.Join("clips", id+"."+ext),
+	}, nil
+}
+
+// ClipPath returns the absolute path of a persisted clip. Only server ids are
+// accepted; symlinks are never followed.
+func (s *Store) ClipPath(id string) (string, error) {
+	if !idPattern.MatchString(id) {
+		return "", ErrInvalidClipID
+	}
+	for _, ext := range clipExts {
+		p, err := s.path("clips", id+"."+ext)
+		if err != nil {
+			return "", err
+		}
+		info, err := os.Lstat(p)
+		if err != nil {
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			return "", ErrUnsafePath
+		}
+		if err := s.verifyParent(p); err != nil {
+			return "", err
+		}
+		return p, nil
+	}
+	return "", ErrNotFound
+}
+
+// RemoveClip deletes a persisted clip. A missing one is not an error.
+func (s *Store) RemoveClip(id string) error {
+	if !idPattern.MatchString(id) {
+		return ErrInvalidClipID
+	}
+	for _, ext := range clipExts {
+		if err := s.removeFile("clips", id+"."+ext); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RemoveAnimated deletes the draft animated WebP animations/<id>.webp of an
+// animation. A missing one is not an error.
+func (s *Store) RemoveAnimated(id string) error {
+	if !idPattern.MatchString(id) {
+		return ErrInvalidClipID
+	}
+	return s.removeFile("animations", id+".webp")
+}
+
+func (s *Store) removeFile(parts ...string) error {
+	p, err := s.path(parts...)
+	if err != nil {
+		return err
+	}
+	if err := s.verifyParent(p); err != nil {
+		return err
+	}
+	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("assets: remove %s: %w", p, err)
+	}
+	return nil
+}
+
 // WorkDir returns (creating if needed) the per-job directory below work/.
 func (s *Store) WorkDir(jobID string) (string, error) {
 	if !jobIDPattern.MatchString(jobID) {
@@ -308,6 +442,21 @@ func sniffImage(data []byte) (mediaType, ext string, err error) {
 		return "image/webp", "webp", nil
 	default:
 		return "", "", ErrInvalidImage
+	}
+}
+
+// sniffClip recognises ISO BMFF (an ftyp box at offset 4; brand "qt  " is
+// QuickTime) and EBML (WebM/Matroska) containers.
+func sniffClip(data []byte) (mediaType, ext string, err error) {
+	switch {
+	case len(data) >= 12 && string(data[4:8]) == "ftyp" && string(data[8:12]) == "qt  ":
+		return "video/quicktime", "mov", nil
+	case len(data) >= 12 && string(data[4:8]) == "ftyp":
+		return "video/mp4", "mp4", nil
+	case len(data) >= 4 && bytes.Equal(data[:4], []byte{0x1A, 0x45, 0xDF, 0xA3}):
+		return "video/webm", "webm", nil
+	default:
+		return "", "", ErrInvalidClip
 	}
 }
 
