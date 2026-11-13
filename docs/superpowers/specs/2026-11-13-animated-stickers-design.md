@@ -101,7 +101,7 @@ API công khai giữ nguyên hình dạng; bundle chỉ lớn hơn. Quyền theo
 - Rủi ro bộ nhớ (ước tính khoảng 2.4 MB mỗi sticker ở `cacheWidth: 128`): đo trên máy thật với pack 20 sticker động trước khi kết luận.
 
 ## Kiểm thử
-- media_factory (pytest): clip tổng hợp từ `cv2.VideoWriter`; hộp bao chung; thang giảm chất lượng; các mã lỗi; hồi quy toàn bộ test tĩnh.
+- media_factory (unittest, như các test hiện có): clip tổng hợp từ `cv2.VideoWriter`; hộp bao chung; thang giảm chất lượng; các mã lỗi; hồi quy toàn bộ test tĩnh.
 - Go: migration; hàng đợi clip và khôi phục sau crash; job `publish`; hồi quy checksum pack tĩnh; nháp lỗi thời; 409 `animation_busy`; `verifyWebP` với file động.
 - Web: kịch bản tương tác trên mock server (upload, toggle, phát hành).
 - Flutter: parse `pack.json` cũ và mới; widget test giảm chuyển động.
