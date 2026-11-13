@@ -32,7 +32,7 @@ import { api, errorText } from "@/lib/api";
 import { providerName } from "@/lib/ai-providers";
 import { formatBytes, formatDate } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import type { AdminPack, AdminPackDetail, Job, JobStatus, PackUpdate } from "@/lib/types";
+import type { AdminPack, AdminPackDetail, AdminPackSticker, Job, JobStatus, PackUpdate } from "@/lib/types";
 
 const POLL_MS = 3000;
 // Job timeout is 300 s server-side (RESTICK_PROCESS_TIMEOUT); stop the browser
@@ -41,6 +41,29 @@ const POLL_LIMIT_MS = 330_000;
 
 function isTerminal(status: JobStatus): boolean {
   return status === "succeeded" || status === "failed" || status === "interrupted";
+}
+
+type VariantChange = { index: number; filename: string; kind: "animated" | "static" };
+
+// The effective draft variant is the ready, enabled, non-stale animation; it is
+// compared with the committed checksum so the dialog lists real changes only.
+function unpublishedChanges(stickers: AdminPackSticker[]): VariantChange[] {
+  const changes: VariantChange[] = [];
+  stickers.forEach((sticker, index) => {
+    const draft = sticker.animation;
+    if (!draft) return;
+    const active = draft.status === "ready" && draft.use_animated && !draft.stale;
+    if (active) {
+      if (draft.animated_checksum_sha256 !== sticker.animated?.checksum_sha256) {
+        changes.push({ index, filename: sticker.filename, kind: "animated" });
+      }
+      return;
+    }
+    if (!draft.use_animated && sticker.animated) {
+      changes.push({ index, filename: sticker.filename, kind: "static" });
+    }
+  });
+  return changes;
 }
 
 function CatalogForm({ pack, onDone }: { pack: AdminPackDetail; onDone: (message: string | null) => void }) {
@@ -192,6 +215,9 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishBusy, setPublishBusy] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   const pack = useQuery({
     queryKey: ["admin-pack", id],
@@ -299,6 +325,28 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
     }
   }
 
+  async function publishAnimations() {
+    setPublishBusy(true);
+    setPublishError(null);
+    setError(null);
+    setMessage(null);
+    try {
+      const created = await api<Job>(`/api/v1/admin/packs/${id}/publish-animations`, { method: "POST" });
+      setJobId(created.id);
+      setPollExpired(false);
+      router.replace(`/packs/detail?id=${encodeURIComponent(id)}&job=${encodeURIComponent(created.id)}`);
+      setPublishOpen(false);
+      setMessage(t("animatePublishStarted"));
+      void qc.invalidateQueries({ queryKey: ["admin-pack", id] });
+      void qc.invalidateQueries({ queryKey: ["admin-packs"] });
+    } catch (err) {
+      // 409 no_changes / job_active stay next to the changes they refer to.
+      setPublishError(errorText(err));
+    } finally {
+      setPublishBusy(false);
+    }
+  }
+
   if (pack.isLoading) {
     return (
       <div className="space-y-5">
@@ -322,6 +370,7 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
   }
 
   const data = pack.data;
+  const changes = unpublishedChanges(data.stickers);
   const designId = data.design_id ?? "";
   const jobRunning = job.data ? !isTerminal(job.data.status) : false;
   const pollStopped = pollExpired && Boolean(job.data && !isTerminal(job.data.status));
@@ -502,6 +551,47 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
       </Section>
 
       <Section
+        title={t("animateUnpublished")}
+        hint={t("animatePublishHint")}
+        actions={
+          <span data-testid="publish-animations">
+            <Button
+              icon="sparkle"
+              size="sm"
+              disabled={data.status === "revoked" || jobRunning}
+              onClick={() => {
+                setPublishError(null);
+                setPublishOpen(true);
+              }}
+            >
+              {t("animatePublish")}
+            </Button>
+          </span>
+        }
+      >
+        <p className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
+          <span data-qa="unpublished-count" className="num text-ink">
+            {changes.length}
+          </span>
+          {t("animateUnpublished")}
+        </p>
+        {changes.length === 0 ? (
+          <p className="mt-2 text-xs text-ink-2">{t("animateNoneUnpublished")}</p>
+        ) : (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {changes.map((change) => (
+              <li key={change.index} className="flex min-w-0 items-center gap-2">
+                <span className="mono truncate text-xs text-ink-2">{change.filename}</span>
+                <Stamp tone={change.kind === "animated" ? "active" : "neutral"}>
+                  {t(change.kind === "animated" ? "animateChangeAnimated" : "animateChangeStatic")}
+                </Stamp>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section
         title={t("stickersTitle")}
         actions={
           data.bundle_url ? (
@@ -543,14 +633,30 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
                   </p>
                   {sticker.emoji_hint && <p className="truncate">{sticker.emoji_hint}</p>}
                   {(sticker.keywords ?? []).length > 0 && <p className="truncate text-ink-3">{(sticker.keywords ?? []).join(", ")}</p>}
-                  <a
-                    href={sticker.object_url}
-                    download
-                    className="inline-flex min-h-8 items-center gap-1 font-medium text-cut-ink hover:underline max-md:min-h-11"
-                  >
-                    <Icon name="download" size={13} />
-                    {t("downloadFile")}
-                  </a>
+                  {(sticker.animated || sticker.animation) && (
+                    <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                      {sticker.animated && <Stamp tone="ok">{t("animateCommitted")}</Stamp>}
+                      {sticker.animation && <StatusPill status={sticker.animation.status} />}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-x-3">
+                    <a
+                      href={sticker.object_url}
+                      download
+                      className="inline-flex min-h-8 items-center gap-1 font-medium text-cut-ink hover:underline max-md:min-h-11"
+                    >
+                      <Icon name="download" size={13} />
+                      {t("downloadFile")}
+                    </a>
+                    <Link
+                      data-testid={`animate-button-${index}`}
+                      href={`/packs/animate?id=${encodeURIComponent(data.id)}&index=${index}`}
+                      className="inline-flex min-h-8 items-center gap-1 font-medium text-cut-ink hover:underline max-md:min-h-11"
+                    >
+                      <Icon name="sparkle" size={13} />
+                      {t("animateLink")}
+                    </Link>
+                  </div>
                 </div>
               </li>
             ))}
@@ -601,6 +707,53 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
             </div>
           )}
           <SheetPicker designId={designId} value={pickedSheet} onChange={setPickedSheet} />
+        </Dialog>
+      )}
+
+      {publishOpen && (
+        <Dialog
+          title={t("animatePublishTitle")}
+          onClose={() => {
+            if (publishBusy) return;
+            setPublishOpen(false);
+            setPublishError(null);
+          }}
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setPublishOpen(false);
+                  setPublishError(null);
+                }}
+                disabled={publishBusy}
+              >
+                {t("cancel")}
+              </Button>
+              <Button icon="sparkle" onClick={() => void publishAnimations()} loading={publishBusy}>
+                {publishBusy ? t("saving") : t("animatePublish")}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-3 text-sm text-ink-2">
+            <p>{t("animatePublishHint")}</p>
+            {changes.length === 0 ? (
+              <p>{t("animatePublishEmpty")}</p>
+            ) : (
+              <ul className="space-y-1">
+                {changes.map((change) => (
+                  <li key={change.index} className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="mono truncate text-xs text-ink-2">{change.filename}</span>
+                    <span className="text-ink">
+                      {t(change.kind === "animated" ? "animateChangeAnimated" : "animateChangeStatic")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {publishError && <ErrorBanner message={publishError} />}
+          </div>
         </Dialog>
       )}
 

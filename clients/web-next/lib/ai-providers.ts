@@ -15,6 +15,17 @@ export const AI_PROVIDERS: readonly AiProvider[] = [
   { id: "runway", name: "Runway", url: "https://app.runwayml.com", hint: "Thiên về video, có tạo ảnh" },
 ];
 
+// Video tools for the animation factory. Opened by hand only: the operator
+// pastes the prompt and attaches the white-backed still themselves.
+export const VIDEO_PROVIDERS: readonly AiProvider[] = [
+  { id: "runway", name: "Runway", url: "https://app.runwayml.com", hint: "Video từ ảnh" },
+  { id: "kling", name: "Kling AI", url: "https://kling.ai/app", hint: "Video từ ảnh" },
+  { id: "luma", name: "Luma Dream Machine", url: "https://lumalabs.ai/dream-machine", hint: "Video từ ảnh" },
+  { id: "pika", name: "Pika", url: "https://pika.art", hint: "Video từ ảnh" },
+  { id: "hailuo", name: "Hailuo AI", url: "https://hailuoai.video", hint: "Video từ ảnh" },
+  { id: "veo", name: "Google Flow (Veo)", url: "https://labs.google/flow", hint: "Video từ ảnh" },
+];
+
 const PROVIDER_OTHER = "other";
 
 /** Display label for a stored provider id; unknown ids (e.g. a removed tool) stay raw. */

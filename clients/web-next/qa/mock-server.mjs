@@ -13,6 +13,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { deflateSync } from "node:zlib";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const STATIC_DIR = path.resolve(process.argv[2] || process.env.STATIC_DIR || path.join(here, "../out"));
@@ -56,6 +57,60 @@ function rng(str) {
 }
 
 const PALETTE = ["#FF7A59", "#FFC145", "#4CC9F0", "#7BD389", "#B388EB", "#FF6B9D", "#5B8DEF", "#F4A261"];
+
+// A real PNG for the white-reference route, so the browser clipboard path in
+// copy-reference-image.ts sees image/png like the Go service does.
+const CRC_TABLE = (() => {
+  const table = new Int32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c;
+  }
+  return table;
+})();
+function crc32(buf) {
+  let c = -1;
+  for (const byte of buf) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+  return (c ^ -1) >>> 0;
+}
+function pngChunk(type, data) {
+  const name = Buffer.from(type, "ascii");
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([name, data])));
+  return Buffer.concat([length, name, data, crc]);
+}
+function onWhitePng(seed) {
+  const size = 128;
+  const color = PALETTE[Math.floor(rng(seed)() * PALETTE.length)];
+  const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(color.slice(i, i + 2), 16));
+  const rows = [];
+  for (let y = 0; y < size; y++) {
+    const row = Buffer.alloc(1 + size * 4);
+    for (let x = 0; x < size; x++) {
+      const i = 1 + x * 4;
+      const inside = (x - 63.5) ** 2 + (y - 63.5) ** 2 < 52 ** 2;
+      row[i] = inside ? r : 255;
+      row[i + 1] = inside ? g : 255;
+      row[i + 2] = inside ? b : 255;
+      row[i + 3] = 255;
+    }
+    rows.push(row);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", deflateSync(Buffer.concat(rows))),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
 
 // A sticker-like blob: smooth closed curve, thick white border, dark outline,
 // simple face. `variant` changes the mouth/eyes so stickers differ.
@@ -333,7 +388,7 @@ function stickerList(slug, count, names) {
   return Array.from({ length: count }, (_, i) => {
     const n = i + 1;
     return {
-      sort_order: n,
+      sort_order: i,
       filename: `${String(n).padStart(2, "0")}-${names[i % names.length]}.png`,
       checksum_sha256: sha(`${slug}-${n}`),
       width: 512, height: 512,
@@ -378,6 +433,123 @@ function packSheetView(sheets, id) {
     checksum_sha256: sheet.checksum_sha256,
     image_url: `/api/v1/admin/designs/${sheet.design_id}/sheets/${sheet.id}/image`,
   };
+}
+
+const animationKey = (packId, index) => `${packId}:${index}`;
+
+function animationView(item) {
+  if (!item.static) {
+    const age = Date.now() - Date.parse(item.created_at);
+    if (item.status === "queued" && age > 500) item.status = "running";
+    if (item.status === "running" && age > 1800) {
+      item.status = "ready";
+      item.frames = 24;
+      item.fps = 12;
+      item.duration_ms = 1800;
+      item.quality = 75;
+      item.width = 512;
+      item.height = 512;
+      item.animated_byte_size = item.clip_byte_size;
+      item.animated_checksum_sha256 = sha(`${item.pack_id}:${item.sticker_index}:${item.clip_checksum}`);
+    }
+  }
+  return {
+    id: item.id, pack_id: item.pack_id, sticker_index: item.sticker_index,
+    motion_text: item.motion_text, static_checksum_sha256: item.static_checksum_sha256,
+    clip_byte_size: item.clip_byte_size, status: item.status, use_animated: item.use_animated,
+    stale: item.stale, animated_checksum_sha256: item.animated_checksum_sha256,
+    animated_byte_size: item.animated_byte_size, frames: item.frames, fps: item.fps,
+    duration_ms: item.duration_ms, quality: item.quality, width: item.width, height: item.height,
+    error_code: item.error_code, error_message: item.error_message,
+    preview_url: `/api/v1/admin/packs/${item.pack_id}/stickers/${item.sticker_index}/animation/preview`,
+  };
+}
+
+function animationSummaryView(item) {
+  const view = animationView(item);
+  return {
+    status: view.status, use_animated: view.use_animated, stale: view.stale,
+    preview_url: view.preview_url, animated_checksum_sha256: view.animated_checksum_sha256,
+    animated_byte_size: view.animated_byte_size, frames: view.frames, fps: view.fps,
+    duration_ms: view.duration_ms, quality: view.quality,
+    error_code: view.error_code, error_message: view.error_message,
+  };
+}
+
+// Mirrors the web's unpublishedChanges: the effective draft is ready, enabled
+// and not stale; a disabled draft reverts an already committed animation.
+function animationChanges(pack, animations) {
+  return pack.stickers.flatMap((sticker, index) => {
+    const draft = animations.get(animationKey(pack.id, index));
+    if (!draft) return [];
+    const active = draft.status === "ready" && draft.use_animated && !draft.stale;
+    if (active) {
+      return draft.animated_checksum_sha256 !== sticker.animated?.checksum_sha256
+        ? [{ index, kind: "animated" }]
+        : [];
+    }
+    return !draft.use_animated && sticker.animated ? [{ index, kind: "static" }] : [];
+  });
+}
+
+function applyAnimationPublish(job, pack) {
+  for (const change of job.animationChanges ?? []) {
+    const sticker = pack.stickers[change.index];
+    if (!sticker) continue;
+    if (change.kind === "static") {
+      delete sticker.animated;
+      continue;
+    }
+    const item = store.animations.get(animationKey(pack.id, change.index));
+    if (!item) continue;
+    sticker.animated = {
+      object_url: `/mock-assets/packs/${pack.slug}/animated/${change.index}.svg`,
+      checksum_sha256: item.animated_checksum_sha256,
+      byte_size: item.animated_byte_size ?? 4096,
+      frames: item.frames ?? 24,
+      duration_ms: item.duration_ms ?? 1800,
+    };
+  }
+  job.result = { stickers: pack.stickers.length };
+}
+
+// pk-ready-1 carries the interesting draft matrix: an unchanged committed
+// variant, an unpublished add, a disabled revert, a stale draft and a failure.
+function seedAnimations(packs) {
+  const animations = new Map();
+  const ready = packs.find((pack) => pack.id === "pk-ready-1");
+  if (!ready) return animations;
+  const mk = (index, overrides = {}) => {
+    const sticker = ready.stickers[index];
+    animations.set(animationKey(ready.id, index), {
+      id: `anim-${index}`, pack_id: ready.id, sticker_index: index,
+      motion_text: ["vẫy tay chào", "nhảy nhẹ theo nhịp", "lắc đầu cười", "nháy mắt", "cười mở miệng"][index] ?? "chuyển động nhẹ",
+      static_checksum_sha256: sticker.checksum_sha256, clip_byte_size: 4096,
+      status: "ready", use_animated: true, stale: false,
+      animated_checksum_sha256: sha(`anim-${ready.slug}-${index}`), animated_byte_size: 4096,
+      frames: 24, fps: 12, duration_ms: 1800, quality: 75, width: 512, height: 512,
+      created_at: ts(420 + index), static: true, ...overrides,
+    });
+  };
+  const commit = (index) => {
+    const item = animations.get(animationKey(ready.id, index));
+    ready.stickers[index].animated = {
+      object_url: `/mock-assets/packs/${ready.slug}/animated/${index}.svg`,
+      checksum_sha256: item.animated_checksum_sha256, byte_size: item.animated_byte_size,
+      frames: item.frames, duration_ms: item.duration_ms,
+    };
+  };
+  mk(0);
+  commit(0);
+  mk(1);
+  mk(2, { use_animated: false });
+  commit(2);
+  mk(3, { stale: true });
+  mk(4, {
+    status: "failed", animated_checksum_sha256: undefined, animated_byte_size: undefined,
+    error_code: "invalid_clip", error_message: "Clip không giải mã được.",
+  });
+  return animations;
 }
 
 function buildStore() {
@@ -425,6 +597,8 @@ function buildStore() {
     },
   ];
 
+  const animations = seedAnimations(packs);
+
   const keys = [
     { id: "key-1", name: "Bot Telegram", prefix: "rsk_7f3a9c", active: true, created_at: ts(10), expires_at: null, disabled_at: null },
     { id: "key-2", name: "Thử nghiệm cũ", prefix: "rsk_2b81de", active: false, created_at: ts(-4000), expires_at: ts(-1000), disabled_at: null },
@@ -433,6 +607,7 @@ function buildStore() {
 
   return {
     groups, fragments, characters, assets, designs, sheets, packs, jobs, keys, sessions: new Set(),
+    animations,
     keyPacks: new Map([["key-1", new Set(["pk-ready-1"])]]),
   };
 }
@@ -533,14 +708,17 @@ function nowIso() {
 
 // Job states advance lazily: seeded jobs marked static keep their state.
 function jobView(job) {
-  if (!job.static && job.status === "queued" && Date.now() - Date.parse(job.created_at) > 1500) {
+  const nowMs = Date.now();
+  if (!job.static && job.status === "queued" && nowMs - Date.parse(job.created_at) > (job.fast ? 400 : 1500)) {
     job.status = "running";
     job.started_at = nowIso();
   }
-  if (!job.static && job.status === "running" && Date.now() - Date.parse(job.created_at) > 6000) {
+  if (!job.static && job.status === "running" && nowMs - Date.parse(job.created_at) > (job.fast ? 1200 : 6000)) {
     job.status = "succeeded";
     job.finished_at = nowIso();
-    job.result = { stickers: 10 };
+    const pack = store.packs.find((item) => item.id === job.pack_id);
+    if (pack && job.animationChanges) applyAnimationPublish(job, pack);
+    else job.result = { stickers: 10 };
   }
   return {
     id: job.id, pack_id: job.pack_id, version: job.version, status: job.status,
@@ -558,6 +736,9 @@ function packDetail(p) {
   const jobs = [...store.jobs.values()].filter((j) => j.pack_id === p.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const latest = jobs[0];
   const design = store.designs.find((d) => d.id === p.design_id);
+  const animations = new Map(
+    [...store.animations.values()].filter((item) => item.pack_id === p.id).map((item) => [item.sticker_index, item]),
+  );
   return {
     ...packView(p),
     ...(design
@@ -569,7 +750,10 @@ function packDetail(p) {
           },
         }
       : {}),
-    stickers: p.stickers,
+    stickers: p.stickers.map((sticker) => {
+      const draft = animations.get(sticker.sort_order);
+      return draft ? { ...sticker, animation: animationSummaryView(draft) } : sticker;
+    }),
     bundle_url: p.status === "ready" ? `/mock-assets/packs/${p.slug}/bundle.zip` : "",
     ...(latest ? { latest_job: jobView(latest) } : {}),
   };
@@ -934,6 +1118,111 @@ async function handleApi(req, res, url) {
     }
   }
 
+  // ----- sticker animations -----
+  if (p === "/api/v1/admin/animations/compile" && method === "POST") {
+    const pk = store.packs.find((x) => x.id === json?.pack_id);
+    const sticker = pk?.stickers.find((s) => s.sort_order === json?.sticker_index);
+    if (!pk || hidden()) return notFound();
+    if (!sticker) return fail(res, 404, "not_found", "Sticker không tồn tại.");
+    if (typeof json.motion_text !== "string" || !json.motion_text.trim()) {
+      return fail(res, 422, "unprocessable", "Thiếu mô tả chuyển động.");
+    }
+    return send(res, 200, {
+      prompt: `Animate the sticker "${sticker.filename}": ${json.motion_text.trim()}. Keep the character identity, centered framing, 512x512, seamless loop.`,
+      emoji_hint: sticker.emoji_hint,
+    });
+  }
+  m = /^\/api\/v1\/admin\/packs\/([^/]+)\/animations$/.exec(p);
+  if (m && method === "GET") {
+    const pk = store.packs.find((x) => x.id === m[1]);
+    if (!pk || hidden()) return notFound();
+    const items = [...store.animations.values()]
+      .filter((item) => item.pack_id === pk.id)
+      .sort((a, b) => a.sticker_index - b.sticker_index)
+      .map(animationView);
+    return send(res, 200, { items });
+  }
+  m = /^\/api\/v1\/admin\/packs\/([^/]+)\/publish-animations$/.exec(p);
+  if (m && method === "POST") {
+    const pk = store.packs.find((x) => x.id === m[1]);
+    if (!pk || hidden()) return notFound();
+    if (pk.status === "revoked") return fail(res, 410, "pack_revoked", "Pack đã bị thu hồi; thao tác này không còn hiệu lực.");
+    const active = [...store.jobs.values()].some((j) => j.pack_id === pk.id && (j.status === "queued" || j.status === "running"));
+    if (active) return fail(res, 409, "job_active", "Pack đang có job chạy. Chờ job kết thúc rồi thử lại.");
+    const changes = animationChanges(pk, store.animations);
+    if (!changes.length) return fail(res, 409, "no_changes", "Không có thay đổi animation nào để phát hành.");
+    const job = {
+      id: nextId("job"), pack_id: pk.id, version: pk.current_version + 1, status: "queued",
+      request: { animations: changes.length }, result: null, created_at: nowIso(), started_at: null,
+      finished_at: null, static: false, fast: true, animationChanges: changes,
+    };
+    store.jobs.set(job.id, job);
+    return send(res, 202, jobView(job));
+  }
+  m = /^\/api\/v1\/admin\/packs\/([^/]+)\/stickers\/(\d+)\/animation$/.exec(p);
+  if (m) {
+    const pk = store.packs.find((x) => x.id === m[1]);
+    const index = Number(m[2]);
+    const sticker = pk?.stickers.find((s) => s.sort_order === index);
+    if (!pk || hidden()) return notFound();
+    if (!sticker) return notFound();
+    const key = animationKey(pk.id, index);
+    const existing = store.animations.get(key);
+    if (method === "POST") {
+      if (existing && (existing.status === "queued" || existing.status === "running")) {
+        return fail(res, 409, "animation_busy", "Sticker này đang có animation chạy.");
+      }
+      const parts = parseMultipart(raw, ct);
+      const clip = parts?.clip;
+      if (!clip || !clip.data.length) return fail(res, 400, "bad_request", "Thiếu clip.");
+      const motionText = (parts.motion_text?.data.toString("utf8") ?? "").trim();
+      if (!motionText) return fail(res, 422, "unprocessable", "Thiếu mô tả chuyển động.");
+      const item = {
+        id: existing?.id ?? nextId("anim"), pack_id: pk.id, sticker_index: index,
+        motion_text: motionText, static_checksum_sha256: sticker.checksum_sha256,
+        clip_byte_size: clip.data.length, clip_checksum: sha(clip.data), status: "queued",
+        use_animated: true, stale: false, animated_checksum_sha256: undefined,
+        animated_byte_size: undefined, frames: undefined, fps: undefined, duration_ms: undefined,
+        quality: undefined, width: undefined, height: undefined, error_code: undefined,
+        error_message: undefined, created_at: nowIso(), static: false,
+      };
+      store.animations.set(key, item);
+      return send(res, 202, animationView(item));
+    }
+    if (!existing) return notFound();
+    if (method === "PATCH") {
+      if (typeof json?.use_animated !== "boolean") {
+        return fail(res, 422, "unprocessable", "use_animated là bắt buộc.");
+      }
+      if (existing.status !== "ready") return fail(res, 409, "not_ready", "Animation chưa xử lý xong.");
+      existing.use_animated = json.use_animated;
+      return send(res, 200, animationView(existing));
+    }
+    if (method === "DELETE") {
+      store.animations.delete(key);
+      return send(res, 204);
+    }
+  }
+  m = /^\/api\/v1\/admin\/packs\/([^/]+)\/stickers\/(\d+)\/animation\/preview$/.exec(p);
+  if (m && method === "GET") {
+    const pk = store.packs.find((x) => x.id === m[1]);
+    if (!pk || hidden()) return notFound();
+    const item = store.animations.get(animationKey(pk.id, Number(m[2])));
+    if (!item) return notFound();
+    const view = animationView(item);
+    if (view.status !== "ready") return fail(res, 409, "not_ready", "Animation chưa xử lý xong.");
+    // The real route serves WebP; the mock serves SVG so the preview needs no
+    // animated-image fixture, and the QA scenario only asserts rendering.
+    return send(res, 200, stickerSvg(`${pk.slug}-anim-${m[2]}`, { bg: false }), { "Content-Type": "image/svg+xml" });
+  }
+  m = /^\/api\/v1\/admin\/packs\/([^/]+)\/stickers\/(\d+)\/on-white\.png$/.exec(p);
+  if (m && method === "GET") {
+    const pk = store.packs.find((x) => x.id === m[1]);
+    if (!pk || hidden()) return notFound();
+    if (!pk.stickers.some((s) => s.sort_order === Number(m[2]))) return notFound();
+    return send(res, 200, onWhitePng(`${pk.slug}-${m[2]}`), { "Content-Type": "image/png" });
+  }
+
   // ----- jobs -----
   m = /^\/api\/v1\/admin\/jobs\/([^/]+)$/.exec(p);
   if (m && method === "GET") {
@@ -1018,6 +1307,8 @@ function mockAsset(p, res) {
   if (m) return send(res, 200, stickerSvg(`${m[1]}-thumb`, { bg: true }), { "Content-Type": MIME[".svg"] });
   m = /^\/mock-assets\/packs\/([^/]+)\/stickers\/(\d+)\.svg$/.exec(p);
   if (m) return send(res, 200, stickerSvg(`${m[1]}-${m[2]}`), { "Content-Type": MIME[".svg"] });
+  m = /^\/mock-assets\/packs\/([^/]+)\/animated\/(\d+)\.svg$/.exec(p);
+  if (m) return send(res, 200, stickerSvg(`${m[1]}-animated-${m[2]}`, { bg: false }), { "Content-Type": MIME[".svg"] });
   m = /^\/mock-assets\/packs\/([^/]+)\/bundle\.zip$/.exec(p);
   if (m) return send(res, 200, Buffer.from(`mock bundle for ${m[1]} (not a real zip)\n`), { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${m[1]}.zip"` });
   return false;

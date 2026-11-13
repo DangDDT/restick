@@ -275,6 +275,53 @@ export interface AdminPack {
   updated_at: string;
 }
 
+export type AnimationStatus = "queued" | "running" | "ready" | "failed" | "interrupted";
+
+// The draft summary embedded in the pack detail. The committed variant is a
+// separate object on the sticker, so the publish diff is computed client-side.
+export interface PackAnimationDraft {
+  status: AnimationStatus;
+  use_animated: boolean;
+  stale: boolean;
+  preview_url: string;
+  animated_checksum_sha256?: string;
+  animated_byte_size?: number;
+  frames?: number;
+  fps?: number;
+  duration_ms?: number;
+  quality?: number;
+  error_code?: string;
+  error_message?: string;
+}
+
+export interface PackCommittedAnimation {
+  object_url: string;
+  checksum_sha256: string;
+  byte_size: number;
+  frames: number;
+  duration_ms: number;
+}
+
+export interface PackAnimation extends PackAnimationDraft {
+  id: string;
+  pack_id: string;
+  sticker_index: number;
+  motion_text: string;
+  static_checksum_sha256: string;
+  clip_byte_size: number;
+  width?: number;
+  height?: number;
+}
+
+export interface PackAnimationList {
+  items: PackAnimation[];
+}
+
+export interface CompiledAnimation {
+  prompt: string;
+  emoji_hint: string;
+}
+
 export interface AdminPackSticker {
   sort_order: number;
   filename: string;
@@ -285,6 +332,10 @@ export interface AdminPackSticker {
   keywords: string[] | null;
   object_url: string;
   thumb_url: string;
+  /** Committed animated variant of the current version, absent for a still sticker. */
+  animated?: PackCommittedAnimation;
+  /** Mutable animation draft for this sticker index, absent when never uploaded. */
+  animation?: PackAnimationDraft;
 }
 
 export interface AdminPackDetail extends AdminPack {
