@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/eykh/restick/api_svc/internal/animations"
 	"github.com/eykh/restick/api_svc/internal/assets"
 	"github.com/eykh/restick/api_svc/internal/auth"
 	"github.com/eykh/restick/api_svc/internal/jobs"
@@ -38,15 +39,16 @@ const (
 // logout requires a valid session cookie; unsafe requests must also carry the
 // configured public origin. Client API keys never authenticate any admin route.
 type admin struct {
-	auth    *auth.Service
-	studio  *studio.Service
-	packs   *packs.Service
-	jobs    *jobs.Runner
-	assets  *assets.Store
-	baseURL string
-	trusted []netip.Prefix
-	limiter *loginLimiter
-	now     func() time.Time
+	auth       *auth.Service
+	studio     *studio.Service
+	packs      *packs.Service
+	jobs       *jobs.Runner
+	assets     *assets.Store
+	animations *animations.Service
+	baseURL    string
+	trusted    []netip.Prefix
+	limiter    *loginLimiter
+	now        func() time.Time
 }
 
 func (a *admin) mount(mux *http.ServeMux) {
@@ -92,6 +94,14 @@ func (a *admin) mount(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/admin/packs/{id}", a.ownerOnly(a.deletePack))
 	mux.HandleFunc("POST /api/v1/admin/packs/{id}/process", a.ownerOnly(a.processPack))
 	mux.HandleFunc("POST /api/v1/admin/packs/{id}/revoke", a.ownerOnly(a.revokePack))
+	mux.HandleFunc("POST /api/v1/admin/packs/{id}/publish-animations", a.ownerOnly(a.publishAnimations))
+	mux.HandleFunc("GET /api/v1/admin/packs/{id}/animations", a.sessionOnly(a.listAnimations))
+	mux.HandleFunc("POST /api/v1/admin/packs/{id}/stickers/{index}/animation", a.ownerOnly(a.uploadAnimation))
+	mux.HandleFunc("PATCH /api/v1/admin/packs/{id}/stickers/{index}/animation", a.ownerOnly(a.setAnimationUse))
+	mux.HandleFunc("DELETE /api/v1/admin/packs/{id}/stickers/{index}/animation", a.ownerOnly(a.deleteAnimation))
+	mux.HandleFunc("GET /api/v1/admin/packs/{id}/stickers/{index}/animation/preview", a.sessionOnly(a.getAnimationPreview))
+	mux.HandleFunc("GET /api/v1/admin/packs/{id}/stickers/{index}/on-white.png", a.sessionOnly(a.getOnWhite))
+	mux.HandleFunc("POST /api/v1/admin/animations/compile", a.ownerOnly(a.compileAnimation))
 	mux.HandleFunc("GET /api/v1/admin/jobs/{id}", a.sessionOnly(a.getJob))
 
 	mux.HandleFunc("GET /api/v1/admin/api-keys", a.sessionOnly(a.listKeys))

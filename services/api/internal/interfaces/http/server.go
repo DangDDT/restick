@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eykh/restick/api_svc/internal/animations"
 	"github.com/eykh/restick/api_svc/internal/assets"
 	"github.com/eykh/restick/api_svc/internal/auth"
 	"github.com/eykh/restick/api_svc/internal/jobs"
@@ -26,6 +27,7 @@ type Dependencies struct {
 	Packs             *packs.Service
 	Jobs              *jobs.Runner
 	Assets            *assets.Store
+	Animations        *animations.Service
 	PublicBaseURL     string
 	TrustedProxyCIDRs []netip.Prefix
 	WebDir            string
@@ -49,15 +51,16 @@ func newHandler(deps Dependencies, now func() time.Time) http.Handler {
 		baseURL: strings.TrimRight(deps.PublicBaseURL, "/"),
 	}
 	owner := &admin{
-		auth:    deps.Auth,
-		studio:  deps.Studio,
-		packs:   deps.Packs,
-		jobs:    deps.Jobs,
-		assets:  deps.Assets,
-		baseURL: strings.TrimRight(deps.PublicBaseURL, "/"),
-		trusted: deps.TrustedProxyCIDRs,
-		limiter: newLoginLimiter(now),
-		now:     now,
+		auth:       deps.Auth,
+		studio:     deps.Studio,
+		packs:      deps.Packs,
+		jobs:       deps.Jobs,
+		assets:     deps.Assets,
+		animations: deps.Animations,
+		baseURL:    strings.TrimRight(deps.PublicBaseURL, "/"),
+		trusted:    deps.TrustedProxyCIDRs,
+		limiter:    newLoginLimiter(now),
+		now:        now,
 	}
 
 	mux := http.NewServeMux()

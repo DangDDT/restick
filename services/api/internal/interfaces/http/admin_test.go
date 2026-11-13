@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/eykh/restick/api_svc/internal/animations"
 	"github.com/eykh/restick/api_svc/internal/assets"
 	"github.com/eykh/restick/api_svc/internal/auth"
 	"github.com/eykh/restick/api_svc/internal/jobs"
@@ -57,18 +58,19 @@ func (c *testClock) Advance(d time.Duration) {
 }
 
 type adminFixture struct {
-	t       *testing.T
-	root    string
-	db      *sql.DB
-	auth    *auth.Service
-	studio  *studio.Service
-	packs   *packs.Service
-	files   *assets.Store
-	jobs    *jobs.Runner
-	handler http.Handler
-	clock   *testClock
-	webDir  string
-	session string
+	t          *testing.T
+	root       string
+	db         *sql.DB
+	auth       *auth.Service
+	studio     *studio.Service
+	packs      *packs.Service
+	files      *assets.Store
+	jobs       *jobs.Runner
+	animations *animations.Service
+	handler    http.Handler
+	clock      *testClock
+	webDir     string
+	session    string
 }
 
 func newAdminFixture(t *testing.T) *adminFixture {
@@ -90,7 +92,8 @@ func newAdminFixture(t *testing.T) *adminFixture {
 	}
 	studioSvc := studio.NewService(db, files)
 	catalog := packs.NewService(db)
-	runner := jobs.NewRunner(db, files, nil, time.Minute)
+	animationsSvc := animations.NewService(db, files)
+	runner := jobs.NewRunner(db, files, nil, time.Minute, jobs.WithAnimations(animationsSvc))
 	webDir := filepath.Join(root, "web")
 	if err := os.MkdirAll(webDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -106,6 +109,7 @@ func newAdminFixture(t *testing.T) *adminFixture {
 		Packs:             catalog,
 		Jobs:              runner,
 		Assets:            files,
+		Animations:        animationsSvc,
 		PublicBaseURL:     adminBaseURL,
 		TrustedProxyCIDRs: trusted,
 		WebDir:            webDir,
@@ -113,7 +117,7 @@ func newAdminFixture(t *testing.T) *adminFixture {
 	}, clock.Now)
 	return &adminFixture{
 		t: t, root: root, db: db, auth: authSvc, studio: studioSvc, packs: catalog,
-		files: files, jobs: runner, handler: handler, clock: clock, webDir: webDir,
+		files: files, jobs: runner, animations: animationsSvc, handler: handler, clock: clock, webDir: webDir,
 	}
 }
 
@@ -344,6 +348,7 @@ func adminUnsafeRoutes(t *testing.T) []adminRouteCase {
 	t.Helper()
 	imageBody, imageType := multipartBody(t, "file", "sheet.png", testPNG(t, 2, 2))
 	sheetBody, sheetType := multipartBody(t, "file", "sheet.png", testPNG(t, 2, 2))
+	clipBody, clipType := multipartBody(t, "clip", "clip.mp4", testClip)
 	id := testResourceID
 	jsonBody := func(payload string) []byte { return []byte(payload) }
 	return []adminRouteCase{
@@ -369,6 +374,11 @@ func adminUnsafeRoutes(t *testing.T) []adminRouteCase {
 		{http.MethodDelete, "/api/v1/admin/designs/" + id + "/sheets/" + id, nil, ""},
 		{http.MethodPost, "/api/v1/admin/packs/" + id + "/process", nil, ""},
 		{http.MethodPost, "/api/v1/admin/packs/" + id + "/revoke", nil, ""},
+		{http.MethodPost, "/api/v1/admin/packs/" + id + "/publish-animations", nil, ""},
+		{http.MethodPost, "/api/v1/admin/packs/" + id + "/stickers/0/animation", clipBody, clipType},
+		{http.MethodPatch, "/api/v1/admin/packs/" + id + "/stickers/0/animation", jsonBody(`{"use_animated":true}`), jsonContentType},
+		{http.MethodDelete, "/api/v1/admin/packs/" + id + "/stickers/0/animation", nil, ""},
+		{http.MethodPost, "/api/v1/admin/animations/compile", jsonBody(`{"pack_id":"` + id + `","sticker_index":0,"motion_text":"wave"}`), jsonContentType},
 		{http.MethodPost, "/api/v1/admin/api-keys", jsonBody(`{"name":"stolen"}`), jsonContentType},
 		{http.MethodPost, "/api/v1/admin/api-keys/" + id + "/rotate", nil, ""},
 		{http.MethodDelete, "/api/v1/admin/api-keys/" + id, nil, ""},
@@ -392,6 +402,9 @@ func adminReadRoutes() []adminRouteCase {
 		{http.MethodGet, "/api/v1/admin/designs/" + id + "/sheets/" + id + "/image", nil, ""},
 		{http.MethodGet, "/api/v1/admin/packs", nil, ""},
 		{http.MethodGet, "/api/v1/admin/packs/" + id, nil, ""},
+		{http.MethodGet, "/api/v1/admin/packs/" + id + "/animations", nil, ""},
+		{http.MethodGet, "/api/v1/admin/packs/" + id + "/stickers/0/animation/preview", nil, ""},
+		{http.MethodGet, "/api/v1/admin/packs/" + id + "/stickers/0/on-white.png", nil, ""},
 		{http.MethodGet, "/api/v1/admin/jobs/" + id, nil, ""},
 		{http.MethodGet, "/api/v1/admin/api-keys", nil, ""},
 		{http.MethodGet, "/api/v1/admin/api-keys/" + id + "/packs", nil, ""},

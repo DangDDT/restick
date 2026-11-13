@@ -2,6 +2,7 @@ package studio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand" // math/rand v1: the approved Suggest signature is asked for a seeded *rand.Rand
 	"sort"
@@ -123,6 +124,48 @@ func (s *Service) Compile(ctx context.Context, draft Draft) (CompiledPrompt, err
 		}
 	}
 	return CompiledPrompt{Text: renderPrompt(draft, snapshot), Snapshot: snapshot}, nil
+}
+
+// CompileAnimation renders the English prompt for one animated sticker. The
+// subject is the design's frozen character description; a pack without a saved
+// design (or a character without a description) falls back to a generic
+// subject. The animation rules are the contract the clip pipeline verifies:
+// 512 px square, fixed camera, centred full body, flat white, a small seamless
+// 3 s loop and no shadow, text or watermark.
+func (s *Service) CompileAnimation(ctx context.Context, designID, motionText string) (string, error) {
+	subject := "the sticker character"
+	if designID != "" {
+		design, err := s.GetDesign(ctx, designID)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			// A pack can outlive its design; animate with the generic subject.
+		case err != nil:
+			return "", err
+		default:
+			if character := design.Snapshot.Character; character != nil {
+				if description := strings.TrimSpace(character.Description); description != "" {
+					subject = description
+				}
+			}
+		}
+	}
+	motion := strings.TrimSpace(motionText)
+	if motion == "" {
+		motion = "a small natural idle motion"
+	}
+	var b strings.Builder
+	b.WriteString("Animate this sticker as one small looping animation.\n\n")
+	fmt.Fprintf(&b, "Subject: %s.\n", strings.TrimRight(subject, "."))
+	fmt.Fprintf(&b, "Motion: %s.\n\n", strings.TrimRight(motion, "."))
+	b.WriteString("Animation contract (follow every rule exactly):\n")
+	b.WriteString("- Canvas: one 512x512 square image on a pure flat white (#FFFFFF) background, fully opaque, with no scenery, floor, gradient or vignette.\n")
+	b.WriteString("- Fixed camera: no pan, zoom, rotation or perspective change; only the character moves.\n")
+	b.WriteString("- Centered full body: the character stays centered and fully visible, at the same size and position as the reference image.\n")
+	b.WriteString("- Preserve the reference: keep the exact character design, proportions, colours, line weight, outline, face and expression style; do not redesign, recolour or add elements.\n")
+	b.WriteString("- Small motion: the movement stays small and readable at 512 px and inside the character silhouette.\n")
+	b.WriteString("- Seamless loop: the last frame matches the first exactly, so the 3 second loop never jumps.\n")
+	b.WriteString("- Do not add a drop shadow, ground shadow, glow, text, caption, label, watermark or signature.\n")
+	return b.String(), nil
 }
 
 func validateCharacterIdentity(characterID string, fragments map[string]Fragment) error {

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eykh/restick/api_svc/internal/animations"
 	"github.com/eykh/restick/api_svc/internal/jobs"
 	"github.com/eykh/restick/api_svc/internal/packs"
 )
@@ -36,6 +37,20 @@ type adminPackSticker struct {
 	Keywords       []string `json:"keywords"`
 	ObjectURL      string   `json:"object_url"`
 	ThumbURL       string   `json:"thumb_url"`
+	// Animated is the committed variant of this version, nil for a still
+	// sticker. It is what clients actually download, so the admin page can
+	// compare it with the draft Animation below and show unpublished changes.
+	Animated *adminPackAnimated `json:"animated,omitempty"`
+	// Animation is the mutable draft for this sticker index, if any.
+	Animation *adminAnimationSummary `json:"animation,omitempty"`
+}
+
+type adminPackAnimated struct {
+	ObjectURL      string `json:"object_url"`
+	ChecksumSHA256 string `json:"checksum_sha256"`
+	ByteSize       int64  `json:"byte_size"`
+	Frames         int    `json:"frames"`
+	DurationMS     int    `json:"duration_ms"`
 }
 
 type adminPack struct {
@@ -207,17 +222,39 @@ func (a *admin) getPack(w http.ResponseWriter, r *http.Request) {
 			writePackError(w, err)
 			return
 		}
+		drafts := map[int]animations.Animation{}
+		if a.animations != nil {
+			items, err := a.animations.List(r.Context(), pack.ID)
+			if err != nil {
+				writeAnimationError(w, err)
+				return
+			}
+			for _, item := range items {
+				drafts[item.StickerIndex] = item
+			}
+		}
 		for _, sticker := range version.Stickers {
 			keywords := sticker.Keywords
 			if keywords == nil {
 				keywords = []string{}
 			}
-			detail.Stickers = append(detail.Stickers, adminPackSticker{
+			entry := adminPackSticker{
 				SortOrder: sticker.SortOrder, Filename: sticker.Filename,
 				ChecksumSHA256: sticker.ChecksumSHA256, Width: sticker.Width, Height: sticker.Height,
 				EmojiHint: sticker.EmojiHint, Keywords: keywords,
 				ObjectURL: a.assetURL(sticker.ObjectPath), ThumbURL: a.assetURL(sticker.ThumbPath),
-			})
+			}
+			if sticker.AnimatedPath != "" {
+				entry.Animated = &adminPackAnimated{
+					ObjectURL: a.assetURL(sticker.AnimatedPath), ChecksumSHA256: sticker.AnimatedChecksumSHA256,
+					ByteSize: sticker.AnimatedByteSize, Frames: sticker.AnimatedFrames,
+					DurationMS: sticker.AnimatedDurationMS,
+				}
+			}
+			if item, ok := drafts[sticker.SortOrder]; ok {
+				entry.Animation = animationSummary(a, item)
+			}
+			detail.Stickers = append(detail.Stickers, entry)
 		}
 		detail.BundleURL = a.baseURL + "/v1/bundles/" + pack.ID + "/v/" + strconv.Itoa(pack.CurrentVersion)
 	}

@@ -114,6 +114,7 @@ func serveWith(ctx context.Context, cfg config.FactoryConfig, processor jobs.Pro
 		Packs:             packs.NewService(db),
 		Jobs:              runner,
 		Assets:            files,
+		Animations:        animationSvc,
 		PublicBaseURL:     cfg.PublicBaseURL,
 		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
 		WebDir:            cfg.WebDir,
@@ -185,6 +186,7 @@ func checkPartialRestore(dataDir string) error {
 			continue
 		}
 		if name == "sources" || name == "work" || name == "packs" || name == "bundles" ||
+			name == "clips" || name == "animations" ||
 			strings.HasPrefix(name, ".restick-restore-") {
 			return fmt.Errorf("restick: data dir %s holds %s but no %s; retry the restore into a new empty data dir instead of initialising on top of the partial tree",
 				dataDir, name, storage.DBFileName)

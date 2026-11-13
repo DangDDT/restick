@@ -177,6 +177,20 @@ func TestStartupRejectsUnwritableDataAndMissingBootstrapSecret(t *testing.T) {
 	})
 }
 
+func TestPartialRestoreRejectsAnimationDirectories(t *testing.T) {
+	for _, name := range []string{"clips", "animations"} {
+		t.Run(name, func(t *testing.T) {
+			dataDir := t.TempDir()
+			if err := os.Mkdir(filepath.Join(dataDir, name), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := checkPartialRestore(dataDir); err == nil {
+				t.Fatalf("accepted partial restore with %s but no database", name)
+			}
+		})
+	}
+}
+
 func TestHealthcheckUsesRunningServer(t *testing.T) {
 	cfg := testConfig(t, t.TempDir())
 	server := startTestServer(t, cfg, jobs.PythonProcessor{})

@@ -23,6 +23,7 @@ info:
     - Admin JSON bodies: 1 MiB, content type `application/json`, single document,
       unknown fields rejected.
     - Multipart uploads: 8 MiB file plus 64 KiB of form overhead.
+    - Animation clip uploads: 20 MiB clip plus 64 KiB of form overhead.
     - Errors always use `{"error":{"code","message"}}`; internal paths and stack
       traces are never returned.
 
@@ -41,6 +42,7 @@ tags:
   - name: Admin characters
   - name: Admin designs
   - name: Admin packs
+  - name: Admin animations
   - name: Admin jobs
   - name: Admin keys
 security: []
@@ -92,6 +94,12 @@ components:
       in: path
       required: true
       schema: { type: integer, minimum: 1 }
+    StickerIndex:
+      name: index
+      in: path
+      required: true
+      description: Zero-based sticker sort order in the current version.
+      schema: { type: integer, minimum: 0 }
 
   responses:
     BadRequest:
@@ -603,6 +611,100 @@ components:
         keywords: { type: array, items: { type: string } }
         object_url: { type: string }
         thumb_url: { type: string }
+        animated:
+          description: Animated variant committed in this version; omitted for a still sticker.
+          allOf:
+            - $ref: '#/components/schemas/AdminPackAnimated'
+        animation:
+          description: Mutable draft at this sticker index; omitted when no clip was uploaded.
+          allOf:
+            - $ref: '#/components/schemas/AdminAnimationSummary'
+
+    AdminPackAnimated:
+      type: object
+      description: The animated variant committed in this version, downloadable from object_url.
+      required: [object_url, checksum_sha256, byte_size, frames, duration_ms]
+      properties:
+        object_url: { type: string }
+        checksum_sha256: { type: string }
+        byte_size: { type: integer, minimum: 1 }
+        frames: { type: integer, minimum: 2 }
+        duration_ms: { type: integer, minimum: 1 }
+
+    AdminAnimationSummary:
+      type: object
+      required: [status, use_animated, stale, preview_url]
+      properties:
+        status: { type: string, enum: [queued, running, ready, failed, interrupted] }
+        use_animated: { type: boolean }
+        stale:
+          type: boolean
+          description: True when the static sticker at this index changed since the clip was drafted.
+        preview_url: { type: string }
+        animated_checksum_sha256: { type: string }
+        animated_byte_size: { type: integer }
+        frames: { type: integer }
+        fps: { type: integer }
+        duration_ms: { type: integer }
+        quality: { type: integer }
+        error_code: { type: string }
+        error_message: { type: string }
+
+    AdminAnimation:
+      type: object
+      required: [id, pack_id, sticker_index, motion_text, static_checksum_sha256, clip_byte_size, status, use_animated, stale, preview_url]
+      properties:
+        id: { type: string }
+        pack_id: { type: string }
+        sticker_index: { type: integer, minimum: 0 }
+        motion_text: { type: string }
+        static_checksum_sha256: { type: string }
+        clip_byte_size: { type: integer }
+        status: { type: string, enum: [queued, running, ready, failed, interrupted] }
+        use_animated: { type: boolean }
+        stale: { type: boolean }
+        animated_checksum_sha256: { type: string }
+        animated_byte_size: { type: integer }
+        frames: { type: integer }
+        fps: { type: integer }
+        duration_ms: { type: integer }
+        quality: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+        error_code: { type: string }
+        error_message: { type: string }
+        preview_url: { type: string }
+
+    AdminAnimationList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminAnimation' }
+
+    AnimationCompileRequest:
+      type: object
+      required: [pack_id, sticker_index, motion_text]
+      additionalProperties: false
+      properties:
+        pack_id: { type: string, format: uuid }
+        sticker_index: { type: integer, minimum: 0 }
+        motion_text: { type: string, maxLength: 500 }
+
+    AnimationCompiled:
+      type: object
+      required: [prompt, emoji_hint]
+      properties:
+        prompt: { type: string }
+        emoji_hint: { type: string }
+
+    AnimationUse:
+      type: object
+      required: [use_animated]
+      additionalProperties: false
+      properties:
+        use_animated: { type: boolean }
 
     AdminPack:
       type: object
@@ -1598,6 +1700,166 @@ paths:
         "403": { $ref: '#/components/responses/Forbidden' }
         "404": { $ref: '#/components/responses/NotFound' }
         "409": { $ref: '#/components/responses/Conflict' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/packs/{id}/animations:
+    get:
+      tags: [Admin animations]
+      summary: List animation drafts of a pack
+      description: One row per sticker index; `stale` is computed against the current version. Reads use the session cookie only.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+      responses:
+        "200":
+          description: Animation drafts
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminAnimationList' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/packs/{id}/stickers/{index}/animation:
+    post:
+      tags: [Admin animations]
+      summary: Upload a clip for one sticker
+      description: |
+        Multipart with one `clip` file part (MP4/MOV/WebM, max 20 MiB) and an optional `motion_text`
+        field (trimmed, at most 500 Unicode characters). The draft is queued for the clip worker and
+        replaces any previous draft at that index. 409 `job_active` while a sheet or publish job runs;
+        409 `job_active` while the previous clip of that sticker is still running; 422 for an invalid
+        index, an oversized motion text or an unsupported container.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+        - $ref: '#/components/parameters/StickerIndex'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [clip]
+              properties:
+                clip: { type: string, format: binary }
+                motion_text: { type: string, maxLength: 500 }
+      responses:
+        "202":
+          description: Queued draft
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminAnimation' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "410": { $ref: '#/components/responses/Gone' }
+        "413": { $ref: '#/components/responses/TooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+    patch:
+      tags: [Admin animations]
+      summary: Enable or disable a ready draft for the next publish
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+        - $ref: '#/components/parameters/StickerIndex'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AnimationUse' } } }
+      responses:
+        "200":
+          description: Updated draft
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminAnimation' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [Admin animations]
+      summary: Delete a draft and its files
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+        - $ref: '#/components/parameters/StickerIndex'
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/admin/packs/{id}/stickers/{index}/animation/preview:
+    get:
+      tags: [Admin animations]
+      summary: Private preview of a ready draft
+      description: "Returns the animated WebP bytes with `Cache-Control: private, no-store`. A queued, running or failed draft answers 409 `not_ready`."
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+        - $ref: '#/components/parameters/StickerIndex'
+      responses:
+        "200":
+          description: Animated WebP
+          content: { image/webp: { schema: { type: string, format: binary } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/admin/packs/{id}/stickers/{index}/on-white.png:
+    get:
+      tags: [Admin animations]
+      summary: Committed static sticker over opaque white
+      description: "Decodes the committed static WebP of the current version and composites it onto opaque white as a 512x512 PNG, for models that reject transparency. Served with `Cache-Control: private, no-store`."
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+        - $ref: '#/components/parameters/StickerIndex'
+      responses:
+        "200":
+          description: White-backed PNG
+          content: { image/png: { schema: { type: string, format: binary } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/packs/{id}/publish-animations:
+    post:
+      tags: [Admin animations]
+      summary: Publish the enabled drafts as the next version
+      description: |
+        Queues a Go-only job that copies the current version and replaces or adds the animated variant
+        of each ready, enabled, non-stale draft. 409 `animation_busy` while a clip of the pack is queued
+        or running, 409 `job_active` while another job is active, 409 `no_changes` when the animated set
+        equals the current version's.
+      security: [{ OwnerCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PackID'
+      responses:
+        "202":
+          description: Queued publish job
+          content: { application/json: { schema: { $ref: '#/components/schemas/Job' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "410": { $ref: '#/components/responses/Gone' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/animations/compile:
+    post:
+      tags: [Admin animations]
+      summary: Compile the animation prompt for one sticker
+      description: Validates the sticker against the current version and returns the English prompt plus its emoji hint. Nothing is written. The subject is the design's character description, with a generic fallback when the pack has no design.
+      security: [{ OwnerCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AnimationCompileRequest' } } }
+      responses:
+        "200":
+          description: Compiled prompt
+          content: { application/json: { schema: { $ref: '#/components/schemas/AnimationCompiled' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
         "422": { $ref: '#/components/responses/Unprocessable' }
 
   /api/v1/admin/jobs/{id}:
