@@ -28,7 +28,6 @@ def execute_cutout(image: Image.Image) -> Image.Image:
 
     References:
         - https://en.wikipedia.org/wiki/Image_segmentation
-        - https://en.wikipedia.org/wiki/Chroma_key
     """
     engine: str = os.getenv("IMG_TOOL_ENGINE", "simple").strip().lower()
     if engine == "rembg":
@@ -343,7 +342,6 @@ def _remove_with_rembg(image: Image.Image) -> Image.Image:
 
     References:
         - https://en.wikipedia.org/wiki/Image_segmentation
-        - https://en.wikipedia.org/wiki/Chroma_key
     """
     from rembg import remove
 
