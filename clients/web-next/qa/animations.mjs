@@ -63,7 +63,7 @@ await scenario("default");
     if ((await count.innerText()).trim() !== "2") throw new Error(`count=${await count.innerText()}`);
     if ((await page.locator("[data-testid=animate-button-1]").count()) !== 1) throw new Error("animate link missing");
     if ((await page.locator("[data-testid=publish-animations]").count()) !== 1) throw new Error("publish button missing");
-    const revertCard = page.locator("li").filter({ hasText: "03-cảm-ơn.png" }).first();
+    const revertCard = page.locator("li").filter({ has: page.locator("[data-testid=animate-button-2]") });
     const revertText = await revertCard.innerText();
     if (!revertText.includes("Đã phát hành") || !revertText.includes("Chờ về tĩnh")) {
       throw new Error("pending revert not shown on card");
