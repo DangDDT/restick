@@ -128,6 +128,9 @@ func versionObjectChecksum(v packs.Version, rel string) (string, bool) {
 		if rel == sticker.ObjectPath || rel == sticker.ThumbPath {
 			return sticker.ChecksumSHA256, true
 		}
+		if sticker.AnimatedPath != "" && rel == sticker.AnimatedPath {
+			return sticker.AnimatedChecksumSHA256, true
+		}
 	}
 	return "", false
 }

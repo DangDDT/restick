@@ -3,17 +3,107 @@ package httpx
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func objectURLFor(rel string) string {
 	return testPublicBase + "/v1/objects/" + rel
+}
+
+// addAnimatedVariant writes the committed animated file for sticker 0 and
+// records the exact path/checksum publish stores, so object serving runs
+// against a real committed version.
+func addAnimatedVariant(f *publicFixture, created testPack, version int) (string, string) {
+	f.t.Helper()
+	rel := fmt.Sprintf("packs/%s/v%d/animated/000.webp", created.pack.ID, version)
+	body := []byte(fmt.Sprintf("animated-webp-bytes-v%d", version))
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(f.root, rel)), 0o755); err != nil {
+		f.t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.root, rel), body, 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+	sum := sha256.Sum256(body)
+	checksum := hex.EncodeToString(sum[:])
+	if _, err := f.db.Exec(`UPDATE stickers SET animated_path = ?, animated_checksum_sha256 = ?, animated_byte_size = ?
+		WHERE pack_id = ? AND version = ? AND sort_order = 0`, rel, checksum, len(body), created.pack.ID, version); err != nil {
+		f.t.Fatal(err)
+	}
+	return rel, checksum
+}
+
+// The committed animated variant is served from its exact DB path with its own
+// checksum, so a preview of the current immutable version keeps working when
+// the draft is failed, absent or otherwise not publishable.
+func TestCommittedAnimatedObjectServes(t *testing.T) {
+	f := newPublicFixture(t)
+	created := f.publish("alpha", 2)
+	id := created.pack.ID
+	f.grant(f.keyID, id)
+	rel, checksum := addAnimatedVariant(f, created, 1)
+	object := objectURLFor(rel)
+
+	ok := f.request(http.MethodGet, object, f.keyHeaders())
+	if ok.Code != http.StatusOK {
+		t.Fatalf("animated object status = %d body=%s", ok.Code, ok.Body)
+	}
+	if !bytes.Equal(ok.Body.Bytes(), []byte("animated-webp-bytes-v1")) {
+		t.Fatal("animated object bytes differ from the committed file")
+	}
+	if ct := ok.Header().Get("Content-Type"); ct != "image/webp" {
+		t.Fatalf("animated content type = %q", ct)
+	}
+	if etag := ok.Header().Get("ETag"); etag != `"sha256:`+checksum+`"` {
+		t.Fatalf("animated etag = %q, want the animated checksum", etag)
+	}
+	if cc := ok.Header().Get("Cache-Control"); cc != "private, no-cache" {
+		t.Fatalf("animated cache control = %q", cc)
+	}
+	if ar := ok.Header().Get("Accept-Ranges"); ar != "bytes" {
+		t.Fatalf("animated accept-ranges = %q", ar)
+	}
+
+	if head := f.request(http.MethodHead, object, f.keyHeaders()); head.Code != http.StatusOK || head.Body.Len() != 0 {
+		t.Fatalf("animated HEAD status=%d body=%d", head.Code, head.Body.Len())
+	}
+	ranged := f.request(http.MethodGet, object, map[string]string{"X-Api-Key": f.apiKey, "Range": "bytes=0-3"})
+	if ranged.Code != http.StatusPartialContent || ranged.Body.Len() != 4 {
+		t.Fatalf("animated range status=%d len=%d", ranged.Code, ranged.Body.Len())
+	}
+	notModified := f.request(http.MethodGet, object, map[string]string{"X-Api-Key": f.apiKey, "If-None-Match": ok.Header().Get("ETag")})
+	if notModified.Code != http.StatusNotModified {
+		t.Fatalf("animated conditional status = %d", notModified.Code)
+	}
+
+	if anonymous := f.request(http.MethodGet, object, nil); anonymous.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous animated status = %d", anonymous.Code)
+	}
+	other, err := f.auth.CreateKey(context.Background(), "other", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ungranted := f.request(http.MethodGet, object, map[string]string{"X-Api-Key": other.Raw}); ungranted.Code != http.StatusNotFound {
+		t.Fatalf("ungranted animated status = %d", ungranted.Code)
+	}
+	unlisted := objectURLFor(fmt.Sprintf("packs/%s/v1/animated/001.webp", id))
+	if rec := f.request(http.MethodGet, unlisted, f.keyHeaders()); rec.Code != http.StatusNotFound {
+		t.Fatalf("unlisted animated status = %d", rec.Code)
+	}
+
+	f.revoke(id, "2026-11-10T10:00:00Z")
+	if revoked := f.request(http.MethodGet, object, f.keyHeaders()); revoked.Code != http.StatusGone {
+		t.Fatalf("revoked animated status = %d", revoked.Code)
+	}
 }
 
 func TestBundleChecksumContract(t *testing.T) {
