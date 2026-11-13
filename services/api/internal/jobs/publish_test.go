@@ -101,17 +101,44 @@ func (e *publishEnv) runOne(id string, want Status) Job {
 	return job
 }
 
-// animation stores data as a ready draft file and describes it as publishable.
+// animation stores data as a ready draft file, inserts the matching
+// ready/enabled draft row at the current version and describes it as
+// publishable. EnqueuePublish re-reads that row inside its transaction, so the
+// row and the returned description must agree.
 func (e *publishEnv) animation(index int, data []byte) PublishableAnimation {
 	e.t.Helper()
-	path, err := e.h.store.SaveAnimated(uuid.NewString(), data)
+	id := uuid.NewString()
+	path, err := e.h.store.SaveAnimated(id, data)
 	if err != nil {
 		e.t.Fatalf("SaveAnimated: %v", err)
 	}
 	sum := sha256.Sum256(data)
+	checksum := hex.EncodeToString(sum[:])
+	clipID := uuid.NewString()
+	if _, err := e.h.db.Exec(`INSERT INTO sticker_animations
+		(id, pack_id, sticker_index, static_checksum_sha256, clip_id, clip_path, clip_byte_size,
+		 clip_checksum_sha256, status, animated_path, animated_checksum_sha256, animated_byte_size,
+		 frames, fps, duration_ms, quality, width, height, use_animated)
+		VALUES (?, ?, ?, (SELECT checksum_sha256 FROM stickers WHERE pack_id = ? AND
+			version = (SELECT current_version FROM packs WHERE id = ?) AND sort_order = ?),
+			?, ?, 1, ?, 'ready', ?, ?, ?, 2, 12, 200, 75, ?, ?, 1)`,
+		id, e.packID, index, e.packID, e.packID, index,
+		clipID, "clips/"+clipID+".webp", strings.Repeat("c", 64), path, checksum, len(data),
+		assets.StickerDimension, assets.StickerDimension); err != nil {
+		e.t.Fatalf("insert draft: %v", err)
+	}
 	return PublishableAnimation{
-		StickerIndex: index, Path: path, Checksum: hex.EncodeToString(sum[:]),
+		StickerIndex: index, Path: path, Checksum: checksum,
 		Frames: 2, DurationMS: 200, Width: assets.StickerDimension, Height: assets.StickerDimension,
+	}
+}
+
+// toggle sets use_animated on the draft row, as animations.SetUse would.
+func (e *publishEnv) toggle(index int, use bool) {
+	e.t.Helper()
+	if _, err := e.h.db.Exec(`UPDATE sticker_animations SET use_animated = ? WHERE pack_id = ? AND sticker_index = ?`,
+		use, e.packID, index); err != nil {
+		e.t.Fatalf("toggle draft: %v", err)
 	}
 }
 
@@ -294,6 +321,7 @@ func TestPublishAllTogglesOffAfterAnimatedVersionCreatesVersionWithoutAnimated(t
 	animated := e.publish()
 
 	e.source.set()
+	e.toggle(1, false)
 	job := e.publish()
 	if job.Version != animated.Version+1 {
 		t.Fatalf("toggle-off publish is v%d, want v%d", job.Version, animated.Version+1)
@@ -345,6 +373,71 @@ func TestPublishBlockedWhileSheetJobActive(t *testing.T) {
 	}
 }
 
+// racingAnimations is the deterministic race seam: it returns the drafts read
+// before EnqueuePublish opens its transaction and then mutates the database, as
+// a concurrent upload or toggle would.
+type racingAnimations struct {
+	source *fakeAnimations
+	after  func()
+}
+
+func (r racingAnimations) Busy(ctx context.Context, packID string) (bool, error) {
+	return r.source.Busy(ctx, packID)
+}
+
+func (r racingAnimations) Publishable(ctx context.Context, packID string) ([]PublishableAnimation, error) {
+	list, err := r.source.Publishable(ctx, packID)
+	r.after()
+	return list, err
+}
+
+func TestPublishConflictsWhenDraftsChangeAfterTheRead(t *testing.T) {
+	// Either a list that gained a draft or one that lost it would queue a
+	// publication the request never approved (a silently dropped or added
+	// animation), so both are a conflict and no job row is written.
+	cases := map[string]struct {
+		prepare func(e *publishEnv)
+		after   func(e *publishEnv)
+	}{
+		"draft appears after the read": {
+			prepare: func(e *publishEnv) {},
+			after: func(e *publishEnv) {
+				e.animation(2, webpBytes(t, animated512WebP))
+			},
+		},
+		"draft toggled off after the read": {
+			prepare: func(e *publishEnv) {
+				e.source.set(e.animation(1, webpBytes(t, animated512WebP)))
+			},
+			after: func(e *publishEnv) { e.toggle(1, false) },
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := newPublishEnv(t, "publish-race")
+			ctx := context.Background()
+			tc.prepare(e)
+			jobs := e.jobCount()
+			e.runner = NewRunner(e.h.db, e.h.store, e.processor, 10*time.Second,
+				WithAnimations(racingAnimations{source: e.source, after: func() { tc.after(e) }}))
+
+			if _, err := e.runner.EnqueuePublish(ctx, e.packID); !errors.Is(err, ErrAnimationBusy) {
+				t.Fatalf("err = %v, want ErrAnimationBusy", err)
+			}
+			if got := e.jobCount(); got != jobs {
+				t.Fatalf("conflicting publish wrote a job row: %d -> %d", jobs, got)
+			}
+			pack, err := e.h.catalog.Get(ctx, e.packID)
+			if err != nil {
+				t.Fatalf("get pack: %v", err)
+			}
+			if pack.CurrentVersion != e.v1.Version {
+				t.Fatalf("pack moved to v%d after a conflicting publish", pack.CurrentVersion)
+			}
+		})
+	}
+}
+
 func TestPublishRequiresLivePackWithVersion(t *testing.T) {
 	e := newPublishEnv(t, "publish-guards")
 	ctx := context.Background()
@@ -390,10 +483,14 @@ func TestPublishFailureKeepsOldVersionReady(t *testing.T) {
 		"not animated": func(e *publishEnv) PublishableAnimation {
 			return e.animation(1, webpBytes(t, stickerWebP))
 		},
-		// The draft changed on disk after enqueue.
+		// The draft row records a digest the draft file does not have.
 		"checksum mismatch": func(e *publishEnv) PublishableAnimation {
 			anim := e.animation(1, webpBytes(t, animated512WebP))
 			anim.Checksum = strings.Repeat("0", 64)
+			if _, err := e.h.db.Exec(`UPDATE sticker_animations SET animated_checksum_sha256 = ?
+				WHERE pack_id = ? AND sticker_index = 1`, anim.Checksum, e.packID); err != nil {
+				e.t.Fatalf("corrupt draft checksum: %v", err)
+			}
 			return anim
 		},
 	}

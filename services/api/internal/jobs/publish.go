@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 
 	"github.com/eykh/restick/api_svc/internal/assets"
@@ -25,8 +26,10 @@ import (
 // The AnimationSource shares the single SQLite connection, so Busy and
 // Publishable run before the transaction (calling them inside it would wait on
 // the connection the transaction holds). The version they were computed
-// against is pinned and re-checked inside the transaction, and the list is
-// frozen into the request, so the job publishes exactly what was checked.
+// against is pinned and re-checked inside the transaction, and the transaction
+// re-derives the publishable drafts with the same filters; a draft, toggle or
+// static that changed in between is a conflict instead of a silently different
+// publication. The request freezes the revalidated list.
 func (r *Runner) EnqueuePublish(ctx context.Context, packID string) (Job, error) {
 	if !isUUID(packID) {
 		return Job{}, ErrNotFound
@@ -83,6 +86,17 @@ func (r *Runner) EnqueuePublish(ctx context.Context, packID string) (Job, error)
 	if busy {
 		return Job{}, ErrAnimationBusy
 	}
+	// The pre-read list is only a proposal: re-derive it on this transaction,
+	// which is the point where no draft writer can slip in (they all refuse
+	// while a job is active, and the job row does not exist yet).
+	busyNow, err := animationBusy(ctx, tx, packID)
+	if err != nil {
+		return Job{}, err
+	}
+	validated, err := publishableAnimations(ctx, tx, packID, current)
+	if err != nil {
+		return Job{}, err
+	}
 	published, count, err := publishedAnimations(ctx, tx, packID, current)
 	if err != nil {
 		return Job{}, err
@@ -90,7 +104,12 @@ func (r *Runner) EnqueuePublish(ctx context.Context, packID string) (Job, error)
 	if err := checkAnimations(animations, count); err != nil {
 		return Job{}, err
 	}
-	if sameAnimations(animations, published) {
+	if busyNow || !slices.Equal(animations, validated) {
+		// A clip or draft changed after the drafts were read: publishing now
+		// would freeze a set the request never approved.
+		return Job{}, ErrAnimationBusy
+	}
+	if sameAnimations(validated, published) {
 		return Job{}, ErrNoChanges
 	}
 
@@ -111,7 +130,7 @@ func (r *Runner) EnqueuePublish(ctx context.Context, packID string) (Job, error)
 		Version:       version,
 		Catalog:       snapshot.catalog,
 		BaseVersion:   current,
-		Animations:    animations,
+		Animations:    validated,
 	})
 	if err != nil {
 		return Job{}, fmt.Errorf("jobs: encode request: %w", err)
@@ -128,6 +147,48 @@ func (r *Runner) EnqueuePublish(ctx context.Context, packID string) (Job, error)
 	}
 	r.signal()
 	return r.Get(ctx, id)
+}
+
+// animationBusy reports whether any draft of the pack is queued or running,
+// read on the caller's transaction.
+func animationBusy(ctx context.Context, tx *sql.Tx, packID string) (bool, error) {
+	var busy bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM sticker_animations
+		WHERE pack_id = ? AND status IN ('queued', 'running'))`, packID).Scan(&busy); err != nil {
+		return false, fmt.Errorf("jobs: check animation busy: %w", err)
+	}
+	return busy, nil
+}
+
+// publishableAnimations re-derives the drafts a publish job may copy, with the
+// same filters as animations.Publishable (the service owns the row, not this
+// package): ready, enabled and drafted against the current version's static
+// sticker at their index.
+func publishableAnimations(ctx context.Context, tx *sql.Tx, packID string, version int) ([]PublishableAnimation, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT a.sticker_index, a.animated_path, a.animated_checksum_sha256,
+		a.frames, a.duration_ms, a.width, a.height
+		FROM sticker_animations a
+		JOIN stickers s ON s.pack_id = a.pack_id AND s.version = ? AND s.sort_order = a.sticker_index
+		WHERE a.pack_id = ? AND a.status = 'ready' AND a.use_animated = 1
+			AND a.static_checksum_sha256 = s.checksum_sha256
+		ORDER BY a.sticker_index`, version, packID)
+	if err != nil {
+		return nil, fmt.Errorf("jobs: read publishable animations: %w", err)
+	}
+	defer rows.Close()
+	items := []PublishableAnimation{}
+	for rows.Next() {
+		var item PublishableAnimation
+		if err := rows.Scan(&item.StickerIndex, &item.Path, &item.Checksum, &item.Frames,
+			&item.DurationMS, &item.Width, &item.Height); err != nil {
+			return nil, fmt.Errorf("jobs: scan animation: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("jobs: read publishable animations: %w", err)
+	}
+	return items, nil
 }
 
 // publishedAnimations returns sticker index -> animated checksum of the
