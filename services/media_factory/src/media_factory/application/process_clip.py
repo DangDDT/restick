@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,7 +57,8 @@ def process_clip(request_path: Path, result_path: Path) -> None:
         2. read_clip_request rồi _render_clip.
         3. ProcessingError: ghi kết quả lỗi rồi raise lại.
         4. Lỗi bất ngờ: bọc thành internal_error, ghi kết quả lỗi.
-        5. Thành công: ghi kết quả nguyên tử qua _write_result.
+        5. Thành công: ghi kết quả nguyên tử qua _write_result; nếu bước này lỗi thì xóa
+           file webp vừa đặt và ghi kết quả lỗi.
 
     Techniques:
         - Request/result file protocol (JSON)
@@ -73,7 +75,7 @@ def process_clip(request_path: Path, result_path: Path) -> None:
     identity: dict[str, object] = {"schema": RESULT_SCHEMA, "job_id": "", "pack_id": ""}
     try:
         request = read_clip_request(request_path, identity)
-        animation, diagnostics = _render_clip(request)
+        animation, diagnostics, target = _render_clip(request)
     except ProcessingError as exc:
         _write_error_result(result_path, identity, exc)
         raise
@@ -81,9 +83,14 @@ def process_clip(request_path: Path, result_path: Path) -> None:
         failure = ProcessingError("internal_error", f"unexpected {type(exc).__name__}")
         _write_error_result(result_path, identity, failure)
         raise failure from exc
-    _write_result(
-        result_path, {**identity, "animation": animation, "diagnostics": diagnostics}
-    )
+    try:
+        _write_result(
+            result_path, {**identity, "animation": animation, "diagnostics": diagnostics}
+        )
+    except ProcessingError as exc:
+        target.unlink(missing_ok=True)  # the file this run placed must not outlive its result
+        _write_error_result(result_path, identity, exc)
+        raise
 
 
 def read_clip_request(request_path: Path, identity: dict[str, object]) -> ClipRequest:
@@ -186,6 +193,23 @@ def shared_box(alphas: list[np.ndarray]) -> tuple[int, int, int, int]:
     )
 
 
+def resampled_count(count: int, fps: int, new_fps: int) -> int:
+    """Số khung sau khi lấy mẫu lại từ fps xuống new_fps, giữ nguyên thời lượng.
+
+    Algorithm:
+        1. round(count * new_fps / fps), tối thiểu 1.
+
+    Techniques:
+        - Temporal subsampling
+
+    Keywords: frame count, resampling, duration preserved
+
+    References:
+        - https://en.wikipedia.org/wiki/Downsampling_(signal_processing)
+    """
+    return max(1, round(count * new_fps / fps))
+
+
 def fit_under_ceiling(
     frames: list[Image.Image], fps: int, quality: int, ceiling: int = CEILING_BYTES
 ) -> tuple[bytes, int, int]:
@@ -217,7 +241,7 @@ def fit_under_ceiling(
         if (step_fps, step_quality) == last:
             continue
         last = (step_fps, step_quality)
-        count = max(1, round(len(frames) * step_fps / fps))
+        count = resampled_count(len(frames), fps, step_fps)
         picked = [frames[min(len(frames) - 1, round(i * fps / step_fps))] for i in range(count)]
         data = encode_animated_webp(picked, step_fps, step_quality)
         if len(data) <= ceiling:
@@ -225,7 +249,9 @@ def fit_under_ceiling(
     raise ProcessingError("output_too_large", f"animation exceeds {ceiling} bytes")
 
 
-def _render_clip(request: ClipRequest) -> tuple[dict[str, object], dict[str, object]]:
+def _render_clip(
+    request: ClipRequest,
+) -> tuple[dict[str, object], dict[str, object], Path]:
     """Đọc clip, tách nền từng khung, cắt chung, dựng sticker, nén và ghi animated/NNN.webp.
 
     Algorithm:
@@ -234,7 +260,8 @@ def _render_clip(request: ClipRequest) -> tuple[dict[str, object], dict[str, obj
            (libwebp bỏ kênh alpha khi khung gần như trống).
         3. shared_box trên mọi khung, crop như nhau để vật thể không nhảy khung.
         4. compose_sticker từng khung (cùng kích thước crop nên cùng tỉ lệ co).
-        5. fit_under_ceiling; ghi file, OSError thành output_failed.
+        5. fit_under_ceiling; ghi file tạm rồi os.replace (nguyên tử), OSError thành
+           output_failed; frames/duration_ms tính từ đầu vào encoder, không mở lại file.
         6. mask_iou_min = IoU nhỏ nhất của mask alpha hai khung liên tiếp.
 
     Techniques:
@@ -274,19 +301,21 @@ def _render_clip(request: ClipRequest) -> tuple[dict[str, object], dict[str, obj
     data, fps_used, quality_used = fit_under_ceiling(canvases, request.fps, request.quality)
     filename = f"{request.sticker_index:03d}.webp"
     target = request.output_dir / "animated" / filename
+    temporary = target.with_name(filename + ".tmp")
     try:
         target.parent.mkdir(exist_ok=True)
-        target.write_bytes(data)
+        temporary.write_bytes(data)
+        os.replace(temporary, target)  # a previous good file survives any earlier failure
     except OSError as exc:
-        target.unlink(missing_ok=True)
+        temporary.unlink(missing_ok=True)
         raise ProcessingError("output_failed", f"cannot write artifacts: {exc.strerror}") from exc
-    with Image.open(target) as written:
-        count = getattr(written, "n_frames", 1)
+    # Counts describe what the encoder was given; Pillow may merge identical frames on disk.
+    count = resampled_count(len(canvases), request.fps, fps_used)
     animation: dict[str, object] = {
         "filename": f"animated/{filename}",
         "frames": count,
         "fps": fps_used,
-        "duration_ms": round(count * 1000 / fps_used),
+        "duration_ms": count * round(1000 / fps_used),
         "byte_size": len(data),
         "quality": quality_used,
         "width": canvases[0].width,
@@ -296,4 +325,4 @@ def _render_clip(request: ClipRequest) -> tuple[dict[str, object], dict[str, obj
         "foreground_ratio_min": round(min(ratios), 4),
         "mask_iou_min": round(min(ious, default=1.0), 4),
     }
-    return animation, diagnostics
+    return animation, diagnostics, target

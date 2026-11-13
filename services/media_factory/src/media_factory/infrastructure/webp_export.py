@@ -38,7 +38,10 @@ def encode_animated_webp(frames: list[Image.Image], fps: int, quality: int) -> b
     Algorithm:
         1. duration mỗi khung = round(1000 / fps) mili giây.
         2. Lưu khung đầu với save_all=True, append_images = các khung còn lại.
-        3. method=4 (đường lưu animated của Pillow mặc định method=0, đo được file lớn
+        3. Pillow/libwebp gộp các khung liên tiếp giống hệt nhau thành một ANMF có thời
+           lượng cộng dồn (đã đo: 6 khung -> 3 khung, tổng thời lượng giữ nguyên), nên
+           n_frames đọc lại có thể nhỏ hơn số khung truyền vào.
+        4. method=4 (đường lưu animated của Pillow mặc định method=0, đo được file lớn
            hơn ~34% so với method=4; ảnh tĩnh mặc định đã là 4), alpha_quality=100 giữ
            viền trong suốt sắc, lossless=False, loop=0 (lặp vô hạn).
 

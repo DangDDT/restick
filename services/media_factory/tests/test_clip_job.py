@@ -7,13 +7,19 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import cv2
 import numpy as np
 from PIL import Image
 
-from media_factory.application.process_clip import fit_under_ceiling, process_clip, shared_box
+from media_factory.application.process_clip import (
+    fit_under_ceiling,
+    process_clip,
+    shared_box,
+)
 from media_factory.application.process_job import ProcessingError
+from media_factory.infrastructure.outline import compose_sticker
 from media_factory.infrastructure.webp_export import encode_animated_webp
 
 
@@ -72,6 +78,8 @@ class ClipJobTest(unittest.TestCase):
         self.assertEqual(("anim-1", "pack-1"), (result["job_id"], result["pack_id"]))
         self.assertEqual("animated/003.webp", animation["filename"])
         self.assertGreater(animation["frames"], 1)
+        self.assertEqual(12, animation["fps"])
+        self.assertEqual(animation["frames"] * 83, animation["duration_ms"])
         self.assertEqual((512, 512), (animation["width"], animation["height"]))
         self.assertLessEqual(animation["byte_size"], 512_000)
         data = (self.output / "animated" / "003.webp").read_bytes()
@@ -113,6 +121,68 @@ class ClipJobTest(unittest.TestCase):
         self.assertLessEqual(len(data), (low + high) // 2)
         data, fps_used, _ = fit_under_ceiling(frames, 12, 75, ceiling=low - 1)
         self.assertEqual(10, fps_used)
+
+    def test_ladder_reaches_fps_8_and_preserves_duration(self) -> None:
+        rng = np.random.default_rng(2)
+        frames = [
+            Image.fromarray(rng.integers(0, 255, (128, 128, 4), dtype=np.uint8), "RGBA")
+            for _ in range(24)
+        ]
+        picked = [frames[min(23, round(i * 12 / 8))] for i in range(16)]
+        small = len(encode_animated_webp(picked, 8, 60))
+        _, fps_used, quality_used = fit_under_ceiling(frames, 12, 75, ceiling=small + 1)
+        self.assertEqual((8, 60), (fps_used, quality_used))
+
+    def test_identical_frames_report_encoder_input_counts(self) -> None:
+        clip = self.root / "hold.mp4"
+        writer = cv2.VideoWriter(clip.as_posix(), cv2.VideoWriter_fourcc(*"mp4v"), 12, (256, 256))
+        if not writer.isOpened():
+            self.skipTest("mp4v VideoWriter unavailable")
+        for _ in range(12):  # a held pose: every frame identical
+            frame = np.full((256, 256, 3), 255, np.uint8)
+            cv2.circle(frame, (128, 128), 60, (40, 40, 220), -1)
+            writer.write(frame)
+        writer.release()
+        self.run_job(clip)
+        animation = self.read_result()["animation"]
+        self.assertEqual(12, animation["frames"])
+        self.assertEqual(12 * 83, animation["duration_ms"])
+
+    def test_failed_result_write_removes_placed_file(self) -> None:
+        clip = write_clip(self.root / "c.mp4", frames=6)
+        with mock.patch(
+            "media_factory.application.process_clip._write_result",
+            side_effect=ProcessingError("output_failed", "boom"),
+        ), self.assertRaises(ProcessingError):
+            self.run_job(clip)
+        self.assertFalse((self.output / "animated" / "003.webp").exists())
+        self.assertEqual("output_failed", self.read_result()["error"]["code"])
+
+    def test_write_failure_keeps_previous_file(self) -> None:
+        clip = write_clip(self.root / "c.mp4", frames=6)
+        (self.output / "animated").mkdir()
+        previous = self.output / "animated" / "003.webp"
+        previous.write_bytes(b"good")
+        with mock.patch("os.replace", side_effect=OSError(28, "disk full")), \
+                self.assertRaises(ProcessingError):
+            self.run_job(clip)
+        self.assertEqual(b"good", previous.read_bytes())
+        self.assertFalse((self.output / "animated" / "003.webp.tmp").exists())
+
+    def test_shared_box_keeps_relative_position_and_scale_on_canvas(self) -> None:
+        def cutout(x: int) -> Image.Image:
+            image = Image.new("RGBA", (100, 40), (0, 0, 0, 0))
+            image.paste((200, 0, 0, 255), (x, 10, x + 10, 20))
+            return image
+
+        box = shared_box([np.array(cutout(x).getchannel("A")) for x in (5, 15, 55, 65)])
+        lefts = []
+        for x in (15, 55):
+            canvas = compose_sticker(cutout(x).crop(box), 0, "#FFFFFF")
+            xs = np.nonzero(np.array(canvas.getchannel("A")) > 32)[1]
+            lefts.append(xs.min())  # left edge: blur-free reference
+        scale = (512 - 2 * 4) / (box[2] - box[0])  # width-limited, minus 4 px slack margins
+        self.assertAlmostEqual(40 * scale, lefts[1] - lefts[0], delta=3)
 
     def test_output_too_large_when_ladder_exhausted(self) -> None:
         frames = [Image.new("RGBA", (32, 32), (9, 9, 9, 255))] * 4
