@@ -13,6 +13,7 @@ import (
 	"image/png"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -24,14 +25,15 @@ import (
 )
 
 const (
-	oldPassword     = "old-owner-password"
-	newPassword     = "new-owner-password"
-	fixturePackID   = "11111111-1111-4111-8111-111111111111"
-	fixtureJobID    = "job-maintenance"
-	stickerWebP     = "UklGRi4AAABXRUJQVlA4TCIAAAAv/8F/AAdQlHIXpf8BgUCyv/cMRfQ/4z//+c9//vOf//wf"
-	thumbWebP       = "UklGRhgAAABXRUJQVlA4TAsAAAAvf8AfAEVRShv9DwA="
-	escapingPath    = "../escaped.txt"
-	replacementHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	oldPassword        = "old-owner-password"
+	newPassword        = "new-owner-password"
+	fixturePackID      = "11111111-1111-4111-8111-111111111111"
+	fixtureJobID       = "job-maintenance"
+	fixtureAnimationID = "22222222-2222-4222-8222-222222222222"
+	stickerWebP        = "UklGRi4AAABXRUJQVlA4TCIAAAAv/8F/AAdQlHIXpf8BgUCyv/cMRfQ/4z//+c9//vOf//wf"
+	thumbWebP          = "UklGRhgAAABXRUJQVlA4TAsAAAAvf8AfAEVRShv9DwA="
+	escapingPath       = "../escaped.txt"
+	replacementHash    = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 )
 
 // fixture is one committed factory data dir plus the values a restore must
@@ -54,6 +56,12 @@ type fixture struct {
 	objectChecksum            string
 	thumbChecksum             string
 	bundleBytes               []byte
+	clipRel                   string
+	clipChecksum              string
+	draftAnimatedRel          string
+	draftAnimatedChecksum     string
+	stickerAnimatedRel        string
+	stickerAnimatedChecksum   string
 }
 
 // buildFixture produces a real data dir: SQLite rows from storage.Open, a real
@@ -174,6 +182,37 @@ func buildFixture(t *testing.T) fixture {
 			sticker.ChecksumSHA256, sticker.Width, sticker.Height, sticker.EmojiHint, string(keywords))
 	}
 
+	// Animated stickers: the committed variant of sticker 0 inside the pack
+	// output, plus one ready draft with its clip and its draft output.
+	clipBytes := append([]byte{0, 0, 0, 0x20, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'}, bytes.Repeat([]byte{7}, 64)...)
+	clip, err := store.SaveClip(ctx, bytes.NewReader(clipBytes), "clip.mp4")
+	if err != nil {
+		t.Fatalf("SaveClip: %v", err)
+	}
+	draftAnimated, err := store.SaveAnimated(fixtureAnimationID, mustWebP(t, thumbWebP))
+	if err != nil {
+		t.Fatalf("SaveAnimated: %v", err)
+	}
+	draftBytes := mustWebP(t, thumbWebP)
+	draftDigest := sha256.Sum256(draftBytes)
+	stickerAnimatedRel := path.Join(committed.OutputDir, "animated", "000.webp")
+	stickerAnimated := mustWebP(t, stickerWebP)
+	if err := os.MkdirAll(filepath.Join(dir, filepath.FromSlash(path.Dir(stickerAnimatedRel))), 0o755); err != nil {
+		t.Fatalf("create animated pack dir: %v", err)
+	}
+	writeFile(t, filepath.Join(dir, filepath.FromSlash(stickerAnimatedRel)), stickerAnimated)
+	stickerDigest := sha256.Sum256(stickerAnimated)
+	execSQL(t, db, `UPDATE stickers SET animated_path = ?, animated_checksum_sha256 = ?, animated_byte_size = ?,
+		animated_frames = 2, animated_duration_ms = 200 WHERE pack_id = ? AND version = 1 AND sort_order = 0`,
+		stickerAnimatedRel, hex.EncodeToString(stickerDigest[:]), len(stickerAnimated), fixturePackID)
+	execSQL(t, db, `INSERT INTO sticker_animations
+		(id, pack_id, sticker_index, static_checksum_sha256, clip_id, clip_path, clip_byte_size,
+		 clip_checksum_sha256, status, animated_path, animated_checksum_sha256, animated_byte_size,
+		 frames, fps, duration_ms, quality, width, height)
+		VALUES (?, ?, 0, ?, ?, ?, ?, ?, 'ready', ?, ?, ?, 2, 12, 200, 75, 512, 512)`,
+		fixtureAnimationID, fixturePackID, committed.Stickers[0].ChecksumSHA256, clip.ID, clip.RelativePath,
+		clip.ByteSize, clip.ChecksumSHA256, draftAnimated, hex.EncodeToString(draftDigest[:]), len(draftBytes))
+
 	// Transient work output and a bootstrap secret: neither may reach a backup.
 	writeFile(t, filepath.Join(dir, "bootstrap-password"), []byte("bootstrap secret\n"))
 
@@ -206,6 +245,12 @@ func buildFixture(t *testing.T) fixture {
 		objectChecksum:            committed.Stickers[0].ChecksumSHA256,
 		thumbChecksum:             thumbChecksum,
 		bundleBytes:               bundleBytes,
+		clipRel:                   clip.RelativePath,
+		clipChecksum:              clip.ChecksumSHA256,
+		draftAnimatedRel:          draftAnimated,
+		draftAnimatedChecksum:     hex.EncodeToString(draftDigest[:]),
+		stickerAnimatedRel:        stickerAnimatedRel,
+		stickerAnimatedChecksum:   hex.EncodeToString(stickerDigest[:]),
 	}
 }
 
@@ -263,14 +308,16 @@ func TestBackupManifestCoversSnapshot(t *testing.T) {
 	for _, entry := range manifest.Files {
 		listed[entry.Path] = entry
 	}
-	for _, want := range []string{storage.DBFileName, f.sourceRel, f.objectPath, f.thumbPath, f.bundlePath, f.thumbnailPath} {
+	for _, want := range []string{storage.DBFileName, f.sourceRel, f.objectPath, f.thumbPath, f.bundlePath,
+		f.thumbnailPath, f.clipRel, f.draftAnimatedRel, f.stickerAnimatedRel} {
 		if _, ok := listed[want]; !ok {
 			t.Errorf("manifest does not list %s", want)
 		}
 	}
 	for rel, entry := range listed {
 		if strings.HasPrefix(rel, "work/") || !strings.HasPrefix(rel, "sources/") &&
-			!strings.HasPrefix(rel, "packs/") && !strings.HasPrefix(rel, "bundles/") && rel != storage.DBFileName {
+			!strings.HasPrefix(rel, "packs/") && !strings.HasPrefix(rel, "bundles/") &&
+			!strings.HasPrefix(rel, "clips/") && !strings.HasPrefix(rel, "animations/") && rel != storage.DBFileName {
 			t.Errorf("manifest lists %s, which is outside the backup allowlist", rel)
 		}
 		digest, size := digestOf(t, filepath.Join(out, filepath.FromSlash(rel)))
@@ -280,6 +327,52 @@ func TestBackupManifestCoversSnapshot(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(out, "work")); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("backup contains work/: %v", err)
+	}
+}
+
+// TestRestoreMigratesPreAnimationBackup proves a schema-3 backup taken before
+// animated stickers existed still restores: its manifest needs no clips/ or
+// animations/, the read-only validation stays version aware, and the staging
+// migration supplies the schema-4 tables the published database has.
+func TestRestoreMigratesPreAnimationBackup(t *testing.T) {
+	ctx := context.Background()
+	f := buildFixture(t)
+	backupDir := filepath.Join(t.TempDir(), "backup")
+	copyTree(t, backupFixture(t, f), backupDir)
+	downgradeToSchema3(t, backupDir, f)
+
+	target := filepath.Join(t.TempDir(), "data")
+	if err := Restore(ctx, backupDir, target, writePassword(t, newPassword)); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	db, err := storage.Open(ctx, target)
+	if err != nil {
+		t.Fatalf("open restored database: %v", err)
+	}
+	defer db.Close()
+
+	var version, drafts int
+	if err := db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
+		t.Fatalf("read restored schema version: %v", err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sticker_animations`).Scan(&drafts); err != nil {
+		t.Fatalf("read restored drafts: %v", err)
+	}
+	if version != 4 || drafts != 0 {
+		t.Fatalf("restored schema = v%d with %d drafts, want v4 with 0", version, drafts)
+	}
+	var animatedPath string
+	if err := db.QueryRow(`SELECT animated_path FROM stickers WHERE pack_id = ? AND version = 1 AND sort_order = 0`,
+		fixturePackID).Scan(&animatedPath); err != nil {
+		t.Fatalf("read restored sticker: %v", err)
+	}
+	if animatedPath != "" {
+		t.Fatalf("restored sticker animated_path = %q, want empty", animatedPath)
+	}
+	for _, name := range []string{"clips", "animations"} {
+		if _, err := os.Lstat(filepath.Join(target, name)); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("restored data dir holds %s/ from a schema-3 backup: %v", name, err)
+		}
 	}
 }
 
@@ -478,6 +571,51 @@ func TestRestoreRejectsTamperedOrEscapingFiles(t *testing.T) {
 			},
 		},
 		{
+			name: "missing clip original",
+			want: "is missing",
+			tamper: func(t *testing.T, backupDir string) {
+				if err := os.Remove(filepath.Join(backupDir, filepath.FromSlash(f.clipRel))); err != nil {
+					t.Fatalf("remove clip: %v", err)
+				}
+				editManifest(t, backupDir, func(m *backupManifest) { removeEntry(m, f.clipRel) })
+			},
+		},
+		{
+			name: "replaced draft animated output",
+			want: "does not match its recorded checksum",
+			tamper: func(t *testing.T, backupDir string) {
+				draft := filepath.Join(backupDir, filepath.FromSlash(f.draftAnimatedRel))
+				body, err := os.ReadFile(draft)
+				if err != nil {
+					t.Fatalf("read draft output: %v", err)
+				}
+				writeFile(t, draft, append(body, 0x00))
+				digest, size := digestOf(t, draft)
+				editManifest(t, backupDir, func(m *backupManifest) {
+					setEntry(m, f.draftAnimatedRel, digest, size)
+				})
+			},
+		},
+		{
+			name: "missing committed animated variant",
+			want: "is missing",
+			tamper: func(t *testing.T, backupDir string) {
+				if err := os.Remove(filepath.Join(backupDir, filepath.FromSlash(f.stickerAnimatedRel))); err != nil {
+					t.Fatalf("remove animated variant: %v", err)
+				}
+				editManifest(t, backupDir, func(m *backupManifest) { removeEntry(m, f.stickerAnimatedRel) })
+			},
+		},
+		{
+			name: "animation media outside the allowlist",
+			want: "outside the backup allowlist",
+			tamper: func(t *testing.T, backupDir string) {
+				editManifest(t, backupDir, func(m *backupManifest) {
+					setEntry(m, "secrets/clip.webp", replacementHash, 1)
+				})
+			},
+		},
+		{
 			name: "unknown manifest schema",
 			tamper: func(t *testing.T, backupDir string) {
 				editManifest(t, backupDir, func(m *backupManifest) { m.Schema = "restick.backup.v2" })
@@ -617,6 +755,24 @@ func TestRestoredFilesMatchDatabase(t *testing.T) {
 		t.Fatalf("sheet checksum = %s, want %s", sheetChecksum, f.sourceChecksum)
 	}
 
+	var animatedPath, animatedChecksum, clipPath, clipChecksum string
+	if err := db.QueryRow(`SELECT animated_path, animated_checksum_sha256 FROM stickers
+		WHERE pack_id = ? AND version = 1 AND sort_order = 0`, fixturePackID).
+		Scan(&animatedPath, &animatedChecksum); err != nil {
+		t.Fatalf("read animated sticker: %v", err)
+	}
+	if animatedPath != f.stickerAnimatedRel || animatedChecksum != f.stickerAnimatedChecksum {
+		t.Fatalf("animated sticker = %s/%s, want %s/%s", animatedPath, animatedChecksum,
+			f.stickerAnimatedRel, f.stickerAnimatedChecksum)
+	}
+	if err := db.QueryRow(`SELECT clip_path, clip_checksum_sha256 FROM sticker_animations WHERE id = ?`, fixtureAnimationID).
+		Scan(&clipPath, &clipChecksum); err != nil {
+		t.Fatalf("read animation draft: %v", err)
+	}
+	if clipPath != f.clipRel || clipChecksum != f.clipChecksum {
+		t.Fatalf("animation draft clip = %s/%s, want %s/%s", clipPath, clipChecksum, f.clipRel, f.clipChecksum)
+	}
+
 	restoredBundle, err := os.ReadFile(filepath.Join(target, filepath.FromSlash(f.bundlePath)))
 	if err != nil {
 		t.Fatalf("read restored bundle: %v", err)
@@ -631,6 +787,9 @@ func TestRestoredFilesMatchDatabase(t *testing.T) {
 		{f.sourceRel, f.sourceChecksum},
 		{f.referenceRel, f.referenceChecksum},
 		{f.archivedReferenceRel, f.archivedReferenceChecksum},
+		{f.clipRel, f.clipChecksum},
+		{f.draftAnimatedRel, f.draftAnimatedChecksum},
+		{f.stickerAnimatedRel, f.stickerAnimatedChecksum},
 	} {
 		digest, _ := digestOf(t, filepath.Join(target, filepath.FromSlash(check.rel)))
 		if digest != check.digest {
@@ -757,6 +916,50 @@ func TestRestoreMissingPasswordFailsBeforeChanges(t *testing.T) {
 			}
 		})
 	}
+}
+
+// downgradeToSchema3 rewrites a backup copy into the last schema before
+// animated stickers: no sticker_animations table, no animated sticker columns,
+// no clips/ or animations/ media, and migration 4 unapplied.
+func downgradeToSchema3(t *testing.T, backupDir string, f fixture) {
+	t.Helper()
+	dbPath := filepath.Join(backupDir, storage.DBFileName)
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open backup database: %v", err)
+	}
+	for _, statement := range []string{
+		`DROP TABLE sticker_animations`,
+		`ALTER TABLE stickers DROP COLUMN animated_path`,
+		`ALTER TABLE stickers DROP COLUMN animated_checksum_sha256`,
+		`ALTER TABLE stickers DROP COLUMN animated_byte_size`,
+		`ALTER TABLE stickers DROP COLUMN animated_frames`,
+		`ALTER TABLE stickers DROP COLUMN animated_duration_ms`,
+		`DELETE FROM schema_migrations WHERE version = 4`,
+	} {
+		execSQL(t, db, statement)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close backup database: %v", err)
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		_ = os.Remove(dbPath + suffix)
+	}
+	for _, name := range []string{"clips", "animations"} {
+		if err := os.RemoveAll(filepath.Join(backupDir, name)); err != nil {
+			t.Fatalf("remove %s/: %v", name, err)
+		}
+	}
+	if err := os.Remove(filepath.Join(backupDir, filepath.FromSlash(f.stickerAnimatedRel))); err != nil {
+		t.Fatalf("remove animated variant: %v", err)
+	}
+	digest, size := digestOf(t, dbPath)
+	editManifest(t, backupDir, func(m *backupManifest) {
+		removeEntry(m, f.clipRel)
+		removeEntry(m, f.draftAnimatedRel)
+		removeEntry(m, f.stickerAnimatedRel)
+		setEntry(m, storage.DBFileName, digest, size)
+	})
 }
 
 func backupFixture(t *testing.T, f fixture) string {

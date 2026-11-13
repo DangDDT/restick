@@ -39,9 +39,11 @@ const (
 	manifestFileName = "manifest.json"
 )
 
-// resourceDirs are the only data-dir subtrees a backup contains. work/ holds
-// transient job artifacts and is never backed up.
-var resourceDirs = []string{"sources", "packs", "bundles"}
+// resourceDirs are the only data-dir subtrees a backup contains: the source
+// images, committed pack and bundle files, and the animated sticker media
+// (clip originals and draft animated output; committed animated variants live
+// under packs/). work/ holds transient job artifacts and is never backed up.
+var resourceDirs = []string{"sources", "packs", "bundles", "clips", "animations"}
 
 var (
 	// ErrBackupInvalid reports a backup folder or restored database that fails

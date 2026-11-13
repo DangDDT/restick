@@ -143,7 +143,8 @@ func safeBackupPath(p string) (string, error) {
 		return "", fmt.Errorf("%w: unsafe path %q", ErrBackupInvalid, p)
 	}
 	top, _, _ := strings.Cut(clean, "/")
-	if top != storage.DBFileName && top != "sources" && top != "packs" && top != "bundles" {
+	if top != storage.DBFileName && top != "sources" && top != "packs" && top != "bundles" &&
+		top != "clips" && top != "animations" {
 		return "", fmt.Errorf("%w: %q is outside the backup allowlist", ErrBackupInvalid, p)
 	}
 	return clean, nil
@@ -276,8 +277,9 @@ func checkSchema(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("%w: schema is missing table %s", ErrBackupInvalid, table)
 		}
 	}
-	// character_reference_assets arrives with schema 3; schema-2 backups are
-	// migrated in staging after this read-only validation.
+	// character_reference_assets arrives with schema 3 and sticker_animations
+	// with schema 4; older backups are migrated in staging after this
+	// read-only validation.
 	var version int
 	if err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
 		return fmt.Errorf("%w: read schema version: %v", ErrBackupInvalid, err)
@@ -285,7 +287,19 @@ func checkSchema(ctx context.Context, db *sql.DB) error {
 	if version >= 3 && !present["character_reference_assets"] {
 		return fmt.Errorf("%w: schema is missing table character_reference_assets", ErrBackupInvalid)
 	}
+	if version >= 4 && !present["sticker_animations"] {
+		return fmt.Errorf("%w: schema is missing table sticker_animations", ErrBackupInvalid)
+	}
 	return nil
+}
+
+// schemaVersion is the highest applied migration of a validated database.
+func schemaVersion(ctx context.Context, db *sql.DB) (int, error) {
+	var version int
+	if err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
+		return 0, fmt.Errorf("%w: read schema version: %v", ErrBackupInvalid, err)
+	}
+	return version, nil
 }
 
 func checkForeignKeys(ctx context.Context, db *sql.DB) error {
@@ -323,7 +337,14 @@ func checkReferencedFiles(ctx context.Context, db *sql.DB, files map[string]mani
 	if err := checkVersionFiles(ctx, db, files); err != nil {
 		return err
 	}
-	return checkStickerFiles(ctx, db, files)
+	version, err := schemaVersion(ctx, db)
+	if err != nil {
+		return err
+	}
+	if err := checkStickerFiles(ctx, db, files, version); err != nil {
+		return err
+	}
+	return checkAnimationFiles(ctx, db, files, version)
 }
 
 // sourceIndex maps a sources/<id>/original.<ext> backup path to its id. Every
@@ -446,8 +467,14 @@ func checkVersionFiles(ctx context.Context, db *sql.DB, files map[string]manifes
 	return nil
 }
 
-func checkStickerFiles(ctx context.Context, db *sql.DB, files map[string]manifestFile) error {
-	rows, err := db.QueryContext(ctx, `SELECT pack_id, version, sort_order, object_path, thumb_path, checksum_sha256 FROM stickers`)
+func checkStickerFiles(ctx context.Context, db *sql.DB, files map[string]manifestFile, schema int) error {
+	// The animated_* columns arrive with schema 4.
+	query := `SELECT pack_id, version, sort_order, object_path, thumb_path, checksum_sha256 FROM stickers`
+	if schema >= 4 {
+		query = `SELECT pack_id, version, sort_order, object_path, thumb_path, checksum_sha256,
+			animated_path, animated_checksum_sha256, animated_byte_size FROM stickers`
+	}
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("%w: read stickers: %v", ErrBackupInvalid, err)
 	}
@@ -457,8 +484,14 @@ func checkStickerFiles(ctx context.Context, db *sql.DB, files map[string]manifes
 			packID                                string
 			version, sortOrder                    int
 			objectPath, thumbPath, checksumSHA256 string
+			animatedPath, animatedChecksum        string
+			animatedByteSize                      int64
 		)
-		if err := rows.Scan(&packID, &version, &sortOrder, &objectPath, &thumbPath, &checksumSHA256); err != nil {
+		dest := []any{&packID, &version, &sortOrder, &objectPath, &thumbPath, &checksumSHA256}
+		if schema >= 4 {
+			dest = append(dest, &animatedPath, &animatedChecksum, &animatedByteSize)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return fmt.Errorf("%w: read stickers: %v", ErrBackupInvalid, err)
 		}
 		object, err := referencedFile(files, objectPath)
@@ -471,9 +504,67 @@ func checkStickerFiles(ctx context.Context, db *sql.DB, files map[string]manifes
 		if _, err := referencedFile(files, thumbPath); err != nil {
 			return err
 		}
+		if animatedPath != "" {
+			if err := checkRecordedFile(files, animatedPath, animatedChecksum, animatedByteSize); err != nil {
+				return err
+			}
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("%w: read stickers: %v", ErrBackupInvalid, err)
+	}
+	return nil
+}
+
+// checkAnimationFiles proves the clip originals and draft animated output of
+// every animation draft are in the backup with the size and digest the draft
+// recorded. The table arrives with schema 4.
+func checkAnimationFiles(ctx context.Context, db *sql.DB, files map[string]manifestFile, version int) error {
+	if version < 4 {
+		return nil
+	}
+	rows, err := db.QueryContext(ctx, `SELECT clip_path, clip_byte_size, clip_checksum_sha256,
+		animated_path, animated_checksum_sha256, animated_byte_size FROM sticker_animations`)
+	if err != nil {
+		return fmt.Errorf("%w: read animation drafts: %v", ErrBackupInvalid, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			clipPath, clipChecksum, animatedPath, animatedChecksum string
+			clipByteSize, animatedByteSize                         int64
+		)
+		if err := rows.Scan(&clipPath, &clipByteSize, &clipChecksum,
+			&animatedPath, &animatedChecksum, &animatedByteSize); err != nil {
+			return fmt.Errorf("%w: read animation drafts: %v", ErrBackupInvalid, err)
+		}
+		if err := checkRecordedFile(files, clipPath, clipChecksum, clipByteSize); err != nil {
+			return err
+		}
+		if animatedPath != "" {
+			if err := checkRecordedFile(files, animatedPath, animatedChecksum, animatedByteSize); err != nil {
+				return err
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("%w: read animation drafts: %v", ErrBackupInvalid, err)
+	}
+	return nil
+}
+
+// checkRecordedFile resolves a database-held path inside the verified backup
+// and compares it with the size and digest the row recorded.
+func checkRecordedFile(files map[string]manifestFile, p, checksum string, byteSize int64) error {
+	entry, err := referencedFile(files, p)
+	if err != nil {
+		return err
+	}
+	if entry.SHA256 != checksum {
+		return fmt.Errorf("%w: %s does not match its recorded checksum", ErrBackupInvalid, p)
+	}
+	if entry.ByteSize != byteSize {
+		return fmt.Errorf("%w: %s does not match its recorded size", ErrBackupInvalid, p)
 	}
 	return nil
 }
@@ -534,7 +625,7 @@ func ensureEmptyTarget(dir string) error {
 // overwriting anything. The database goes last: its presence marks a complete
 // restore, and the lock file stays where it is.
 func publish(stagingDir, dataDir string) error {
-	for _, name := range []string{"sources", "packs", "bundles", storage.DBFileName} {
+	for _, name := range []string{"sources", "packs", "bundles", "clips", "animations", storage.DBFileName} {
 		src := filepath.Join(stagingDir, name)
 		if _, err := os.Lstat(src); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
