@@ -371,6 +371,57 @@ async function expectStaticRevert(page) {
   await context.close();
 }
 
+// Regression: returning to the detail page while a clip is still processing
+// must pick up the finished draft without a manual reload.
+{
+  await scenario("default");
+  const { context, page, errors } = await ctx(1440, 900);
+  await login(page);
+  await step("detail: a draft that finishes while the page is open updates pending changes", async () => {
+    await page.goto(`${BASE}/packs/animate?id=pk-ready-1&index=1`);
+    await page.waitForLoadState("networkidle");
+    await page
+      .locator("input[type=file]")
+      .setInputFiles({ name: "clip.mp4", mimeType: "video/mp4", buffer: clip });
+    const uploaded = page.waitForResponse(
+      (res) => res.request().method() === "POST" && /\/stickers\/1\/animation$/.test(new URL(res.url()).pathname),
+      { timeout: 10000 },
+    );
+    await page.locator("[data-testid=animate-upload] button").click();
+    if ((await uploaded).status() !== 202) throw new Error("upload not accepted");
+    await page.goto(`${BASE}/packs/detail?id=pk-ready-1`);
+    await page.locator("[data-qa=unpublished-count]").waitFor();
+    const status = await page.evaluate(async () => {
+      const res = await fetch("/api/v1/admin/packs/pk-ready-1/animations", { credentials: "same-origin" });
+      const body = await res.json();
+      return body.items.find((item) => item.sticker_index === 1)?.status;
+    });
+    if (status !== "queued" && status !== "running") {
+      throw new Error(`fixture settled before the page loaded: ${status}`);
+    }
+    await page.waitForFunction(
+      () => document.querySelector("[data-qa=unpublished-count]")?.textContent.trim() === "2",
+      undefined,
+      { timeout: 15000 },
+    );
+    await page.locator("[data-testid=publish-animations] button").click();
+    const dialog = page.locator("dialog[open]");
+    await dialog.waitFor();
+    const entries = await dialog.locator("li").allInnerTexts();
+    const addition = entries.find((text) => text.includes("02-lì-xì.png"));
+    if (entries.length !== 2 || !addition?.includes("Thêm hoặc cập nhật")) {
+      throw new Error(`dialog=${JSON.stringify(entries)}`);
+    }
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("dialog[open]", { state: "detached" });
+    return `draft was ${status} on load, pending reached 2 without reload`;
+  });
+  await step("detail: processing-draft refresh has no console errors", async () => {
+    if (errors.length) throw new Error(errors[0]);
+  });
+  await context.close();
+}
+
 await browser.close();
 const failed = results.filter((result) => !result.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);

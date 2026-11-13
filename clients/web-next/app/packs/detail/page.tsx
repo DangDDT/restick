@@ -218,11 +218,23 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [animationPollExpired, setAnimationPollExpired] = useState(false);
 
   const pack = useQuery({
     queryKey: ["admin-pack", id],
     queryFn: () => api<AdminPackDetail>(`/api/v1/admin/packs/${id}`),
     refetchOnMount: "always",
+    // Draft rows have no job to poll from this view: keep the cards and the
+    // pending count current while a clip is processing, and stop once every
+    // draft is terminal.
+    refetchInterval: (query) => {
+      if (animationPollExpired) return false;
+      return (query.state.data?.stickers ?? []).some(
+        (sticker) => sticker.animation?.status === "queued" || sticker.animation?.status === "running",
+      )
+        ? POLL_MS
+        : false;
+    },
   });
   const jobId = requestedJobId ?? pack.data?.latest_job?.id ?? initialJobId;
 
@@ -246,6 +258,13 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
     const timer = window.setTimeout(() => setPollExpired(true), POLL_LIMIT_MS);
     return () => window.clearTimeout(timer);
   }, [jobId]);
+
+  // Animation drafts share the same processing timeout; bound their refetch
+  // window from this view's mount so a stuck draft cannot poll forever.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setAnimationPollExpired(true), POLL_LIMIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [id]);
 
   const jobStatus = job.data?.status;
   useEffect(() => {
