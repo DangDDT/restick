@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 
+	"golang.org/x/image/riff"
 	"golang.org/x/image/webp"
 )
 
@@ -52,6 +53,18 @@ type ManifestSticker struct {
 	Height    int
 	EmojiHint string
 	Keywords  []string
+	Animated  *ManifestAnimated
+}
+
+// ManifestAnimated is the optional animated variant of a sticker. File is a
+// flat name inside work/<job>/output/animated/ and is committed as
+// animated/<File>; Frames and DurationMS are reported by media_factory.
+type ManifestAnimated struct {
+	File       string
+	Frames     int
+	DurationMS int
+	Width      int
+	Height     int
 }
 
 // StagedVersion is a fully written version that is not public yet: pack.json,
@@ -81,6 +94,13 @@ type CommittedSticker struct {
 	Height         int
 	EmojiHint      string
 	Keywords       []string
+
+	// Animated* stay zero for a sticker without an animated variant.
+	AnimatedPath           string
+	AnimatedChecksumSHA256 string
+	AnimatedByteSize       int64
+	AnimatedFrames         int
+	AnimatedDurationMS     int
 }
 
 // CommittedFiles lists the files renamed into their final public locations.
@@ -100,7 +120,8 @@ type CommittedFiles struct {
 }
 
 // PackJSON renders the immutable pack.json snapshot with its aggregate
-// checksum (SHA256 over sticker bytes in manifest order, never the ZIP).
+// checksum (SHA256 over sticker bytes in manifest order, each static file
+// followed by its animated file when present; never the ZIP).
 func (m PackManifest) PackJSON(checksum string) ([]byte, error) {
 	doc := packDocument{
 		Schema:         PackSchema,
@@ -125,6 +146,15 @@ func (m PackManifest) PackJSON(checksum string) ([]byte, error) {
 			EmojiHint: sticker.EmojiHint,
 			Width:     sticker.Width,
 			Height:    sticker.Height,
+		}
+		if a := sticker.Animated; a != nil {
+			doc.Stickers[i].Animated = &packDocumentAnimated{
+				File:       path.Join("animated", a.File),
+				Frames:     a.Frames,
+				DurationMS: a.DurationMS,
+				Width:      a.Width,
+				Height:     a.Height,
+			}
 		}
 	}
 	body, err := json.MarshalIndent(doc, "", "  ")
@@ -154,6 +184,16 @@ type packDocumentSticker struct {
 	EmojiHint string `json:"emoji_hint"`
 	Width     int    `json:"width"`
 	Height    int    `json:"height"`
+	// omitempty keeps a static pack.json byte-identical to the pre-animation format.
+	Animated *packDocumentAnimated `json:"animated,omitempty"`
+}
+
+type packDocumentAnimated struct {
+	File       string `json:"file"`
+	Frames     int    `json:"frames"`
+	DurationMS int    `json:"duration_ms"`
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
 }
 
 // StageBundle copies validated job output into a staged version directory and
@@ -194,6 +234,17 @@ func (s *Store) StageBundle(ctx context.Context, jobID string, manifest PackMani
 	if err := os.MkdirAll(filepath.Join(packDir, "thumbs"), 0o755); err != nil {
 		return StagedVersion{}, fmt.Errorf("assets: create staged pack: %w", err)
 	}
+	syncDirs := []string{packDir, filepath.Join(packDir, "thumbs"), stageDir}
+	animatedOutput := filepath.Join(outputDir, "animated")
+	if manifest.hasAnimated() {
+		if err := s.verifyDir(animatedOutput); err != nil {
+			return StagedVersion{}, memberError("animated", err)
+		}
+		if err := os.Mkdir(filepath.Join(packDir, "animated"), 0o755); err != nil {
+			return StagedVersion{}, fmt.Errorf("assets: create staged pack: %w", err)
+		}
+		syncDirs = append(syncDirs, filepath.Join(packDir, "animated"))
+	}
 
 	aggregate := sha256.New()
 	stickers := make([]CommittedSticker, len(manifest.Stickers))
@@ -233,6 +284,22 @@ func (s *Store) StageBundle(ctx context.Context, jobID string, manifest PackMani
 			EmojiHint:      sticker.EmojiHint,
 			Keywords:       append([]string(nil), sticker.Keywords...),
 		}
+		if a := sticker.Animated; a != nil {
+			member := path.Join("animated", a.File)
+			stagedAnimated := filepath.Join(packDir, "animated", a.File)
+			// Appended right after this sticker's static bytes (spec "pack.json và checksum").
+			animatedSum, n, err := copyFile(stagedAnimated, filepath.Join(animatedOutput, a.File), aggregate, budget)
+			if err != nil {
+				return StagedVersion{}, memberError(member, err)
+			}
+			if err := verifyAnimatedWebP(stagedAnimated, StickerDimension, StickerDimension); err != nil {
+				return StagedVersion{}, memberError(member, err)
+			}
+			stickers[i].AnimatedChecksumSHA256 = animatedSum
+			stickers[i].AnimatedByteSize = n
+			stickers[i].AnimatedFrames = a.Frames
+			stickers[i].AnimatedDurationMS = a.DurationMS
+		}
 	}
 	checksum := hex.EncodeToString(aggregate.Sum(nil))
 	manifestJSON, err := manifest.PackJSON(checksum)
@@ -248,7 +315,7 @@ func (s *Store) StageBundle(ctx context.Context, jobID string, manifest PackMani
 	if err != nil {
 		return StagedVersion{}, err
 	}
-	for _, dir := range []string{packDir, filepath.Join(packDir, "thumbs"), stageDir} {
+	for _, dir := range syncDirs {
 		if err := syncDir(dir); err != nil {
 			return StagedVersion{}, err
 		}
@@ -322,6 +389,9 @@ func (s *Store) CommitFiles(ctx context.Context, staged StagedVersion) (Committe
 	for i, sticker := range staged.stickers {
 		sticker.ObjectPath = path.Join(outputDir, sticker.Filename)
 		sticker.ThumbPath = path.Join(outputDir, "thumbs", staged.Manifest.Stickers[i].ThumbFile)
+		if a := staged.Manifest.Stickers[i].Animated; a != nil {
+			sticker.AnimatedPath = path.Join(outputDir, "animated", a.File)
+		}
 		committedStickers[i] = sticker
 	}
 	return CommittedFiles{
@@ -369,8 +439,30 @@ func (m PackManifest) validate() error {
 				return fmt.Errorf("%w: empty keyword for %s", ErrInvalidManifest, sticker.File)
 			}
 		}
+		if a := sticker.Animated; a != nil {
+			// The fixed name rules out traversal and collisions inside animated/.
+			if a.File != sticker.File {
+				return fmt.Errorf("%w: animated member %q is not the fixed name for index %d", ErrInvalidManifest, a.File, i)
+			}
+			if a.Width != StickerDimension || a.Height != StickerDimension {
+				return fmt.Errorf("%w: animated %s must be declared %dx%d, got %dx%d",
+					ErrInvalidManifest, a.File, StickerDimension, StickerDimension, a.Width, a.Height)
+			}
+			if a.Frames < 2 || a.DurationMS < 1 {
+				return fmt.Errorf("%w: animated %s needs at least 2 frames and a duration", ErrInvalidManifest, a.File)
+			}
+		}
 	}
 	return nil
+}
+
+func (m PackManifest) hasAnimated() bool {
+	for _, sticker := range m.Stickers {
+		if sticker.Animated != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // verifyWebP checks the staged bytes: the decoded edge must be exactly the
@@ -394,6 +486,41 @@ func verifyWebP(p string, width, height int) error {
 	}
 	if height > 0 && cfg.Height != height {
 		return fmt.Errorf("%w: height %d does not match manifest %d", ErrInvalidManifest, cfg.Height, height)
+	}
+	return nil
+}
+
+// verifyAnimatedWebP checks a staged animated WebP without decoding pixels:
+// x/image/webp cannot decode animations, so the canvas comes from DecodeConfig
+// (the VP8X chunk) and the frames are counted as ANMF chunks.
+func verifyAnimatedWebP(p string, width, height int) error {
+	if err := verifyWebP(p, width, height); err != nil {
+		return err
+	}
+	f, err := openNoFollow(p)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	formType, chunks, err := riff.NewReader(f)
+	if err != nil || formType != (riff.FourCC{'W', 'E', 'B', 'P'}) {
+		return ErrInvalidImage
+	}
+	frames := 0
+	for {
+		id, _, _, err := chunks.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return ErrInvalidImage
+		}
+		if id == (riff.FourCC{'A', 'N', 'M', 'F'}) {
+			frames++
+		}
+	}
+	if frames < 2 {
+		return fmt.Errorf("%w: animated webp has %d frames, want at least 2", ErrInvalidManifest, frames)
 	}
 	return nil
 }
@@ -485,6 +612,9 @@ func writeBundle(packDir, bundlePath string, manifest PackManifest) (int64, erro
 	members := []string{"pack.json", "thumb.webp"}
 	for _, sticker := range manifest.Stickers {
 		members = append(members, sticker.File, path.Join("thumbs", sticker.ThumbFile))
+		if sticker.Animated != nil {
+			members = append(members, path.Join("animated", sticker.Animated.File))
+		}
 	}
 	var writeErr error
 	for _, member := range members {

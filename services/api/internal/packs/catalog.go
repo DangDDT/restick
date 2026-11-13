@@ -250,7 +250,8 @@ func (s *Service) GetVersion(ctx context.Context, id string, version int) (Versi
 	item.CreatedAt = parseTimestamp(createdAt)
 
 	rows, err := s.db.QueryContext(ctx, `SELECT sort_order, filename, object_path, thumb_path, checksum_sha256,
-			width, height, emoji_hint, keywords_json
+			width, height, emoji_hint, keywords_json, animated_path, animated_checksum_sha256,
+			animated_byte_size, animated_frames, animated_duration_ms
 		FROM stickers WHERE pack_id = ? AND version = ? ORDER BY sort_order`, id, version)
 	if err != nil {
 		return Version{}, fmt.Errorf("packs: get stickers: %w", err)
@@ -261,7 +262,9 @@ func (s *Service) GetVersion(ctx context.Context, id string, version int) (Versi
 		var sticker Sticker
 		var keywords string
 		if err := rows.Scan(&sticker.SortOrder, &sticker.Filename, &sticker.ObjectPath, &sticker.ThumbPath,
-			&sticker.ChecksumSHA256, &sticker.Width, &sticker.Height, &sticker.EmojiHint, &keywords); err != nil {
+			&sticker.ChecksumSHA256, &sticker.Width, &sticker.Height, &sticker.EmojiHint, &keywords,
+			&sticker.AnimatedPath, &sticker.AnimatedChecksumSHA256, &sticker.AnimatedByteSize,
+			&sticker.AnimatedFrames, &sticker.AnimatedDurationMS); err != nil {
 			return Version{}, fmt.Errorf("packs: scan sticker: %w", err)
 		}
 		if err := json.Unmarshal([]byte(keywords), &sticker.Keywords); err != nil {

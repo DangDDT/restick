@@ -127,4 +127,11 @@ type Sticker struct {
 	Height         int
 	EmojiHint      string
 	Keywords       []string
+
+	// Animated* stay zero for a sticker without an animated variant.
+	AnimatedPath           string
+	AnimatedChecksumSHA256 string
+	AnimatedByteSize       int64
+	AnimatedFrames         int
+	AnimatedDurationMS     int
 }

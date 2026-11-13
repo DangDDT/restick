@@ -194,3 +194,55 @@ func countRows(t *testing.T, db *sql.DB, query string, args ...any) int {
 	}
 	return count
 }
+
+func TestCommitProcessedStoresAnimatedColumns(t *testing.T) {
+	service, db := openTestService(t)
+	ctx := context.Background()
+	packID, jobID := runningJob(t, db, service, "animated-pack", 1)
+	result := processedVersion(packID, jobID, 1, 2)
+	animated := &result.Files.Stickers[1]
+	animated.AnimatedPath = result.Files.OutputDir + "/animated/001.webp"
+	animated.AnimatedChecksumSHA256 = testChecksum("e")
+	animated.AnimatedByteSize = 9000
+	animated.AnimatedFrames = 24
+	animated.AnimatedDurationMS = 2000
+
+	if err := CommitProcessed(ctx, db, result); err != nil {
+		t.Fatalf("CommitProcessed: %v", err)
+	}
+	version, err := service.GetVersion(ctx, packID, 1)
+	if err != nil {
+		t.Fatalf("get version: %v", err)
+	}
+	if s := version.Stickers[0]; s.AnimatedPath != "" || s.AnimatedChecksumSHA256 != "" ||
+		s.AnimatedByteSize != 0 || s.AnimatedFrames != 0 || s.AnimatedDurationMS != 0 {
+		t.Errorf("static sticker row has animated columns: %+v", s)
+	}
+	s := version.Stickers[1]
+	if s.AnimatedPath != animated.AnimatedPath || s.AnimatedChecksumSHA256 != animated.AnimatedChecksumSHA256 ||
+		s.AnimatedByteSize != 9000 || s.AnimatedFrames != 24 || s.AnimatedDurationMS != 2000 {
+		t.Errorf("animated sticker row = %+v", s)
+	}
+}
+
+func TestCommitProcessedRejectsInvalidAnimatedSticker(t *testing.T) {
+	cases := map[string]func(*assets.CommittedSticker){
+		"bad checksum": func(s *assets.CommittedSticker) { s.AnimatedChecksumSHA256 = "nope" },
+		"one frame":    func(s *assets.CommittedSticker) { s.AnimatedFrames = 1 },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			result := processedVersion(uuid.NewString(), uuid.NewString(), 1, 1)
+			s := &result.Files.Stickers[0]
+			s.AnimatedPath = result.Files.OutputDir + "/animated/000.webp"
+			s.AnimatedChecksumSHA256 = testChecksum("e")
+			s.AnimatedByteSize = 9000
+			s.AnimatedFrames = 24
+			s.AnimatedDurationMS = 2000
+			mutate(s)
+			if err := validateProcessed(result); !errors.Is(err, ErrInvalid) {
+				t.Fatalf("error = %v, want ErrInvalid", err)
+			}
+		})
+	}
+}

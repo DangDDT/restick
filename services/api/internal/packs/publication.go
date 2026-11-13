@@ -91,11 +91,15 @@ func CommitProcessed(ctx context.Context, db *sql.DB, result ProcessedVersion) e
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO stickers
 			(pack_id, version, sort_order, filename, object_path, thumb_path,
-			 checksum_sha256, width, height, emoji_hint, keywords_json)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 checksum_sha256, width, height, emoji_hint, keywords_json,
+			 animated_path, animated_checksum_sha256, animated_byte_size,
+			 animated_frames, animated_duration_ms)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			result.PackID, result.Version, sticker.SortOrder, sticker.Filename,
 			sticker.ObjectPath, sticker.ThumbPath, sticker.ChecksumSHA256,
-			sticker.Width, sticker.Height, sticker.EmojiHint, keywords); err != nil {
+			sticker.Width, sticker.Height, sticker.EmojiHint, keywords,
+			sticker.AnimatedPath, sticker.AnimatedChecksumSHA256, sticker.AnimatedByteSize,
+			sticker.AnimatedFrames, sticker.AnimatedDurationMS); err != nil {
 			return fmt.Errorf("packs: insert sticker: %w", err)
 		}
 	}
@@ -188,6 +192,9 @@ func validateProcessed(result ProcessedVersion) error {
 			return fmt.Errorf("%w: sticker %d has an invalid checksum", ErrInvalid, i)
 		case sticker.Width < 1 || sticker.Height < 1:
 			return fmt.Errorf("%w: sticker %d has invalid dimensions", ErrInvalid, i)
+		case sticker.AnimatedPath != "" && (!checksumPattern.MatchString(sticker.AnimatedChecksumSHA256) ||
+			sticker.AnimatedFrames < 2 || sticker.AnimatedByteSize < 1):
+			return fmt.Errorf("%w: sticker %d has an invalid animated variant", ErrInvalid, i)
 		}
 	}
 	return nil

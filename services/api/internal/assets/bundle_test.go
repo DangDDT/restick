@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -509,4 +510,218 @@ func mustReadFile(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return data
+}
+
+// Golden values produced by the unmodified static-only StageBundle at commit
+// ce12fa0 (before the animated variant existed). A pack without animated
+// stickers must keep this exact aggregate checksum and pack.json bytes.
+const (
+	goldenStaticPackID       = "0b6b1f0e-4d0c-4b7a-9a52-2f7c1f5d9e11"
+	goldenStaticChecksum     = "36465b47d4d16105e67fd8447c7c12588afd9c37136b874d793a95dff226a62f"
+	goldenStaticPackJSONHash = "90d19db300ba48e6fe897c33e3cfde659bd68bd9c28548d727f85353ab964b05"
+)
+
+func TestStaticPackChecksumUnchanged(t *testing.T) {
+	store := newTestStore(t)
+	jobID := "job_" + uuid.NewString()
+	writeOutput(t, store, jobID, map[string][]byte{
+		"000.webp":       mustWebP(t, stickerAWebP),
+		"thumb_000.webp": mustWebP(t, thumbAWebP),
+		"001.webp":       mustWebP(t, stickerBWebP),
+		"thumb_001.webp": mustWebP(t, thumbBWebP),
+	})
+	staged, err := store.StageBundle(context.Background(), jobID, testManifest(goldenStaticPackID, 2))
+	if err != nil {
+		t.Fatalf("StageBundle: %v", err)
+	}
+	if staged.ChecksumSHA256 != goldenStaticChecksum {
+		t.Errorf("aggregate checksum = %s, want golden %s", staged.ChecksumSHA256, goldenStaticChecksum)
+	}
+	if got := hex.EncodeToString(sha256Sum(staged.manifestJSON)); got != goldenStaticPackJSONHash {
+		t.Errorf("pack.json sha256 = %s, want golden %s", got, goldenStaticPackJSONHash)
+	}
+}
+
+// Lossless animated WebP (VP8X + ANIM + 2 ANMF frames) generated once with
+// Pillow (save_all, 2 solid frames, 100 ms). Pillow writes a single-frame
+// animation as a plain VP8L file, so the static stickerAWebP doubles as the
+// "fewer than two frames" case.
+const (
+	animated512WebP = "UklGRoQAAABXRUJQVlA4WAoAAAACAAAA/wEA/wEAQU5JTQYAAAAAAAAAAABBTk1GKAAAAAAAAAAAAP8BAP8BAGQAAAJWUDhMDwAAAC//wX8ABxD9j/4HIqL/AQBBTk1GKAAAAAAAAAAAAP8BAP8BAGQAAABWUDhMDwAAAC//wX8ABxDR//4HIqL/AQA="
+	animated128WebP = "UklGRoQAAABXRUJQVlA4WAoAAAACAAAAfwAAfwAAQU5JTQYAAAAAAAAAAABBTk1GKAAAAAAAAAAAAH8AAH8AAGQAAAJWUDhMDwAAAC9/wB8ABxD9j/4HIqL/AQBBTk1GKAAAAAAAAAAAAH8AAH8AAGQAAABWUDhMDwAAAC9/wB8ABxDR//4HIqL/AQA="
+)
+
+func animatedManifest(packID string) PackManifest {
+	manifest := testManifest(packID, 2)
+	manifest.Stickers[1].Animated = &ManifestAnimated{
+		File: "001.webp", Frames: 2, DurationMS: 200, Width: StickerDimension, Height: StickerDimension,
+	}
+	return manifest
+}
+
+func writeAnimatedOutput(t *testing.T, store *Store, jobID string, animated map[string][]byte) {
+	t.Helper()
+	output := writeOutput(t, store, jobID, map[string][]byte{
+		"000.webp":       mustWebP(t, stickerAWebP),
+		"thumb_000.webp": mustWebP(t, thumbAWebP),
+		"001.webp":       mustWebP(t, stickerBWebP),
+		"thumb_001.webp": mustWebP(t, thumbBWebP),
+	})
+	dir := filepath.Join(output, "animated")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range animated {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestStageBundleIncludesAnimatedAndAppendsToChecksum(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	packID := uuid.NewString()
+	jobID := "job_" + uuid.NewString()
+	animated := mustWebP(t, animated512WebP)
+	writeAnimatedOutput(t, store, jobID, map[string][]byte{"001.webp": animated})
+
+	staged, err := store.StageBundle(ctx, jobID, animatedManifest(packID))
+	if err != nil {
+		t.Fatalf("StageBundle: %v", err)
+	}
+	wantSum := sha256.New()
+	wantSum.Write(mustWebP(t, stickerAWebP))
+	wantSum.Write(mustWebP(t, stickerBWebP))
+	wantSum.Write(animated)
+	if want := hex.EncodeToString(wantSum.Sum(nil)); staged.ChecksumSHA256 != want {
+		t.Fatalf("checksum = %s, want static then animated bytes %s", staged.ChecksumSHA256, want)
+	}
+
+	committed, err := store.CommitFiles(ctx, staged)
+	if err != nil {
+		t.Fatalf("CommitFiles: %v", err)
+	}
+	if s := committed.Stickers[0]; s.AnimatedPath != "" || s.AnimatedChecksumSHA256 != "" || s.AnimatedByteSize != 0 || s.AnimatedFrames != 0 {
+		t.Errorf("static sticker carries animated metadata: %+v", s)
+	}
+	s := committed.Stickers[1]
+	if s.AnimatedPath != committed.OutputDir+"/animated/001.webp" ||
+		s.AnimatedChecksumSHA256 != hex.EncodeToString(sha256Sum(animated)) ||
+		s.AnimatedByteSize != int64(len(animated)) || s.AnimatedFrames != 2 || s.AnimatedDurationMS != 200 {
+		t.Errorf("animated sticker row = %+v", s)
+	}
+	f, err := store.OpenCommitted(s.AnimatedPath)
+	if err != nil {
+		t.Fatalf("OpenCommitted(%q): %v", s.AnimatedPath, err)
+	}
+	f.Close()
+
+	zipReader, err := zip.OpenReader(filepath.Join(store.dataDir, filepath.FromSlash(committed.BundlePath)))
+	if err != nil {
+		t.Fatalf("open bundle: %v", err)
+	}
+	defer zipReader.Close()
+	for _, member := range zipReader.File {
+		if member.Method != zip.Store {
+			t.Errorf("member %s is compressed", member.Name)
+		}
+	}
+	if !bytes.Equal(readZipMember(t, zipReader, "animated/001.webp"), animated) {
+		t.Errorf("zip animated bytes differ")
+	}
+	var document struct {
+		Stickers []struct {
+			Animated *struct {
+				File       string `json:"file"`
+				Frames     int    `json:"frames"`
+				DurationMS int    `json:"duration_ms"`
+				Width      int    `json:"width"`
+				Height     int    `json:"height"`
+			} `json:"animated"`
+		} `json:"stickers"`
+	}
+	if err := json.Unmarshal(readZipMember(t, zipReader, "pack.json"), &document); err != nil {
+		t.Fatalf("decode pack.json: %v", err)
+	}
+	if document.Stickers[0].Animated != nil {
+		t.Errorf("static sticker has an animated entry")
+	}
+	got := document.Stickers[1].Animated
+	if got == nil || got.File != "animated/001.webp" || got.Frames != 2 || got.DurationMS != 200 ||
+		got.Width != StickerDimension || got.Height != StickerDimension {
+		t.Errorf("pack.json animated = %+v", got)
+	}
+}
+
+func TestStageBundleRejectsMissingAnimatedFile(t *testing.T) {
+	store := newTestStore(t)
+	packID := uuid.NewString()
+	jobID := "job_" + uuid.NewString()
+	writeAnimatedOutput(t, store, jobID, nil)
+	if _, err := store.StageBundle(context.Background(), jobID, animatedManifest(packID)); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("error = %v, want ErrInvalidManifest", err)
+	}
+	assertNoCommittedArtifact(t, store, packID, jobID)
+}
+
+func TestStageBundleRejectsAnimatedWrongSize(t *testing.T) {
+	cases := []struct {
+		name   string
+		data   []byte
+		mutate func(*ManifestAnimated)
+	}{
+		{name: "animated file is 128x128", data: mustWebP(t, animated128WebP)},
+		{name: "animated file has one frame", data: mustWebP(t, stickerAWebP)},
+		{name: "animated file is not webp", data: encodePNG(t, 2, 2)},
+		{name: "declared size is not 512", data: mustWebP(t, animated512WebP), mutate: func(a *ManifestAnimated) { a.Width = 128 }},
+		{name: "declared one frame", data: mustWebP(t, animated512WebP), mutate: func(a *ManifestAnimated) { a.Frames = 1 }},
+		{name: "traversal file name", data: mustWebP(t, animated512WebP), mutate: func(a *ManifestAnimated) { a.File = "../001.webp" }},
+		{name: "renamed file", data: mustWebP(t, animated512WebP), mutate: func(a *ManifestAnimated) { a.File = "000.webp" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newTestStore(t)
+			packID := uuid.NewString()
+			jobID := "job_" + uuid.NewString()
+			writeAnimatedOutput(t, store, jobID, map[string][]byte{"001.webp": tc.data})
+			manifest := animatedManifest(packID)
+			if tc.mutate != nil {
+				tc.mutate(manifest.Stickers[1].Animated)
+			}
+			if _, err := store.StageBundle(context.Background(), jobID, manifest); !errors.Is(err, ErrInvalidManifest) {
+				t.Fatalf("error = %v, want ErrInvalidManifest", err)
+			}
+			assertNoCommittedArtifact(t, store, packID, jobID)
+		})
+	}
+}
+
+func TestStageBundleRejectsSymlinkedAnimatedFile(t *testing.T) {
+	store := newTestStore(t)
+	packID := uuid.NewString()
+	jobID := "job_" + uuid.NewString()
+	writeAnimatedOutput(t, store, jobID, nil)
+	secret := filepath.Join(t.TempDir(), "secret.webp")
+	if err := os.WriteFile(secret, mustWebP(t, animated512WebP), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, filepath.Join(store.dataDir, "work", jobID, "output", "animated", "001.webp")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := store.StageBundle(context.Background(), jobID, animatedManifest(packID))
+	if !errors.Is(err, ErrInvalidManifest) && !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("error = %v, want unsafe member rejection", err)
+	}
+	assertNoCommittedArtifact(t, store, packID, jobID)
+}
+
+func TestPackJSONOmitsAnimatedWhenAbsent(t *testing.T) {
+	body, err := testManifest(goldenStaticPackID, 1).PackJSON(strings.Repeat("a", 64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(body, []byte("animated")) {
+		t.Fatalf("static pack.json mentions animated:\n%s", body)
+	}
 }
