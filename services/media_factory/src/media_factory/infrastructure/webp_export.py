@@ -38,7 +38,8 @@ def encode_animated_webp(frames: list[Image.Image], fps: int, quality: int) -> b
     Algorithm:
         1. duration mỗi khung = round(1000 / fps) mili giây.
         2. Lưu khung đầu với save_all=True, append_images = các khung còn lại.
-        3. method=4 (mặc định 0 làm file lớn hơn ~50%), alpha_quality=100 giữ
+        3. method=4 (đường lưu animated của Pillow mặc định method=0, đo được file lớn
+           hơn ~34% so với method=4; ảnh tĩnh mặc định đã là 4), alpha_quality=100 giữ
            viền trong suốt sắc, lossless=False, loop=0 (lặp vô hạn).
 
     Techniques:

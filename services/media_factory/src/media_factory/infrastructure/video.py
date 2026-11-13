@@ -21,9 +21,12 @@ def read_frames(
     Algorithm:
         1. Mở file bằng cv2.VideoCapture; không mở được -> decode_failed.
         2. Pass 1: grab() từng khung (không giải mã sang ảnh), ghi POS_MSEC.
-        3. duration = ts cuối + một khoảng khung; > max_seconds -> clip_too_long.
+        3. duration = ts cuối + một khoảng khung; > max_seconds (+1 ms dung sai)
+           -> clip_too_long. ts không tăng nghiêm ngặt -> decode_failed.
         4. Số khung ra = min(max_frames, round(duration * fps)); mốc i/fps giây.
         5. Với mỗi mốc chọn khung có timestamp gần nhất (bisect trên ts đã sắp xếp).
+        5b. Trần cứng số khung grab (240 khung/giây * max_seconds) chặn video
+            timestamp giả; kích thước khung thật được kiểm lại ở pass 2.
         6. Pass 2: mở lại, retrieve() đúng các khung đã chọn, BGR -> RGB -> RGBA.
 
     Techniques:
@@ -49,6 +52,11 @@ def read_frames(
         times: list[float] = []
         while capture.grab():
             times.append(capture.get(cv2.CAP_PROP_POS_MSEC))
+            if len(times) > max_seconds * 240:  # hard ceiling, independent of timestamps
+                raise ProcessingError("clip_too_long", f"Video dài hơn {max_seconds:g}s")
+            if len(times) > 1 and times[-1] <= times[-2]:
+                # Without monotonic timestamps the length limit cannot be enforced.
+                raise ProcessingError("decode_failed", "Video không có timestamp hợp lệ")
             if times[-1] / 1000 > max_seconds:
                 raise ProcessingError("clip_too_long", f"Video dài hơn {max_seconds:g}s")
     finally:
@@ -57,7 +65,7 @@ def read_frames(
         raise ProcessingError("decode_failed", "Video không có khung hình")
     step = times[-1] - times[-2] if len(times) > 1 else 0.0
     duration = (times[-1] + step) / 1000
-    if duration > max_seconds:
+    if duration > max_seconds + 1e-3:  # tolerance: float error on exactly-4 s clips
         raise ProcessingError("clip_too_long", f"Video dài hơn {max_seconds:g}s")
 
     count = max(1, min(max_frames, round(duration * fps)))
@@ -79,6 +87,8 @@ def read_frames(
                 ok, bgr = capture.retrieve()
                 if not ok:
                     raise ProcessingError("decode_failed", "Không giải mã được khung hình")
+                if max(bgr.shape[:2]) > max_side:  # header may lie about the size
+                    raise ProcessingError("clip_too_large", f"Video lớn hơn {max_side}px")
                 rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
                 decoded[index] = Image.fromarray(rgb).convert("RGBA")
             index += 1

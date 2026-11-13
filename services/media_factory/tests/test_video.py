@@ -92,6 +92,55 @@ class ReadFramesTest(unittest.TestCase):
         self.assertEqual(len(frames), 10)
 
 
+class ZeroTimestampCapture(FakeCapture):
+    TIMES = [0] * 30
+
+
+class EndlessFrozenCapture(FakeCapture):
+    def grab(self) -> bool:
+        return True
+
+    def get(self, prop: int) -> float:
+        return 8.0 if prop in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT) else 0.0
+
+
+class LyingHeaderCapture(FakeCapture):
+    """Header says 8x8 but decoded frames are 64x64."""
+
+    TIMES = [0, 40, 80, 120]
+
+    def retrieve(self) -> tuple[bool, np.ndarray]:
+        return True, np.full((64, 64, 3), 255, np.uint8)
+
+
+class BoundaryTest(unittest.TestCase):
+    def test_exactly_four_second_clip_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            for src_fps in (24, 60):
+                clip = write_clip(Path(tmp), 4 * src_fps, fps=src_fps)
+                self.assertEqual(len(read_frames(clip, fps=12, max_frames=48)), 48)
+
+    def test_rejects_unreliable_zero_timestamps(self) -> None:
+        patch = "media_factory.infrastructure.video.cv2.VideoCapture"
+        with mock.patch(patch, ZeroTimestampCapture), self.assertRaises(ProcessingError) as ctx:
+            read_frames(Path("x.mp4"), fps=10, max_frames=48)
+        self.assertEqual(ctx.exception.code, "decode_failed")
+
+
+class HostileInputTest(unittest.TestCase):
+    def read(self, capture: type, **kw: int) -> ProcessingError:
+        with mock.patch("media_factory.infrastructure.video.cv2.VideoCapture", capture):
+            with self.assertRaises(ProcessingError) as ctx:
+                read_frames(Path("x.mp4"), fps=10, max_frames=48, **kw)
+        return ctx.exception
+
+    def test_endless_frozen_stream_terminates(self) -> None:
+        self.assertIn(self.read(EndlessFrozenCapture).code, {"decode_failed", "clip_too_long"})
+
+    def test_rejects_decoded_frame_larger_than_header(self) -> None:
+        self.assertEqual(self.read(LyingHeaderCapture, max_side=32).code, "clip_too_large")
+
+
 class EncodeAnimatedWebpTest(unittest.TestCase):
     def test_animated_webp_has_all_frames_and_alpha(self) -> None:
         frames = []
