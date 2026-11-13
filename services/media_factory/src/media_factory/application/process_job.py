@@ -32,6 +32,19 @@ class ProcessingError(Exception):
     """Coded, manager-facing failure. `code` is stable for the machine protocol."""
 
     def __init__(self, code: str, message: str) -> None:
+        """Khởi tạo lỗi có mã ổn định cho giao thức xử lý media.
+
+        Algorithm:
+            Khởi tạo Exception bằng message, rồi lưu code và message cho bên gọi.
+
+        Techniques:
+            - Custom exception với structured error code.
+
+        Keywords: custom exception, structured error, error code
+
+        References:
+            - https://docs.python.org/3/tutorial/errors.html#user-defined-exceptions
+        """
         super().__init__(message)
         self.code = code
         self.message = message

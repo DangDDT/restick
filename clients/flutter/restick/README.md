@@ -129,7 +129,8 @@ IconButton(
       builder: (context) => SizedBox(
         height: 360,
         child: StickerPicker(
-          onStickerSelected: (File stickerFile, StickerAsset asset) {
+          onStickerSelected: (StickerAsset asset) {
+            final File stickerFile = asset.animatedFile ?? asset.file;
             print('Selected sticker file: ${stickerFile.path}');
             print('Emoji hint: ${asset.emojiHint}');
             Navigator.pop(context);
@@ -140,6 +141,17 @@ IconButton(
   },
 );
 ```
+
+The picker still emits one `StickerAsset` per sticker. `file` is always the static
+fallback; `animatedFile` is present only when the downloaded pack includes an enabled
+animated variant. Use `asset.animatedFile ?? asset.file` when your host application
+supports sending animated WebP. The grid uses the static thumbnail when the OS
+requests reduced motion. Missing local animation files fall back to the static file.
+
+Upgrade the SDK before enabling animated packs on the server: older clients hash
+only static files and will reject those bundles. Static-only packs keep their old
+checksum. New clients include each static file followed by its animation in the
+aggregate checksum; checksum checks are never bypassed.
 
 ### 2. Sticker Marketplace (`StickerMarketplace`)
 Open the full marketplace screen for users to discover and download new packs:

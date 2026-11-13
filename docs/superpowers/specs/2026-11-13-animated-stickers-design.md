@@ -1,6 +1,6 @@
 # Sticker động (animated stickers)
 
-Ngày: 2026-11-13. Trạng thái: bản nháp chờ duyệt. Hệ thống chưa chạy thật, không cần di trú dữ liệu.
+Ngày: 2026-11-13. Trạng thái: đã duyệt, đang triển khai. Hệ thống chưa chạy thật, không cần di trú dữ liệu.
 
 ## Mục tiêu
 1. Một sticker tĩnh trong pack có thể có thêm **biến thể động** mượt (~12 fps, vòng lặp 2 đến 4 giây) để dùng chính trong app Flutter.
@@ -79,7 +79,7 @@ Là một job trong `processing_jobs` với `kind` trong `request_json` (mặc �
 5. `verifyWebP` với file động chỉ dùng `DecodeConfig` (kiểm 512x512); không gọi `Decode`. Nội dung khung do `media_factory` báo trong kết quả.
 
 ## `pack.json` và checksum
-Mỗi sticker thêm `animated` tùy chọn: `{file, frames, duration_ms, width, height}` (file trong `animated/`). Checksum tổng: với mỗi sticker theo thứ tự manifest, thêm byte bản tĩnh, rồi byte bản động **chỉ khi có**. Pack tĩnh cũ giữ nguyên checksum. Client cũ bỏ qua trường lạ.
+Mỗi sticker thêm `animated` tùy chọn: `{file, frames, duration_ms, width, height}` (file trong `animated/`). Checksum tổng: với mỗi sticker theo thứ tự manifest, thêm byte bản tĩnh, rồi byte bản động **chỉ khi có**. Pack tĩnh cũ giữ nguyên checksum. Client mới phải nâng cấp bộ kiểm tra ZIP/checksum trước khi tải pack động: client cũ chỉ hash ảnh tĩnh nên sẽ từ chối bundle động vì checksum không khớp, dù bỏ qua được trường JSON mới. Không được bỏ qua kiểm tra checksum để giữ tương thích. Rollout hiện tại yêu cầu nâng cấp Flutter SDK cùng tính năng; phục vụ bundle động cho client chưa nâng cấp không nằm trong phạm vi.
 
 ## API quản trị (chỉ owner)
 - `POST /admin/packs/{id}/stickers/{index}/animation`: multipart clip + `motion_text`, trả 202.
@@ -98,7 +98,7 @@ API công khai giữ nguyên hình dạng; bundle chỉ lớn hơn. Quyền theo
 - `StickerAsset` thêm `animatedFile` tùy chọn; `file` vẫn là bản tĩnh để app chủ gửi sticker như cũ.
 - `getStickers` đọc `animated` trong `pack.json`; pack cũ chạy bình thường.
 - Tile phát bản động bằng `Image.file`; dùng thumb tĩnh khi hệ điều hành bật giảm chuyển động (`MediaQuery.disableAnimationsOf`). `GridView.builder` chỉ dựng ô đang hiện.
-- Rủi ro bộ nhớ (ước tính khoảng 2.4 MB mỗi sticker ở `cacheWidth: 128`): đo trên máy thật với pack 20 sticker động trước khi kết luận.
+- Đã thử native macOS debug với 20 đường dẫn animated WebP riêng (clip lotus 36 khung, q80, 512 px), lưới 5 cột, tile `cacheWidth/cacheHeight: 128`: ảnh chụp cách nhau 250 ms khác pixel; giảm chuyển động hiển thị ảnh tĩnh. RSS từ 241.5 MiB lên 314.4 MiB (+72.9 MiB); image cache 20 MiB; sau bật giảm chuyển động RSS 310.5 MiB. Đây là phép đo cả tiến trình debug, không phải bộ nhớ riêng mỗi sticker hay benchmark mobile/release; chưa kết luận FPS/độ mượt khi máy chủ đang chịu tải cao.
 
 ## Kiểm thử
 - media_factory (unittest, như các test hiện có): clip tổng hợp từ `cv2.VideoWriter`; hộp bao chung; thang giảm chất lượng; các mã lỗi; hồi quy toàn bộ test tĩnh.
@@ -120,7 +120,7 @@ API công khai giữ nguyên hình dạng; bundle chỉ lớn hơn. Quyền theo
 - Chỉ đo trên một clip lotus nền trắng; công cụ video khác có thể cho nền bẩn hoặc chuyển động mạnh hơn nên dung lượng và độ sạch viền khác.
 - `cv2.VideoCapture` đọc H.264 trong môi trường chạy chưa xác nhận (phương án dự phòng PyAV).
 - `webp.Decode` trên WebP tĩnh cho `on-white.png` chưa thử.
-- Hiệu năng phát nhiều animated WebP trong lưới Flutter chưa đo; chưa thử Flutter thật.
+- Đã xác nhận phát/giảm chuyển động trên macOS debug với 20 sticker; iOS/Android, profile/release và cuộn lưới trên thiết bị di động chưa đo.
 - Giới hạn WhatsApp 500 KB theo trí nhớ, chưa tra nguồn (chỉ ảnh hưởng hướng mở rộng).
 - Điều khoản thương mại và watermark của gói miễn phí các công cụ video do operator tự kiểm tra.
 - Mô hình video có thể làm méo nhân vật; bước xem trước và toggle là chốt chặn.

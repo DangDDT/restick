@@ -121,7 +121,9 @@ class _ExampleHomeState extends State<ExampleHome> with WidgetsBindingObserver {
 
   void _onStickerSelected(StickerAsset asset) {
     setState(() {
-      _selected = asset.file;
+      _selected = MediaQuery.disableAnimationsOf(context)
+          ? asset.file
+          : asset.animatedFile ?? asset.file;
     });
   }
 }

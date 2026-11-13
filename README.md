@@ -294,9 +294,39 @@ cd services/api && go run ./cmd/restick
 `go run ./cmd/restick` defaults to `serve`; use `go run ./cmd/restick healthcheck`
 to probe the running instance.
 
-The Flutter SDK is unchanged and still reads the same summary/bundle/tombstone
-contract. Create a read-only client key in `/keys` and pass it to the SDK; the
-raw key is shown once.
+The Flutter SDK keeps the summary/bundle/tombstone endpoints. Static-only packs
+retain their existing checksum. Upgrade the SDK before enabling animated variants:
+older clients hash static files only and reject animated bundles at verification.
+Create a read-only client key in `/keys` and pass it to the SDK; the raw key is
+shown once.
+
+## Animated sticker workflow
+
+Keep publishing static sheets as before. In a processed pack, choose individual
+stickers for animation: export the white-background reference and compiled motion
+prompt, generate a video externally, and upload one clip per sticker. The original
+static file remains the same sticker's fallback; an animation never adds a duplicate
+entry to the pack.
+
+Draft clips are processed by `media_factory.interfaces.clip_job`. The default output
+is transparent animated WebP at 512×512, 12 fps, quality 75, method 4 and alpha quality
+100. Uploads are limited to 20 MiB; videos must be at most four seconds and 1920 px
+per side. If necessary, encoding reduces quality and then frame rate to fit 512,000
+bytes; unencodable clips fail rather than publishing partial results. Complex clips
+may therefore use fewer than 12 fps. Flat white backgrounds and a fixed camera give
+the existing background-removal pipeline the cleanest input.
+
+Preview each result, then use **Dùng bản động** to choose the published variant.
+Toggle changes and clip uploads are drafts until **Phát hành bản mới** publishes
+the whole batch as a new immutable version. Turning an animation off keeps the
+static sticker; it does not delete a previously published version.
+
+Clients download a ZIP and extract it after integrity validation. ZIP members use
+`Store`: WebP is already compressed, and Deflate provided negligible savings in
+the measured sample. The aggregate SHA256 covers each sticker's static bytes
+followed immediately by its enabled animated bytes, in manifest order; it excludes
+thumbnails and the ZIP container. Updated Flutter clients play the animated file
+and show the static thumbnail when the OS requests reduced motion.
 
 ## Image publishing
 
