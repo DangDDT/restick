@@ -637,6 +637,9 @@ function PackDetailView({ id, initialJobId }: { id: string; initialJobId: string
                     <div className="flex flex-wrap items-center gap-1 pt-0.5">
                       {sticker.animated && <Stamp tone="ok">{t("animateCommitted")}</Stamp>}
                       {sticker.animation && <StatusPill status={sticker.animation.status} />}
+                      {sticker.animated && sticker.animation && !sticker.animation.use_animated && (
+                        <Stamp tone="warn">{t("animatePendingStatic")}</Stamp>
+                      )}
                     </div>
                   )}
                   <div className="flex flex-wrap items-center gap-x-3">

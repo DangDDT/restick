@@ -39,9 +39,10 @@ import type {
 } from "@/lib/types";
 
 const POLL_MS = 2500;
-// The worker has no progress feed; stop watching a stuck draft instead of
-// polling forever. Reloading picks the durable state back up.
-const POLL_LIMIT_MS = 120_000;
+// Same window as the pack detail job poll: the server-side process timeout
+// (RESTICK_PROCESS_TIMEOUT = 300 s) plus a little margin. Reloading picks a
+// timed-out draft back up from its durable state.
+const POLL_LIMIT_MS = 330_000;
 const MAX_CLIP_BYTES = 20 * 1024 * 1024;
 
 function uploadError(xhr: XMLHttpRequest): ApiError {
@@ -73,6 +74,7 @@ function AnimateView({ id, stickerIndex }: { id: string; stickerIndex: number })
   const [pollExpired, setPollExpired] = useState(false);
   const [pollCycle, setPollCycle] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const pack = useQuery({
     queryKey: ["admin-pack", id],
@@ -139,12 +141,19 @@ function AnimateView({ id, stickerIndex }: { id: string; stickerIndex: number })
     }
   }
 
+  function resetFileInput() {
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
   function pickFile(next: File | null) {
     setError(null);
     setMessage(null);
     if (next && next.size > MAX_CLIP_BYTES) {
       setFile(null);
       setError(t("animateClipTooLarge"));
+      // Clearing the input lets the operator re-pick the same file (and see the
+      // same rejection) instead of a silent no-op change event.
+      resetFileInput();
       return;
     }
     setFile(next);
@@ -180,6 +189,7 @@ function AnimateView({ id, stickerIndex }: { id: string; stickerIndex: number })
       xhrRef.current = null;
       if (xhr.status >= 200 && xhr.status < 300) {
         setFile(null);
+        resetFileInput();
         setMessage(t("animateUploadDone"));
         setPollCycle((cycle) => cycle + 1);
         void qc.invalidateQueries({ queryKey: ["pack-animations", id] });
@@ -248,6 +258,14 @@ function AnimateView({ id, stickerIndex }: { id: string; stickerIndex: number })
       ? `${previewURL}?v=${encodeURIComponent(animation.animated_checksum_sha256 ?? "")}`
       : sticker.animated?.object_url ?? null;
   const committed = Boolean(sticker.animated);
+  // The caption describes the preview actually shown: the committed bytes when
+  // the draft matches them (or no ready draft exists), otherwise the new draft.
+  const previewIsCommitted =
+    committed &&
+    (!animation ||
+      animation.status !== "ready" ||
+      animation.animated_checksum_sha256 === sticker.animated?.checksum_sha256);
+  const pendingStatic = committed && Boolean(animation && animation.status === "ready" && !animation.use_animated);
   const active = animation?.status === "queued" || animation?.status === "running";
   const pollStopped = pollExpired && active;
 
@@ -309,8 +327,12 @@ function AnimateView({ id, stickerIndex }: { id: string; stickerIndex: number })
             )}
             <figcaption className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-2">
               {t("animateAnimated")}
-              {animation?.status === "ready" && <Stamp tone="active">{t("animateDraftBadge")}</Stamp>}
-              {committed && <Stamp tone="ok">{t("animateCommitted")}</Stamp>}
+              {previewIsCommitted ? (
+                <Stamp tone="ok">{t("animateCommitted")}</Stamp>
+              ) : animation?.status === "ready" ? (
+                <Stamp tone="active">{t("animateDraftBadge")}</Stamp>
+              ) : null}
+              {pendingStatic && <Stamp tone="warn">{t("animatePendingStatic")}</Stamp>}
             </figcaption>
           </figure>
         </div>
@@ -343,13 +365,13 @@ function AnimateView({ id, stickerIndex }: { id: string; stickerIndex: number })
               )}
               {animation.fps !== undefined && (
                 <>
-                  <dt className="text-ink-3">fps</dt>
+                  <dt className="text-ink-3">{t("animateFps")}</dt>
                   <dd className="num text-ink">{animation.fps}</dd>
                 </>
               )}
               {animation.duration_ms !== undefined && (
                 <>
-                  <dt className="text-ink-3">ms</dt>
+                  <dt className="text-ink-3">{t("animateDurationMs")}</dt>
                   <dd className="num text-ink">{animation.duration_ms}</dd>
                 </>
               )}
@@ -497,6 +519,7 @@ function AnimateView({ id, stickerIndex }: { id: string; stickerIndex: number })
         <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <Field label={t("animateClip")}>
             <input
+              ref={fileInputRef}
               type="file"
               accept="video/mp4,video/webm,video/quicktime"
               onChange={(event) => pickFile(event.target.files?.[0] ?? null)}

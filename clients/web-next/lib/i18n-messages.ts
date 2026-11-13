@@ -296,7 +296,6 @@ export const vi = {
   animateTitle: "Sticker động",
   animateSubtitle: "Soạn prompt chuyển động, tạo clip ở công cụ ngoài rồi tải clip về đây.",
   animateMissingParams: "URL thiếu tham số id của pack hoặc index sticker.",
-  animateSticker: "Sticker",
   animateMotion: "Mô tả chuyển động",
   animateMotionHint:
     "Mô tả ngắn điều sticker làm, ví dụ “vẫy tay chào, tai rung nhẹ”. Prompt biên dịch bằng tiếng Anh.",
@@ -310,7 +309,7 @@ export const vi = {
   animateEmojiHint: "Gợi ý emoji",
   animateReference: "Ảnh tham chiếu nền trắng",
   animateReferenceHint:
-    "Ảnh PNG nền trắng để đính kèm vào công cụ tạo video. Ảnh chỉ tải khi bạn tự mở hoặc sao chép.",
+    "Ảnh PNG nền trắng do Restick tạo từ sticker tĩnh và được tải từ chính máy chủ này khi mục này hiện ra. Restick không tự gửi ảnh hay prompt sang công cụ ngoài; bạn tự đính kèm và tự tải clip về.",
   animateCopyReference: "Sao chép ảnh",
   animateReferenceCopied: "Đã sao chép ảnh tham chiếu.",
   animateReferenceCopyFailed: "Trình duyệt không sao chép được ảnh. Dùng nút tải ảnh để lưu về máy.",
@@ -336,6 +335,9 @@ export const vi = {
   animateAnimated: "Bản động",
   animateCommitted: "Đã phát hành",
   animateFrameInfo: "Frame",
+  animateFps: "FPS",
+  animateDurationMs: "Thời lượng (ms)",
+  animatePendingStatic: "Chờ về tĩnh",
   animatePollingStopped:
     "Đã ngừng theo dõi animation. Tải lại trang để xem trạng thái mới nhất; job vẫn chạy trên máy chủ.",
   animateUnpublished: "Biến thể chờ phát hành",

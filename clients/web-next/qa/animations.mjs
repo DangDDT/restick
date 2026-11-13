@@ -63,9 +63,25 @@ await scenario("default");
     if ((await count.innerText()).trim() !== "2") throw new Error(`count=${await count.innerText()}`);
     if ((await page.locator("[data-testid=animate-button-1]").count()) !== 1) throw new Error("animate link missing");
     if ((await page.locator("[data-testid=publish-animations]").count()) !== 1) throw new Error("publish button missing");
+    const revertCard = page.locator("li").filter({ hasText: "03-cảm-ơn.png" }).first();
+    const revertText = await revertCard.innerText();
+    if (!revertText.includes("Đã phát hành") || !revertText.includes("Chờ về tĩnh")) {
+      throw new Error("pending revert not shown on card");
+    }
+  });
+
+  await step("animate: an already-published checksum is not labelled a draft", async () => {
+    await page.goto(`${BASE}/packs/animate?id=pk-ready-1&index=0`);
+    await page.waitForLoadState("networkidle");
+    await page.waitForSelector("figcaption");
+    const animated = (await page.locator("figcaption").allInnerTexts()).find((text) => text.includes("Bản động"));
+    if (!animated?.includes("Đã phát hành")) throw new Error(`caption=${animated}`);
+    if (animated.includes("Có animation nháp")) throw new Error("equal checksum labelled draft");
   });
 
   await step("detail: per-sticker animate link opens the animate page", async () => {
+    await page.goto(`${BASE}/packs/detail?id=pk-ready-1`);
+    await page.waitForLoadState("networkidle");
     await page.locator("[data-testid=animate-button-1]").click();
     await page.waitForURL("**/packs/animate?id=pk-ready-1&index=1");
     await page.waitForSelector("#main h1");
@@ -106,6 +122,16 @@ await scenario("default");
     await page.getByText("Đã sao chép ảnh tham chiếu.", { exact: true }).waitFor({ timeout: 5000 });
   });
 
+  await step("animate: oversize clip is rejected and the input can retry", async () => {
+    const input = page.locator("input[type=file]");
+    await input.setInputFiles({ name: "too-big.mp4", mimeType: "video/mp4", buffer: Buffer.alloc(21 * 1024 * 1024, 1) });
+    await page.getByText(/Clip vượt quá 20 MiB/).first().waitFor({ timeout: 5000 });
+    if ((await input.inputValue()) !== "") throw new Error("input value not reset");
+    if (!(await page.locator("[data-testid=animate-upload] button").isDisabled())) {
+      throw new Error("upload enabled after rejection");
+    }
+  });
+
   await step("animate: real clip upload reaches ready through polling", async () => {
     await page.locator("input[type=file]").setInputFiles({ name: "clip.mp4", mimeType: "video/mp4", buffer: clip });
     const uploaded = page.waitForResponse(
@@ -115,6 +141,29 @@ await scenario("default");
     await page.locator("[data-testid=animate-upload] button").click();
     const response = await uploaded;
     if (response.status() !== 202) throw new Error(`upload=${response.status()}`);
+    await page.waitForFunction(
+      () => {
+        const toggle = document.querySelector("[data-testid=animate-toggle] [role=switch]");
+        return toggle instanceof HTMLButtonElement && !toggle.disabled;
+      },
+      undefined,
+      { timeout: 20000 },
+    );
+    if ((await page.locator("input[type=file]").inputValue()) !== "") {
+      throw new Error("input value retained after upload");
+    }
+  });
+
+  await step("animate: the same clip can be selected again", async () => {
+    await page.locator("input[type=file]").setInputFiles({ name: "clip.mp4", mimeType: "video/mp4", buffer: clip });
+    const uploaded = page.waitForResponse(
+      (res) => res.request().method() === "POST" && /\/stickers\/1\/animation$/.test(new URL(res.url()).pathname),
+      { timeout: 10000 },
+    );
+    await page.locator("[data-testid=animate-upload] button").click();
+    const response = await uploaded;
+    if (response.status() !== 202) throw new Error(`reupload=${response.status()}`);
+    await page.getByText(/Đang chờ|Đang chạy/).first().waitFor({ timeout: 5000 });
     await page.waitForFunction(
       () => {
         const toggle = document.querySelector("[data-testid=animate-toggle] [role=switch]");
@@ -168,6 +217,17 @@ await scenario("default");
       { timeout: 20000 },
     );
     if ((await dialog.count()) !== 0) throw new Error("publish dialog still open");
+  });
+
+  await step("animate: after publish the equal draft reads as published, not a draft", async () => {
+    await page.goto(`${BASE}/packs/animate?id=pk-ready-1&index=1`);
+    await page.waitForLoadState("networkidle");
+    await page.waitForSelector("figcaption");
+    const animated = (await page.locator("figcaption").allInnerTexts()).find((text) => text.includes("Bản động"));
+    if (!animated?.includes("Đã phát hành")) throw new Error(`caption=${animated}`);
+    if (animated.includes("Có animation nháp")) throw new Error("published draft still labelled draft");
+    await page.goto(`${BASE}/packs/detail?id=pk-ready-1`);
+    await page.waitForLoadState("networkidle");
   });
 
   await step("detail: publishing again surfaces the no_changes error inline", async () => {
