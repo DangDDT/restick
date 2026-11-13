@@ -4,13 +4,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from img_tool.application.process_job import ProcessingError, process_job
+from media_factory.application.process_job import ProcessingError, process_job
 
 MAX_DIAGNOSTIC_CHARS: int = 400
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="img_tool.interfaces.machine_job")
+    parser = argparse.ArgumentParser(prog="media_factory.interfaces.machine_job")
     parser.add_argument("--request", required=True, type=Path)
     parser.add_argument("--result", required=True, type=Path)
     args = parser.parse_args(argv)

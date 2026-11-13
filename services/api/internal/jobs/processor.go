@@ -27,14 +27,14 @@ const (
 	// §7.1. Nothing from an HTTP request ever becomes the executable or an argv
 	// element: only server-generated job paths are appended.
 	pythonExecutable = "python"
-	machineJobModule = "img_tool.interfaces.machine_job"
+	machineJobModule = "media_factory.interfaces.machine_job"
 
 	requestSchema = "restick.job.v1"
 	resultSchema  = "restick.job-result.v1"
 	maxStderrSize = 4 << 10
 )
 
-// PythonProcessor runs img_tool.interfaces.machine_job without a shell.
+// PythonProcessor runs media_factory.interfaces.machine_job without a shell.
 type PythonProcessor struct{}
 
 // Process writes the request document, runs the child and reads the bounded

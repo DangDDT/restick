@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from img_tool.application.process_job import ProcessingError, process_job
+from media_factory.application.process_job import ProcessingError, process_job
 
 QUADRANT_COLORS: list[tuple[int, int, int]] = [
     (220, 40, 40),
@@ -260,7 +260,7 @@ class MachineJobCliTest(ProcessJobTestCase):
             [
                 sys.executable,
                 "-m",
-                "img_tool.interfaces.machine_job",
+                "media_factory.interfaces.machine_job",
                 "--request",
                 str(self.request),
                 "--result",

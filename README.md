@@ -97,7 +97,7 @@ The design is in
 Dockerfile                 multi-stage Node 24 web + Go 1.26 + Python 3.12 runtime
 docker-compose.yml         the one application service
 services/api               Go server, SQLite storage, auth, packs, jobs, assets
-services/img_tool          Python sheet slicer, local CLI and machine job
+services/media_factory          Python sheet slicer, local CLI and machine job
 clients/web-next           Next.js static studio export (built into the image)
 clients/flutter/restick    Flutter SDK (unchanged read contract)
 contracts/openapi/v1.yaml  single HTTP source of truth
@@ -255,7 +255,7 @@ storage-only tests do not need it.
 
 The factory round-trip integration test (`internal/integration`) runs the real
 Python machine job; `python` on `PATH` must resolve to an interpreter with
-`services/img_tool` installed (the CI `Go API` job installs Python 3.12 and the
+`services/media_factory` installed (the CI `Go API` job installs Python 3.12 and the
 editable package beside the Go toolchain for exactly this reason).
 
 Run these commands from the repository root. The virtual environment keeps the
@@ -264,7 +264,7 @@ same real processor available to both Go integration tests and Python tests:
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -e services/img_tool
+pip install -e services/media_factory
 
 # Static studio export (required by ./cmd/restick tests)
 (cd clients/web-next && npm ci && npm run build)   # writes out/
@@ -276,8 +276,8 @@ go -C services/api test ./...
 go -C services/api test -count=1 -run '^TestFactoryRoundTrip$' ./internal/integration
 
 # Python core, local CLI and machine job
-python -m unittest discover -s services/img_tool/tests -v
-img_tool --help
+python -m unittest discover -s services/media_factory/tests -v
+media_factory --help
 ```
 
 Run the server locally with a real data dir and secret:

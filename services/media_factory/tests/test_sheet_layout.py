@@ -4,7 +4,7 @@ import unittest
 
 from PIL import Image
 
-from img_tool.infrastructure.layout import (
+from media_factory.infrastructure.layout import (
     CANVAS_SIZE,
     assign_boxes,
     fit_in_square,

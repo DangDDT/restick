@@ -4,7 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 
-from img_tool.domain.sticker import Sticker
+from media_factory.domain.sticker import Sticker
 
 SCHEMA: str = "restick.pack.v1"
 

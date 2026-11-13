@@ -9,10 +9,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from img_tool.infrastructure.cutout import execute_cutout, find_sticker_boxes
-from img_tool.infrastructure.layout import MAX_SHEET_SIDE, assign_boxes, make_thumb
-from img_tool.infrastructure.outline import MAX_OUTLINE_WIDTH, compose_sticker
-from img_tool.infrastructure.webp_export import encode_webp
+from media_factory.infrastructure.cutout import execute_cutout, find_sticker_boxes
+from media_factory.infrastructure.layout import MAX_SHEET_SIDE, assign_boxes, make_thumb
+from media_factory.infrastructure.outline import MAX_OUTLINE_WIDTH, compose_sticker
+from media_factory.infrastructure.webp_export import encode_webp
 
 REQUEST_SCHEMA: str = "restick.job.v1"
 RESULT_SCHEMA: str = "restick.job-result.v1"

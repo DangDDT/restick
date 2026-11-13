@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import typer
 
-from img_tool.application.process_sheet import execute_process
+from media_factory.application.process_sheet import execute_process
 
 app: typer.Typer = typer.Typer(
     help="Restick image pipeline. Does not generate images from keywords.",

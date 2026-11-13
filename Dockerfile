@@ -36,9 +36,9 @@ RUN apt-get update \
     && chown 10001:10001 /data
 
 WORKDIR /app
-COPY services/img_tool/pyproject.toml /app/img_tool/pyproject.toml
-COPY services/img_tool/src /app/img_tool/src
-RUN pip install /app/img_tool
+COPY services/media_factory/pyproject.toml /app/media_factory/pyproject.toml
+COPY services/media_factory/src /app/media_factory/src
+RUN pip install /app/media_factory
 COPY --from=api /out/restick /usr/local/bin/restick
 COPY --from=web /src/clients/web-next/out /app/web
 COPY contracts/openapi/v1.yaml /app/openapi/v1.yaml

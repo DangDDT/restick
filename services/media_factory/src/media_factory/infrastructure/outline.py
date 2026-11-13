@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from img_tool.infrastructure.layout import CANVAS_SIZE, fit_in_square
+from media_factory.infrastructure.layout import CANVAS_SIZE, fit_in_square
 
 MAX_OUTLINE_WIDTH: int = 16
 # Slack around the sticker so a dilated outline never touches the canvas edge.

@@ -4,7 +4,7 @@ import unittest
 
 from PIL import Image
 
-from img_tool.infrastructure.outline import compose_sticker
+from media_factory.infrastructure.outline import compose_sticker
 
 RED: tuple[int, int, int, int] = (220, 30, 30, 255)
 

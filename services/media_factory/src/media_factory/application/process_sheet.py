@@ -5,10 +5,10 @@ from pathlib import Path
 
 from PIL import Image
 
-from img_tool.domain.pack import Pack
-from img_tool.domain.sticker import Sticker
-from img_tool.infrastructure.cutout import execute_cutout, find_sticker_boxes
-from img_tool.infrastructure.layout import (
+from media_factory.domain.pack import Pack
+from media_factory.domain.sticker import Sticker
+from media_factory.infrastructure.cutout import execute_cutout, find_sticker_boxes
+from media_factory.infrastructure.layout import (
     filter_outlier_boxes,
     fit_on_canvas,
     load_image,
@@ -16,7 +16,7 @@ from img_tool.infrastructure.layout import (
     sort_boxes,
     upscale_source,
 )
-from img_tool.infrastructure.webp_export import encode_webp
+from media_factory.infrastructure.webp_export import encode_webp
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
