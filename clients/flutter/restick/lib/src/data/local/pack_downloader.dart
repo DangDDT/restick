@@ -125,12 +125,14 @@ class PackDownloader {
 /// segments. Directory entries may keep one trailing slash.
 bool _isSafePath(String value, {bool directory = false}) {
   if (value.isEmpty ||
-      value.contains("\u0000") ||
+      value.codeUnits.contains(0) ||
+      // A raw string cannot express a lone backslash.
+      // ignore: use_raw_strings
       value.contains("\\") ||
       value.startsWith("/")) {
     return false;
   }
-  if (RegExp(r"^[A-Za-z]:").hasMatch(value)) {
+  if (RegExp("^[A-Za-z]:").hasMatch(value)) {
     return false;
   }
   final List<String> segments = value.split("/");

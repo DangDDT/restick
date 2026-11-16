@@ -1,4 +1,4 @@
-import "package:flutter/material.dart";
+import "package:material_ui/material_ui.dart";
 import "package:restick/src/presentation/scope/restick_scope.dart";
 
 class PackThumbnail extends StatelessWidget {

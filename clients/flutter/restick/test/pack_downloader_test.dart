@@ -270,7 +270,7 @@ void main() {
   test("rejects windows separator member", () async {
     await _expectRejected(
       (Directory root) => _validZip(<_ZipEntry>[
-        _ZipEntry("thumbs\\evil.webp", _stickerBytes),
+        _ZipEntry(r"thumbs\evil.webp", _stickerBytes),
       ]),
     );
   });
