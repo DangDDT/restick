@@ -21,6 +21,18 @@ already installs this package; there is no separate media_factory container.
 The cutout engine is still selected with the legacy env var `IMG_TOOL_ENGINE`
 (name kept unchanged for compatibility).
 
+The default `simple` engine expects a near-white background. Both static sheets
+and video frames share the same cutout and outline processing: the ink-halo
+fallback fills external contours, preserving enclosed white details (such as
+eyes and bellies) instead of making them transparent. Generated cutout edges
+use a narrow antialiased transition; outlines use 2× supersampled dilation and
+coverage-aware compositing. Existing input alpha, including intentional holes
+and translucent interiors, is preserved rather than filled or blurred.
+
+These changes apply when media is processed again; existing published WebP files
+are not rewritten automatically. Reprocess from the original sheet or clip to
+recover pixels already discarded by an older cutout.
+
 ## Local CLI
 
 ```bash

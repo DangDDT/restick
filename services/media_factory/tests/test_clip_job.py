@@ -88,6 +88,25 @@ class ClipJobTest(unittest.TestCase):
         with Image.open(self.output / "animated" / "003.webp") as webp:
             self.assertEqual(animation["frames"], webp.n_frames)
 
+    def test_clip_preserves_white_interior_in_every_encoded_frame(self) -> None:
+        clip = self.root / "white-interior.mp4"
+        writer = cv2.VideoWriter(str(clip), cv2.VideoWriter_fourcc(*"mp4v"), 12, (512, 256))
+        if not writer.isOpened():
+            self.skipTest("mp4v VideoWriter unavailable")
+        for shift in range(6):
+            frame = np.full((256, 512, 3), 255, np.uint8)
+            for y in range(8, 256, 16):
+                for x in range(8, 512, 16):
+                    frame[y:y + 2, x:x + 2] = 240
+            cv2.circle(frame, (256 + shift, 128), 70, (0, 0, 0), 8)
+            writer.write(frame)
+        writer.release()
+        self.run_job(clip)
+        with Image.open(self.output / "animated" / "003.webp") as webp:
+            for index in range(webp.n_frames):
+                webp.seek(index)
+                self.assertEqual(webp.convert("RGBA").getpixel((256, 256))[3], 255)
+
     def test_shared_box_is_union(self) -> None:
         a = np.zeros((20, 20), np.uint8)
         b = np.zeros((20, 20), np.uint8)

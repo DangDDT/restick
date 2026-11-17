@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from PIL import Image
+import numpy as np
+from PIL import Image, ImageDraw
 
 from media_factory.infrastructure.outline import compose_sticker
 
@@ -56,6 +57,14 @@ class ComposeStickerTest(unittest.TestCase):
         canvas = compose_sticker(Image.new("RGBA", (64, 64), (0, 0, 255, 128)), 4, "#FFFFFF")
         self.assertAlmostEqual(canvas.getpixel((256, 256))[3], 128, delta=3)
         self.assertEqual(canvas.getpixel((5, 256)), (255, 255, 255, 255))
+
+    def test_round_outline_has_antialiased_outer_edge(self) -> None:
+        image = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((100, 100, 412, 412), fill=RED)
+        canvas = compose_sticker(image, 8, "#00FF00")
+        rgba = np.array(canvas)
+        outer = (rgba[:, :, 0] == 0) & (rgba[:, :, 1] == 255)
+        self.assertTrue(np.any(outer & (rgba[:, :, 3] > 0) & (rgba[:, :, 3] < 255)))
 
     def test_rejects_invalid_color(self) -> None:
         with self.assertRaises(ValueError):

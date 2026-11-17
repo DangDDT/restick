@@ -93,7 +93,8 @@ def _remove_background(image: Image.Image) -> Image.Image:
         1. Nếu ảnh đã có alpha (hơn 2% pixel trong suốt) thì giữ nguyên.
         2. Tính mặt nạ bằng exterior flood fill trên nền gần trắng.
         3. Nếu mặt nạ yếu (quá ít/nhỏ thành phần) thì chuyển sang ink-halo fallback.
-        4. Ghi alpha, xóa RGB của pixel trong suốt hoàn toàn.
+        4. Làm mềm biên alpha sinh ra bằng Gaussian 3x3; giữ nguyên alpha có sẵn.
+        5. Ghi alpha, xóa RGB của pixel trong suốt hoàn toàn.
 
     Techniques:
         - Exterior flood fill
@@ -113,6 +114,7 @@ def _remove_background(image: Image.Image) -> Image.Image:
     alpha = _exterior_flood_alpha(rgba)
     if _is_weak_mask(alpha):
         alpha = _ink_halo_alpha(rgba)
+    alpha = cv2.GaussianBlur(alpha, (3, 3), 0.7)
     rgba[:, :, 3] = alpha
     rgba[alpha < 1, :3] = 0
     return Image.fromarray(rgba, "RGBA")
@@ -209,6 +211,7 @@ def _ink_halo_alpha(rgba: np.ndarray) -> np.ndarray:
         3. Gộp mảnh nhỏ gần thành phần lớn (_merge_nearby_ink).
         4. Với mỗi thành phần lớn tính distance transform; mỗi pixel thuộc thành phần gần nhất.
         5. Giữ pixel trong bán kính halo và gần chủ sở hữu hơn thành phần thứ hai.
+        6. Tô kín contour ngoài để vùng trắng trong nhân vật không bị thủng.
 
     Techniques:
         - Distance transform (L2)
@@ -260,7 +263,10 @@ def _ink_halo_alpha(rgba: np.ndarray) -> np.ndarray:
         between = (~closer) & (dist < second)
         second[between] = dist[between]
     halo = (owner > 0) & (nearest <= radius) & (nearest < second)
-    return halo.astype(np.uint8) * 255
+    alpha = halo.astype(np.uint8) * 255
+    contours, _ = cv2.findContours(alpha, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(alpha, contours, -1, 255, cv2.FILLED)
+    return alpha
 
 
 def _merge_nearby_ink(

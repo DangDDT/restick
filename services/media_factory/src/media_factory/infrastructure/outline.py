@@ -11,6 +11,7 @@ from media_factory.infrastructure.layout import CANVAS_SIZE, fit_in_square
 MAX_OUTLINE_WIDTH: int = 16
 # Slack around the sticker so a dilated outline never touches the canvas edge.
 OUTLINE_SLACK: int = 4
+_OUTLINE_SCALE: int = 2
 _COLOR_PATTERN: re.Pattern[str] = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
@@ -21,9 +22,9 @@ def compose_sticker(image: Image.Image, outline_width: int, outline_color: str) 
         1. Kiểm tra outline_width (0-16) và outline_color (#RRGGBB).
         2. fit_in_square với lề outline_width + OUTLINE_SLACK để viền không chạm mép.
         3. Nếu width = 0 trả ngay canvas.
-        4. Dilate kênh alpha bằng elliptical structuring element (2w+1).
-        5. Dải viền = pixel alpha 0 mà sau dilation > 0 (chỉ nằm ngoài vật thể).
-        6. Tô màu viền, alpha_composite viền xuống dưới ảnh gốc.
+        4. Dilate alpha ở độ phân giải 2x bằng ellipse rồi lấy trung bình về canvas.
+        5. Tính alpha viền theo coverage còn thiếu; giữ nguyên alpha nội thất.
+        6. Tô màu viền, alpha_composite viền xuống dưới ảnh gốc để biên liên tục.
 
     Techniques:
         - Morphological dilation với elliptical structuring element
@@ -46,12 +47,18 @@ def compose_sticker(image: Image.Image, outline_width: int, outline_color: str) 
     if outline_width == 0:
         return canvas
     alpha = np.array(canvas.getchannel("A"))
-    kernel = cv2.getStructuringElement(
-        cv2.MORPH_ELLIPSE, (2 * outline_width + 1, 2 * outline_width + 1)
+    # Overall artwork opacity must not make the exterior stroke translucent.
+    coverage = alpha.astype(np.float32) * (255.0 / max(int(alpha.max()), 1))
+    enlarged = cv2.resize(
+        coverage, None, fx=_OUTLINE_SCALE, fy=_OUTLINE_SCALE, interpolation=cv2.INTER_NEAREST
     )
-    # Keep a fully opaque band strictly outside the foreground; interior alpha stays exact.
-    dilated = cv2.dilate(alpha, kernel)
-    band = np.where((alpha == 0) & (dilated > 0), 255, 0).astype(np.uint8)
+    radius = outline_width * _OUTLINE_SCALE
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1))
+    dilated = cv2.resize(cv2.dilate(enlarged, kernel), canvas.size, interpolation=cv2.INTER_AREA)
+    # Invert alpha-over so edge coverage joins the stroke without changing interior alpha.
+    band = np.clip(
+        np.rint((dilated - coverage) * 255 / np.maximum(255 - coverage, 1)), 0, 255
+    ).astype(np.uint8)
     layer = Image.new(
         "RGBA",
         canvas.size,
