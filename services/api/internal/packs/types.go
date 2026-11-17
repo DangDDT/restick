@@ -36,6 +36,9 @@ type Metadata struct {
 	Tags        []string
 	DesignID    string
 	SheetID     string
+
+	// ThemeColor is #RRGGBB; nil keeps the stored colour, "" clears it.
+	ThemeColor *string
 }
 
 // PackDraft creates a new pack. Slug is permanent and case-insensitively
@@ -79,8 +82,21 @@ type Pack struct {
 	ThumbnailPath  string
 	SheetID        string
 	Sheet          *PackSheet
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+
+	// ThemeColor is the admin override; ThemeColorSuggested is derived from the
+	// stickers. Both are "" or #RRGGBB.
+	ThemeColor          string
+	ThemeColorSuggested string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+// EffectiveThemeColor is the admin colour, else the suggested one, else "".
+func (p Pack) EffectiveThemeColor() string {
+	if p.ThemeColor != "" {
+		return p.ThemeColor
+	}
+	return p.ThemeColorSuggested
 }
 
 // Filter selects ready packs. Page starts at 1; PageSize defaults to 20 and is

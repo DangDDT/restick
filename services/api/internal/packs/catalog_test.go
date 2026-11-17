@@ -401,3 +401,45 @@ func TestListReadyFiltersPaginatesAndOrders(t *testing.T) {
 		t.Errorf("draft status = %q", got.Status)
 	}
 }
+
+func TestUpdateCatalogThemeColor(t *testing.T) {
+	svc, db := openTestService(t)
+	ctx := context.Background()
+	design, sheet := insertSheet(t, db, "gemini")
+	pack, err := svc.Create(ctx, PackDraft{Slug: "tint", Name: "Tint", Author: "Owner", DesignID: design, SheetID: sheet})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	meta := func(color *string) Metadata {
+		return Metadata{Name: "Tint", Author: "Owner", DesignID: design, SheetID: sheet, ThemeColor: color}
+	}
+	ptr := func(s string) *string { return &s }
+
+	if _, err := svc.UpdateCatalog(ctx, pack.ID, meta(ptr("#ffdde"))); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("short hex error = %v, want ErrInvalid", err)
+	}
+	got, err := svc.UpdateCatalog(ctx, pack.ID, meta(ptr(" #ffddee ")))
+	if err != nil || got.ThemeColor != "#FFDDEE" {
+		t.Fatalf("set colour = %q, %v; want #FFDDEE", got.ThemeColor, err)
+	}
+	got, err = svc.UpdateCatalog(ctx, pack.ID, meta(nil))
+	if err != nil || got.ThemeColor != "#FFDDEE" {
+		t.Fatalf("nil colour = %q, %v; want kept #FFDDEE", got.ThemeColor, err)
+	}
+	got, err = svc.UpdateCatalog(ctx, pack.ID, meta(ptr("")))
+	if err != nil || got.ThemeColor != "" {
+		t.Fatalf("empty colour = %q, %v; want cleared", got.ThemeColor, err)
+	}
+}
+
+func TestEffectiveThemeColor(t *testing.T) {
+	for _, tc := range []struct{ color, suggested, want string }{
+		{"#111111", "#222222", "#111111"},
+		{"", "#222222", "#222222"},
+		{"", "", ""},
+	} {
+		if got := (Pack{ThemeColor: tc.color, ThemeColorSuggested: tc.suggested}).EffectiveThemeColor(); got != tc.want {
+			t.Errorf("Effective(%q,%q) = %q, want %q", tc.color, tc.suggested, got, tc.want)
+		}
+	}
+}

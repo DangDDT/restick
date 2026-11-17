@@ -358,8 +358,8 @@ func TestRestoreMigratesPreAnimationBackup(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM sticker_animations`).Scan(&drafts); err != nil {
 		t.Fatalf("read restored drafts: %v", err)
 	}
-	if version != 4 || drafts != 0 {
-		t.Fatalf("restored schema = v%d with %d drafts, want v4 with 0", version, drafts)
+	if version != 5 || drafts != 0 {
+		t.Fatalf("restored schema = v%d with %d drafts, want v5 with 0", version, drafts)
 	}
 	var animatedPath string
 	if err := db.QueryRow(`SELECT animated_path FROM stickers WHERE pack_id = ? AND version = 1 AND sort_order = 0`,
@@ -935,7 +935,9 @@ func downgradeToSchema3(t *testing.T, backupDir string, f fixture) {
 		`ALTER TABLE stickers DROP COLUMN animated_byte_size`,
 		`ALTER TABLE stickers DROP COLUMN animated_frames`,
 		`ALTER TABLE stickers DROP COLUMN animated_duration_ms`,
-		`DELETE FROM schema_migrations WHERE version = 4`,
+		`ALTER TABLE packs DROP COLUMN theme_color`,
+		`ALTER TABLE packs DROP COLUMN theme_color_suggested`,
+		`DELETE FROM schema_migrations WHERE version >= 4`,
 	} {
 		execSQL(t, db, statement)
 	}

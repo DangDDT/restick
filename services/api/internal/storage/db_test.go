@@ -386,8 +386,8 @@ func TestMigration0004AppliesOnFreshDatabase(t *testing.T) {
 	db, _ := openTemp(t)
 
 	var version int
-	if err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil || version != 4 {
-		t.Fatalf("schema version = %d (err %v), want 4", version, err)
+	if err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil || version < 4 {
+		t.Fatalf("schema version = %d (err %v), want >= 4", version, err)
 	}
 	for _, col := range []string{"animated_path", "animated_checksum_sha256", "animated_byte_size", "animated_frames", "animated_duration_ms"} {
 		var n int
@@ -418,4 +418,45 @@ func TestMigration0004AppliesOnFreshDatabase(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM sticker_animations`).Scan(&n); err != nil || n != 0 {
 		t.Errorf("drafts survived pack delete (n=%d err=%v)", n, err)
 	}
+}
+
+func TestMigration0005KeepsExistingPacks(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	db, err := sql.Open("sqlite", dsn(filepath.Join(dir, DBFileName)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	all, err := loadMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(ctx, db, all[:4]); err != nil {
+		t.Fatalf("apply schema 4: %v", err)
+	}
+	execSQL(t, db, `INSERT INTO packs (id, slug, name, author) VALUES ('p1', 'pack', 'Pack', 'Restick')`)
+	db.Close()
+
+	upgraded, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("upgrade to 0005: %v", err)
+	}
+	defer upgraded.Close()
+	var slug, color, suggested string
+	if err := upgraded.QueryRow(`SELECT slug, theme_color, theme_color_suggested FROM packs WHERE id = 'p1'`).
+		Scan(&slug, &color, &suggested); err != nil {
+		t.Fatalf("read upgraded pack: %v", err)
+	}
+	if slug != "pack" || color != "" || suggested != "" {
+		t.Fatalf("pack = %q/%q/%q, want kept row with empty colours", slug, color, suggested)
+	}
+	if _, err := upgraded.Exec(`UPDATE packs SET theme_color = '#ffddee' WHERE id = 'p1'`); err == nil {
+		t.Error("lowercase hex accepted by CHECK")
+	}
+	if _, err := upgraded.Exec(`UPDATE packs SET theme_color_suggested = '#FFDDE' WHERE id = 'p1'`); err == nil {
+		t.Error("short hex accepted by CHECK")
+	}
+	execSQL(t, upgraded, `UPDATE packs SET theme_color = '#FFDDEE' WHERE id = 'p1'`)
 }

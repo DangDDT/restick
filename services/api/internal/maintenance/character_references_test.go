@@ -87,8 +87,8 @@ func TestRestoreLegacyCharacterReferences(t *testing.T) {
 	if err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
 		t.Fatalf("read restored schema version: %v", err)
 	}
-	if version != 4 {
-		t.Fatalf("restored schema version = %d, want 4", version)
+	if version != 5 {
+		t.Fatalf("restored schema version = %d, want 5", version)
 	}
 	rows, err := db.Query(`SELECT asset_id, position FROM character_reference_assets WHERE character_id = 'char-legacy'`)
 	if err != nil {

@@ -19,15 +19,17 @@ const packColumns = `p.id, p.slug, p.name, p.author, p.description, p.design_id,
 	p.status, p.current_version,
 	p.sheet_id, s.provider, s.filename, s.checksum_sha256, s.width, s.height, s.byte_size,
 	p.created_at, p.updated_at,
-	COALESCE(v.sticker_count, 0), COALESCE(v.checksum_sha256, ''), COALESCE(v.thumbnail_path, '')`
+	COALESCE(v.sticker_count, 0), COALESCE(v.checksum_sha256, ''), COALESCE(v.thumbnail_path, ''),
+	p.theme_color, p.theme_color_suggested`
 
 const packFrom = ` FROM packs p
 	LEFT JOIN design_sheets s ON s.id = p.sheet_id
 	LEFT JOIN pack_versions v ON v.pack_id = p.id AND v.version = p.current_version`
 
 var (
-	slugPattern     = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
-	checksumPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	slugPattern       = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+	checksumPattern   = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	themeColorPattern = regexp.MustCompile(`^#[0-9A-F]{6}$`)
 )
 
 // Service exposes the catalog and immutable version metadata.
@@ -141,6 +143,11 @@ func (s *Service) UpdateCatalog(ctx context.Context, id string, metadata Metadat
 	}
 	if err := replaceTags(ctx, tx, id, normalized.Tags); err != nil {
 		return Pack{}, err
+	}
+	if normalized.ThemeColor != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE packs SET theme_color = ? WHERE id = ?`, *normalized.ThemeColor, id); err != nil {
+			return Pack{}, fmt.Errorf("packs: update theme color: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return Pack{}, err
@@ -333,7 +340,8 @@ func scanPack(row scanner) (Pack, error) {
 		&status, &item.CurrentVersion,
 		&sheetID, &provider, &sheetFile, &sheetSum, &sheetWidth, &sheetHeight, &sheetSize,
 		&createdAtText, &updatedAtText,
-		&item.StickerCount, &item.ChecksumSHA256, &item.ThumbnailPath); err != nil {
+		&item.StickerCount, &item.ChecksumSHA256, &item.ThumbnailPath,
+		&item.ThemeColor, &item.ThemeColorSuggested); err != nil {
 		return Pack{}, err
 	}
 	item.DesignID = designID.String
@@ -466,6 +474,13 @@ func normalizeMetadata(metadata Metadata) (Metadata, error) {
 	metadata.Description = strings.TrimSpace(metadata.Description)
 	metadata.DesignID = strings.TrimSpace(metadata.DesignID)
 	metadata.SheetID = strings.TrimSpace(metadata.SheetID)
+	if metadata.ThemeColor != nil {
+		color := strings.ToUpper(strings.TrimSpace(*metadata.ThemeColor))
+		if color != "" && !themeColorPattern.MatchString(color) {
+			return Metadata{}, fmt.Errorf("%w: theme_color must be #RRGGBB", ErrInvalid)
+		}
+		metadata.ThemeColor = &color
+	}
 	switch {
 	case metadata.Name == "" || metadata.Author == "":
 		return Metadata{}, fmt.Errorf("%w: name and author are required", ErrInvalid)

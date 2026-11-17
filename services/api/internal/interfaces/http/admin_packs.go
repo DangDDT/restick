@@ -54,22 +54,25 @@ type adminPackAnimated struct {
 }
 
 type adminPack struct {
-	ID             string          `json:"id"`
-	Slug           string          `json:"slug"`
-	Name           string          `json:"name"`
-	Author         string          `json:"author"`
-	Description    string          `json:"description"`
-	Tags           []string        `json:"tags"`
-	DesignID       string          `json:"design_id,omitempty"`
-	Status         packs.Status    `json:"status"`
-	CurrentVersion int             `json:"current_version"`
-	StickerCount   int             `json:"sticker_count"`
-	ChecksumSHA256 string          `json:"checksum_sha256"`
-	ThumbnailURL   string          `json:"thumbnail_url"`
-	SheetID        string          `json:"sheet_id"`
-	Sheet          *adminPackSheet `json:"sheet"`
-	CreatedAt      string          `json:"created_at"`
-	UpdatedAt      string          `json:"updated_at"`
+	ID                  string          `json:"id"`
+	Slug                string          `json:"slug"`
+	Name                string          `json:"name"`
+	Author              string          `json:"author"`
+	Description         string          `json:"description"`
+	Tags                []string        `json:"tags"`
+	DesignID            string          `json:"design_id,omitempty"`
+	Status              packs.Status    `json:"status"`
+	CurrentVersion      int             `json:"current_version"`
+	StickerCount        int             `json:"sticker_count"`
+	ChecksumSHA256      string          `json:"checksum_sha256"`
+	ThumbnailURL        string          `json:"thumbnail_url"`
+	SheetID             string          `json:"sheet_id"`
+	Sheet               *adminPackSheet `json:"sheet"`
+	ThemeColor          string          `json:"theme_color"`
+	ThemeColorSuggested string          `json:"theme_color_suggested"`
+	ThemeColorEffective string          `json:"theme_color_effective"`
+	CreatedAt           string          `json:"created_at"`
+	UpdatedAt           string          `json:"updated_at"`
 }
 
 type adminPackDesign struct {
@@ -104,6 +107,7 @@ func (a *admin) pack(p packs.Pack) adminPack {
 		CreatedAt:    formatSeconds(p.CreatedAt), UpdatedAt: formatSeconds(p.UpdatedAt),
 	}
 	out.SheetID = p.SheetID
+	out.ThemeColor, out.ThemeColorSuggested, out.ThemeColorEffective = p.ThemeColor, p.ThemeColorSuggested, p.EffectiveThemeColor()
 	if p.Sheet != nil {
 		out.Sheet = &adminPackSheet{
 			ID: p.Sheet.ID, Provider: p.Sheet.Provider, Filename: p.Sheet.Filename,
@@ -269,13 +273,14 @@ func (a *admin) updatePack(w http.ResponseWriter, r *http.Request) {
 		Tags        []string `json:"tags"`
 		DesignID    string   `json:"design_id"`
 		SheetID     string   `json:"sheet_id"`
+		ThemeColor  *string  `json:"theme_color"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
 	}
 	pack, err := a.packs.UpdateCatalog(r.Context(), r.PathValue("id"), packs.Metadata{
 		Name: body.Name, Author: body.Author, Description: body.Description,
-		Tags: body.Tags, DesignID: body.DesignID, SheetID: body.SheetID,
+		Tags: body.Tags, DesignID: body.DesignID, SheetID: body.SheetID, ThemeColor: body.ThemeColor,
 	})
 	if err != nil {
 		writePackError(w, err)

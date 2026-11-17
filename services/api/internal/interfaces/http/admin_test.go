@@ -1666,3 +1666,45 @@ func TestAdminKeyPackGrantBodyRequired(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminUpdatePackKeepsThemeColorWhenOmitted(t *testing.T) {
+	f := newAdminFixture(t)
+	f.login()
+	draft := seedSheetDraft(t, f.db, f.files, "tinted", "Tinted", nil)
+	rec := f.mutate(http.MethodPost, "/api/v1/admin/packs", map[string]any{
+		"slug": "tinted-pack", "name": "N", "author": "A", "design_id": draft.DesignID, "sheet_id": draft.SheetID,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d: %s", rec.Code, rec.Body.String())
+	}
+	var pack adminPack
+	decodeInto(t, rec, &pack)
+	url := "/api/v1/admin/packs/" + pack.ID
+	put := func(extra map[string]any) *httptest.ResponseRecorder {
+		body := map[string]any{"name": "N", "author": "A", "design_id": draft.DesignID, "sheet_id": draft.SheetID}
+		for k, v := range extra {
+			body[k] = v
+		}
+		return f.mutate(http.MethodPut, url, body)
+	}
+
+	if rec := put(map[string]any{"theme_color": "#abcdef"}); rec.Code != http.StatusOK {
+		t.Fatalf("set colour = %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := put(nil); rec.Code != http.StatusOK {
+		t.Fatalf("PUT without colour = %d: %s", rec.Code, rec.Body.String())
+	}
+	var got map[string]any
+	if got = decodeMap(t, f.get(url)); got["theme_color"] != "#ABCDEF" || got["theme_color_effective"] != "#ABCDEF" || got["theme_color_suggested"] != "" {
+		t.Fatalf("colours after omitted PUT = %v / %v / %v", got["theme_color"], got["theme_color_effective"], got["theme_color_suggested"])
+	}
+	if rec := put(map[string]any{"theme_color": "bad"}); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("bad colour = %d, want 422", rec.Code)
+	}
+	if rec := put(map[string]any{"theme_color": ""}); rec.Code != http.StatusOK {
+		t.Fatalf("clear colour = %d", rec.Code)
+	}
+	if got = decodeMap(t, f.get(url)); got["theme_color"] != "" {
+		t.Fatalf("colour after clear = %v", got["theme_color"])
+	}
+}
