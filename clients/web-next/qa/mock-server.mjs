@@ -571,6 +571,7 @@ function buildStore() {
 
   const packs = [
     {
+      theme_color: "", theme_color_suggested: "#EBE3FF", theme_color_effective: "#EBE3FF",
       id: "pk-draft-1", slug: "meo-mi-vui", name: "Mèo Mi vui nhộn", author: "Restick Studio",
       description: "Bộ sticker Mèo Mi cho các tình huống hằng ngày.", tags: ["mèo", "hằng ngày"],
       design_id: "design-1", status: "draft", current_version: 0, sticker_count: 10,
@@ -579,6 +580,7 @@ function buildStore() {
       stickers: stickerList("meo-mi-vui", 10, ["vui", "buồn", "giận", "ngạc-nhiên", "ngại", "yêu", "ngủ", "khóc", "vẫy", "cảm-ơn"]),
     },
     {
+      theme_color: "#FFDDEE", theme_color_suggested: "#FFE6CF", theme_color_effective: "#FFDDEE",
       id: "pk-ready-1", slug: "gau-bong-tet", name: "Gấu Bông ngày Tết", author: "Restick Studio",
       description: "Lời chúc Tết dễ thương với Gấu Bông.", tags: ["tết", "lễ hội", "gấu"],
       design_id: "design-2", status: "ready", current_version: 2, sticker_count: 12,
@@ -587,6 +589,7 @@ function buildStore() {
       stickers: stickerList("gau-bong-tet", 12, ["chúc-tết", "lì-xì", "cảm-ơn", "vui", "nhảy", "ôm", "ngủ", "yêu", "bánh-chưng", "pháo", "hoa-mai", "ngạc-nhiên"]),
     },
     {
+      theme_color: "", theme_color_suggested: "", theme_color_effective: "",
       id: "pk-revoked-1", slug: "cun-bo-hoc-duong", name: "Cún Bơ đi học", author: "Restick Studio",
       description: "Bộ đã thu hồi vì chờ xác nhận quyền.", tags: null,
       design_id: "design-3", status: "revoked", current_version: 1, sticker_count: 9,
@@ -825,6 +828,17 @@ async function handleApi(req, res, url) {
       return send(res, 200, { username: "owner" });
     }
     return fail(res, 405, "bad_request", "Method not allowed.");
+  }
+
+  // Public catalogue summaries mirror the consuming API contract.
+  if (p === "/api/v1/packs" && method === "GET") {
+    const items = store.packs.filter((x) => x.status === "ready").map((x) => ({
+      id: x.id, slug: x.slug, name: x.name, author: x.author, description: x.description, tags: x.tags ?? [],
+      sticker_count: x.sticker_count, thumbnail_url: x.thumbnail_url, theme_color: x.theme_color_effective,
+      version: x.current_version, checksum_sha256: x.checksum_sha256,
+      preview_stickers: x.stickers.slice(0, 6).map((st) => ({ thumb_url: st.thumb_url, file_url: st.object_url })),
+    }));
+    return send(res, 200, { items, page: 1, page_size: items.length, total: items.length });
   }
 
   if (!isAuthed(req)) return fail(res, 401, "unauthorized", "Cần đăng nhập.");
@@ -1070,7 +1084,7 @@ async function handleApi(req, res, url) {
       const sheet = store.sheets.find((s) => s.id === json.sheet_id && s.design_id === json.design_id);
       if (!json.design_id || !sheet) return fail(res, 422, "unprocessable", "Sheet phải thuộc thiết kế đã chọn.");
       if (store.packs.some((x) => x.slug === json.slug)) return fail(res, 409, "slug_taken", "Slug này đã được dùng. Chọn slug khác.");
-      const pk = { id: nextId("pk"), slug: json.slug, name: json.name, author: json.author ?? "", description: json.description ?? "", tags: json.tags?.length ? json.tags : null, design_id: json.design_id, status: "draft", current_version: 0, sticker_count: 0, checksum_sha256: sha(json.slug), thumbnail_url: `/mock-assets/packs/${json.slug}/thumb.svg`, sheet_id: sheet.id, sheet: packSheetView(store.sheets, sheet.id), created_at: nowIso(), updated_at: nowIso(), stickers: [] };
+      const pk = { id: nextId("pk"), slug: json.slug, name: json.name, author: json.author ?? "", description: json.description ?? "", tags: json.tags?.length ? json.tags : null, design_id: json.design_id, status: "draft", current_version: 0, sticker_count: 0, checksum_sha256: sha(json.slug), thumbnail_url: `/mock-assets/packs/${json.slug}/thumb.svg`, sheet_id: sheet.id, sheet: packSheetView(store.sheets, sheet.id), theme_color: "", theme_color_suggested: "", theme_color_effective: "", created_at: nowIso(), updated_at: nowIso(), stickers: [] };
       store.packs.unshift(pk);
       return send(res, 201, packView(pk));
     }
@@ -1090,9 +1104,12 @@ async function handleApi(req, res, url) {
         const designId = json.design_id ?? pk.design_id;
         const sheet = store.sheets.find((s) => s.id === json.sheet_id && s.design_id === designId);
         if (!designId || !sheet) return fail(res, 422, "unprocessable", "Sheet phải thuộc thiết kế đã chọn.");
+        if (json.theme_color !== undefined && !/^(#[0-9a-fA-F]{6})?$/.test(json.theme_color)) return fail(res, 422, "unprocessable", "Màu nền phải có dạng #RRGGBB.");
         const active = [...store.jobs.values()].some((j) => j.pack_id === pk.id && (j.status === "queued" || j.status === "running"));
         if (sheet.id !== pk.sheet_id && active) return fail(res, 409, "job_active", "Pack đang có job chạy. Chờ job kết thúc rồi thử lại.");
         Object.assign(pk, { name: json.name ?? pk.name, author: json.author ?? pk.author, description: json.description ?? "", tags: json.tags?.length ? json.tags : null, design_id: designId, sheet_id: sheet.id, sheet: packSheetView(store.sheets, sheet.id), updated_at: nowIso() });
+        if (json.theme_color !== undefined) pk.theme_color = json.theme_color;
+        pk.theme_color_effective = pk.theme_color || pk.theme_color_suggested;
         return send(res, 200, packView(pk));
       }
       if (method === "DELETE") {

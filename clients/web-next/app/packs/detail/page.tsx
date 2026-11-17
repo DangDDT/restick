@@ -8,6 +8,7 @@ import { AppShell } from "@/components/app-shell";
 import { DesignPanel } from "@/components/design-panel";
 import { SheetPicker, sheetImageURL } from "@/components/design-sheets";
 import { RequireAuth } from "@/components/guards";
+import { ThemeColorPicker, isThemeColor } from "@/components/ThemeColorPicker";
 import { Icon } from "@/components/icons";
 import {
   ArtFrame,
@@ -73,11 +74,16 @@ function CatalogForm({ pack, onDone }: { pack: AdminPackDetail; onDone: (message
   const [author, setAuthor] = useState(pack.author);
   const [description, setDescription] = useState(pack.description);
   const [tags, setTags] = useState((pack.tags ?? []).join(", "));
+  const [themeColor, setThemeColor] = useState(pack.theme_color);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (!isThemeColor(themeColor)) {
+      setError(t("themeColorInvalid"));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -91,6 +97,7 @@ function CatalogForm({ pack, onDone }: { pack: AdminPackDetail; onDone: (message
           .filter((tag) => tag.length > 0),
         design_id: pack.design_id,
         sheet_id: pack.sheet_id,
+        theme_color: themeColor,
       };
       await api<AdminPack>(`/api/v1/admin/packs/${pack.id}`, { method: "PUT", json: body });
       qc.invalidateQueries({ queryKey: ["admin-pack", pack.id] });
@@ -119,6 +126,16 @@ function CatalogForm({ pack, onDone }: { pack: AdminPackDetail; onDone: (message
       <Field label={t("packTags")}>
         <input value={tags} onChange={(e) => setTags(e.target.value)} className={inputClass} />
       </Field>
+      {/* fieldset, not Field: a <label> wrapper would forward clicks to the first swatch. */}
+      <fieldset>
+        <legend className="mb-1.5 text-[13px] font-medium text-ink">{t("themeColor")}</legend>
+        <ThemeColorPicker
+          value={themeColor}
+          suggested={pack.theme_color_suggested}
+          previews={pack.stickers.map((sticker) => sticker.thumb_url || sticker.object_url)}
+          onChange={setThemeColor}
+        />
+      </fieldset>
       <p className="text-xs text-ink-2">{t("catalogHint")}</p>
       <div className="flex justify-end">
         <Button type="submit" disabled={busy} loading={busy}>

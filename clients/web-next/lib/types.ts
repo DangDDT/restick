@@ -271,6 +271,11 @@ export interface AdminPack {
   thumbnail_url: string;
   sheet_id: string;
   sheet: AdminPackSheet | null;
+  /** Admin-chosen background, "" when unset. */
+  theme_color: string;
+  theme_color_suggested: string;
+  /** Admin colour, else the suggestion, else "". */
+  theme_color_effective: string;
   created_at: string;
   updated_at: string;
 }
@@ -369,6 +374,8 @@ export interface PackUpdate {
   tags: string[];
   design_id?: string;
   sheet_id: string;
+  /** Omitted keeps the stored colour; "" clears it (use the suggestion). */
+  theme_color?: string;
 }
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "interrupted";
