@@ -3,10 +3,13 @@ package packs
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/eykh/restick/api_svc/internal/storage"
@@ -443,3 +446,134 @@ func TestEffectiveThemeColor(t *testing.T) {
 		}
 	}
 }
+
+// addStickers appends stickers sort_order from..to-1 to a committed version.
+func addStickers(t *testing.T, db *sql.DB, packID string, version, from, to int) {
+	t.Helper()
+	dir := fmt.Sprintf("packs/%s/v%d", packID, version)
+	for i := from; i < to; i++ {
+		if _, err := db.Exec(`INSERT INTO stickers
+			(pack_id, version, sort_order, filename, object_path, thumb_path, checksum_sha256, width, height, emoji_hint, keywords_json)
+			VALUES (?, ?, ?, ?, ?, ?, ?, 512, 512, '', '[]')`,
+			packID, version, i, fmt.Sprintf("%03d.webp", i), fmt.Sprintf("%s/%03d.webp", dir, i),
+			fmt.Sprintf("%s/thumbs/thumb_%03d.webp", dir, i), testChecksum("b")); err != nil {
+			t.Fatalf("insert sticker: %v", err)
+		}
+	}
+}
+
+func readyPackWithStickers(t *testing.T, svc *Service, db *sql.DB, slug string, stickers int) Pack {
+	t.Helper()
+	created, err := svc.Create(context.Background(), sheeted(t, db, PackDraft{Slug: slug, Name: slug, Author: "Owner"}))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	addVersion(t, db, created.ID, 1)
+	addStickers(t, db, created.ID, 1, 2, stickers)
+	return created
+}
+
+func TestListReadyLoadsAtMostSixPreviewsInOrder(t *testing.T) {
+	svc, db := openTestService(t)
+	ctx := context.Background()
+	pack := readyPackWithStickers(t, svc, db, "eight", 8)
+
+	page, err := svc.ListReady(ctx, Filter{})
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("ListReady = %v, %v", page.Items, err)
+	}
+	dir := fmt.Sprintf("packs/%s/v1", pack.ID)
+	got := page.Items[0].Previews
+	if len(got) != 6 {
+		t.Fatalf("previews = %d, want 6", len(got))
+	}
+	for i, p := range got {
+		if p.ObjectPath != fmt.Sprintf("%s/%03d.webp", dir, i) || p.ThumbPath != fmt.Sprintf("%s/thumbs/thumb_%03d.webp", dir, i) {
+			t.Fatalf("preview %d = %+v", i, p)
+		}
+	}
+
+	// A newer version replaces the previews; v1 stickers must not leak in.
+	addVersion(t, db, pack.ID, 2)
+	one, err := svc.Get(ctx, pack.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(one.Previews) != 2 || !strings.Contains(one.Previews[0].ObjectPath, "/v2/") || !strings.Contains(one.Previews[1].ObjectPath, "/v2/") {
+		t.Fatalf("Get previews = %+v, want the 2 v2 stickers", one.Previews)
+	}
+}
+
+// countingDriver counts queries that read the stickers table.
+type countingDriver struct {
+	inner driver.Driver
+	n     *atomic.Int64
+}
+
+func (d countingDriver) Open(name string) (driver.Conn, error) {
+	c, err := d.inner.Open(name)
+	return &countingConn{Conn: c, n: d.n}, err
+}
+
+type countingConn struct {
+	driver.Conn
+	n *atomic.Int64
+}
+
+func (c *countingConn) QueryContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
+	if strings.Contains(q, "FROM stickers") {
+		c.n.Add(1)
+	}
+	return c.Conn.(driver.QueryerContext).QueryContext(ctx, q, args)
+}
+
+func TestListReadyPreviewsDoNotMultiplyQueries(t *testing.T) {
+	dir := t.TempDir()
+	setup, err := storage.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer setup.Close()
+	svc := NewService(setup)
+	for _, slug := range []string{"one", "two", "three"} {
+		readyPackWithStickers(t, svc, setup, slug, 3)
+	}
+
+	var n atomic.Int64
+	probe, err := sql.Open("sqlite", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner := probe.Driver()
+	probe.Close()
+	counted := sql.OpenDB(connectorFunc(func() (driver.Conn, error) {
+		return countingDriver{inner: inner, n: &n}.Open("file:" + filepath.Join(dir, storage.DBFileName))
+	}))
+	defer counted.Close()
+
+	items := []Pack{}
+	page, err := svc.ListReady(context.Background(), Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items = append(items, page.Items...)
+	if len(items) != 3 {
+		t.Fatalf("items = %d", len(items))
+	}
+	if err := loadPreviews(context.Background(), counted, items); err != nil {
+		t.Fatal(err)
+	}
+	if n.Load() != 1 {
+		t.Fatalf("sticker queries for 3 packs = %d, want 1", n.Load())
+	}
+	for _, it := range items {
+		if len(it.Previews) != 3 {
+			t.Fatalf("%s previews = %d", it.Slug, len(it.Previews))
+		}
+	}
+}
+
+type connectorFunc func() (driver.Conn, error)
+
+func (f connectorFunc) Connect(context.Context) (driver.Conn, error) { return f() }
+func (f connectorFunc) Driver() driver.Driver                        { return nil }

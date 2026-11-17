@@ -468,7 +468,7 @@ components:
 
     PackSummary:
       type: object
-      required: [id, slug, name, author, tags, sticker_count, version, thumbnail_url, checksum_sha256]
+      required: [id, slug, name, author, tags, sticker_count, version, thumbnail_url, checksum_sha256, theme_color, preview_stickers]
       properties:
         id: { type: string }
         slug: { type: string }
@@ -479,6 +479,20 @@ components:
         version: { type: integer }
         thumbnail_url: { type: string }
         checksum_sha256: { type: string }
+        theme_color:
+          type: string
+          description: Effective pack colour (admin override, else suggested) as #RRGGBB, or "" when none.
+          example: '#FFDDEE'
+        preview_stickers:
+          type: array
+          maxItems: 6
+          description: First stickers of the current version by sort_order; [] when none.
+          items:
+            type: object
+            required: [thumb_url, file_url]
+            properties:
+              thumb_url: { type: string }
+              file_url: { type: string }
 
     PackSticker:
       type: object

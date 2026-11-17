@@ -12,6 +12,7 @@ from PIL import Image
 from media_factory.infrastructure.cutout import execute_cutout, find_sticker_boxes
 from media_factory.infrastructure.layout import MAX_SHEET_SIDE, assign_boxes, make_thumb
 from media_factory.infrastructure.outline import MAX_OUTLINE_WIDTH, compose_sticker
+from media_factory.infrastructure.theme_color import suggest_theme_color
 from media_factory.infrastructure.webp_export import encode_webp
 
 REQUEST_SCHEMA: str = "restick.job.v1"
@@ -93,7 +94,7 @@ def process_job(request_path: Path, result_path: Path) -> None:
     }
     try:
         request = read_request(request_path, identity)
-        stickers, diagnostics = _render(request)
+        stickers, diagnostics, theme_color = _render(request)
     except ProcessingError as exc:
         _write_error_result(result_path, identity, exc)
         raise
@@ -103,7 +104,12 @@ def process_job(request_path: Path, result_path: Path) -> None:
         raise failure from exc
     _write_result(
         result_path,
-        {**identity, "stickers": stickers, "diagnostics": diagnostics},
+        {
+            **identity,
+            "stickers": stickers,
+            "diagnostics": diagnostics,
+            "suggested_theme_color": theme_color,
+        },
     )
 
 
@@ -173,8 +179,8 @@ def read_request(request_path: Path, identity: dict[str, object]) -> JobRequest:
     )
 
 
-def _render(request: JobRequest) -> tuple[list[dict[str, object]], dict[str, object]]:
-    """Cắt nền tờ sheet, tách từng ô, dựng sticker và ghi file.
+def _render(request: JobRequest) -> tuple[list[dict[str, object]], dict[str, object], str]:
+    """Cắt nền tờ sheet, tách từng ô, dựng sticker, ghi file và gợi ý màu nền pack.
 
     Algorithm:
         1. Mở sheet an toàn (_open_sheet), đọc engine từ biến môi trường.
@@ -182,11 +188,13 @@ def _render(request: JobRequest) -> tuple[list[dict[str, object]], dict[str, obj
         3. Tính min_area theo ô; find_sticker_boxes rồi assign_boxes (lỗi: layout_invalid).
         4. Mỗi box: crop, compose_sticker (viền), encode WebP lossless và thumbnail.
         5. Lỗi OSError: xóa các file đã ghi rồi báo output_failed.
+        6. Giữ bản thu nhỏ (<= 64px) của mỗi canvas, rồi suggest_theme_color chọn màu pastel.
 
     Techniques:
         - Foreground-ratio sanity check
         - Grid layout assignment
         - Cleanup on failure (rollback)
+        - Downsampled copies (không giữ canvas 512px trong bộ nhớ)
 
     Keywords: sheet job, cutout, foreground ratio, grid, outline, WebP
 
@@ -218,11 +226,15 @@ def _render(request: JobRequest) -> tuple[list[dict[str, object]], dict[str, obj
         raise ProcessingError("layout_invalid", str(exc)) from exc
     stickers: list[dict[str, object]] = []
     written: list[Path] = []
+    samples: list[Image.Image] = []
     try:
         for index, box in enumerate(boxes):
             canvas = compose_sticker(
                 cutout.crop(box), request.outline_width, request.outline_color
             )
+            sample = canvas.copy()
+            sample.thumbnail((64, 64))
+            samples.append(sample)
             filename = f"{index:03d}.webp"
             thumb_name = f"thumb_{index:03d}.webp"
             (request.output_dir / filename).write_bytes(encode_webp(canvas, True))
@@ -241,7 +253,8 @@ def _render(request: JobRequest) -> tuple[list[dict[str, object]], dict[str, obj
         for path in written:
             path.unlink(missing_ok=True)
         raise ProcessingError("output_failed", f"cannot write artifacts: {exc.strerror}") from exc
-    return stickers, {"engine": engine, "foreground_ratio": round(foreground, 4)}
+    diagnostics = {"engine": engine, "foreground_ratio": round(foreground, 4)}
+    return stickers, diagnostics, suggest_theme_color(samples)
 
 
 def _open_sheet(path: Path) -> Image.Image:

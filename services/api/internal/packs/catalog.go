@@ -203,6 +203,9 @@ func (s *Service) ListReady(ctx context.Context, filter Filter) (Page, error) {
 	if err := loadTags(ctx, s.db, items); err != nil {
 		return Page{}, err
 	}
+	if err := loadPreviews(ctx, s.db, items); err != nil {
+		return Page{}, err
+	}
 	return Page{Items: items, Page: page, PageSize: size, Total: total}, nil
 }
 
@@ -224,6 +227,11 @@ func (s *Service) Get(ctx context.Context, id string) (Pack, error) {
 		return Pack{}, err
 	}
 	item.Tags = tags
+	one := []Pack{item}
+	if err := loadPreviews(ctx, s.db, one); err != nil {
+		return Pack{}, err
+	}
+	item.Previews = one[0].Previews
 	return item, nil
 }
 
@@ -414,6 +422,49 @@ func loadTags(ctx context.Context, db *sql.DB, items []Pack) error {
 	return nil
 }
 
+// maxPreviews is how many stickers a marketplace card shows per pack.
+const maxPreviews = 6
+
+// loadPreviews fills Pack.Previews for all items in one query: the first
+// maxPreviews stickers by sort_order of each pack's current version.
+func loadPreviews(ctx context.Context, db *sql.DB, items []Pack) error {
+	if len(items) == 0 {
+		return nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(items)), ",")
+	args := make([]any, 0, len(items)+1)
+	for _, item := range items {
+		args = append(args, item.ID)
+	}
+	args = append(args, maxPreviews)
+	rows, err := db.QueryContext(ctx, `SELECT pack_id, thumb_path, object_path FROM (
+			SELECT s.pack_id, s.thumb_path, s.object_path, s.sort_order,
+				ROW_NUMBER() OVER (PARTITION BY s.pack_id ORDER BY s.sort_order) AS rn
+			FROM stickers s JOIN packs p ON p.id = s.pack_id AND s.version = p.current_version
+			WHERE s.pack_id IN (`+placeholders+`))
+		WHERE rn <= ? ORDER BY pack_id, sort_order`, args...)
+	if err != nil {
+		return fmt.Errorf("packs: list previews: %w", err)
+	}
+	defer rows.Close()
+	byPack := map[string][]PreviewSticker{}
+	for rows.Next() {
+		var packID string
+		var p PreviewSticker
+		if err := rows.Scan(&packID, &p.ThumbPath, &p.ObjectPath); err != nil {
+			return fmt.Errorf("packs: scan preview: %w", err)
+		}
+		byPack[packID] = append(byPack[packID], p)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("packs: read previews: %w", err)
+	}
+	for i := range items {
+		items[i].Previews = byPack[items[i].ID]
+	}
+	return nil
+}
+
 func tagsFor(ctx context.Context, db *sql.DB, packID string) ([]string, error) {
 	rows, err := db.QueryContext(ctx, `SELECT tag FROM pack_tags WHERE pack_id = ? ORDER BY tag`, packID)
 	if err != nil {
@@ -468,6 +519,13 @@ func replaceTags(ctx context.Context, tx *sql.Tx, packID string, tags []string) 
 	return nil
 }
 
+// NormalizeThemeColor trims and upper-cases a #RRGGBB colour. An empty input
+// is valid and returns "", ok; anything else malformed returns ok == false.
+func NormalizeThemeColor(value string) (string, bool) {
+	color := strings.ToUpper(strings.TrimSpace(value))
+	return color, color == "" || themeColorPattern.MatchString(color)
+}
+
 func normalizeMetadata(metadata Metadata) (Metadata, error) {
 	metadata.Name = strings.TrimSpace(metadata.Name)
 	metadata.Author = strings.TrimSpace(metadata.Author)
@@ -475,8 +533,8 @@ func normalizeMetadata(metadata Metadata) (Metadata, error) {
 	metadata.DesignID = strings.TrimSpace(metadata.DesignID)
 	metadata.SheetID = strings.TrimSpace(metadata.SheetID)
 	if metadata.ThemeColor != nil {
-		color := strings.ToUpper(strings.TrimSpace(*metadata.ThemeColor))
-		if color != "" && !themeColorPattern.MatchString(color) {
+		color, ok := NormalizeThemeColor(*metadata.ThemeColor)
+		if !ok {
 			return Metadata{}, fmt.Errorf("%w: theme_color must be #RRGGBB", ErrInvalid)
 		}
 		metadata.ThemeColor = &color

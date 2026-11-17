@@ -113,7 +113,14 @@ func (a *publicAPI) summary(p packs.Pack) map[string]any {
 	if tags == nil {
 		tags = []string{}
 	}
+	previews := make([]map[string]string, 0, len(p.Previews))
+	for _, sticker := range p.Previews {
+		previews = append(previews, map[string]string{
+			"thumb_url": a.objectURL(sticker.ThumbPath), "file_url": a.objectURL(sticker.ObjectPath),
+		})
+	}
 	return map[string]any{
+		"theme_color": p.EffectiveThemeColor(), "preview_stickers": previews,
 		"id": p.ID, "slug": p.Slug, "name": p.Name, "author": p.Author, "tags": tags,
 		"sticker_count": p.StickerCount, "version": p.CurrentVersion,
 		"thumbnail_url": a.objectURL(p.ThumbnailPath), "checksum_sha256": p.ChecksumSHA256,

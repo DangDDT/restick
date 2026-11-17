@@ -246,3 +246,74 @@ func TestCommitProcessedRejectsInvalidAnimatedSticker(t *testing.T) {
 		})
 	}
 }
+
+func TestCommitProcessedStoresSuggestedColorAndKeepsAdminColor(t *testing.T) {
+	service, db := openTestService(t)
+	ctx := context.Background()
+	packID, jobID := runningJob(t, db, service, "tint-pack", 1)
+	if _, err := db.Exec(`UPDATE packs SET theme_color = '#112233' WHERE id = ?`, packID); err != nil {
+		t.Fatal(err)
+	}
+	result := processedVersion(packID, jobID, 1, 2)
+	result.SuggestedThemeColor = "#A98BF0"
+	if err := CommitProcessed(ctx, db, result); err != nil {
+		t.Fatalf("CommitProcessed: %v", err)
+	}
+	pack, err := service.Get(ctx, packID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pack.ThemeColor != "#112233" || pack.ThemeColorSuggested != "#A98BF0" || pack.EffectiveThemeColor() != "#112233" {
+		t.Fatalf("admin=%q suggested=%q effective=%q", pack.ThemeColor, pack.ThemeColorSuggested, pack.EffectiveThemeColor())
+	}
+}
+
+func TestCommitProcessedClearsStaleSuggestion(t *testing.T) {
+	service, db := openTestService(t)
+	ctx := context.Background()
+	packID, jobID := runningJob(t, db, service, "stale-pack", 1)
+	if _, err := db.Exec(`UPDATE packs SET theme_color_suggested = '#A98BF0' WHERE id = ?`, packID); err != nil {
+		t.Fatal(err)
+	}
+	if err := CommitProcessed(ctx, db, processedVersion(packID, jobID, 1, 2)); err != nil {
+		t.Fatalf("CommitProcessed: %v", err)
+	}
+	pack, err := service.Get(ctx, packID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pack.ThemeColorSuggested != "" {
+		t.Fatalf("suggested = %q, want cleared", pack.ThemeColorSuggested)
+	}
+}
+
+func TestCommitProcessedKeepSuggestionPreservesStoredColor(t *testing.T) {
+	service, db := openTestService(t)
+	ctx := context.Background()
+	packID, jobID := runningJob(t, db, service, "keep-pack", 1)
+	if _, err := db.Exec(`UPDATE packs SET theme_color = '#112233' WHERE id = ?`, packID); err != nil {
+		t.Fatal(err)
+	}
+	first := processedVersion(packID, jobID, 1, 2)
+	first.SuggestedThemeColor = "#A98BF0"
+	if err := CommitProcessed(ctx, db, first); err != nil {
+		t.Fatalf("first commit: %v", err)
+	}
+	jobID2 := uuid.NewString()
+	if _, err := db.Exec(`INSERT INTO processing_jobs (id, pack_id, version, status, request_json, started_at)
+		VALUES (?, ?, 2, 'running', '{"schema_version":1}', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`, jobID2, packID); err != nil {
+		t.Fatal(err)
+	}
+	second := processedVersion(packID, jobID2, 2, 2)
+	second.KeepSuggestion = true
+	if err := CommitProcessed(ctx, db, second); err != nil {
+		t.Fatalf("second commit: %v", err)
+	}
+	pack, err := service.Get(ctx, packID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pack.ThemeColorSuggested != "#A98BF0" || pack.ThemeColor != "#112233" || pack.CurrentVersion != 2 {
+		t.Fatalf("suggested=%q admin=%q v%d", pack.ThemeColorSuggested, pack.ThemeColor, pack.CurrentVersion)
+	}
+}

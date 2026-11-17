@@ -87,8 +87,15 @@ type Pack struct {
 	// stickers. Both are "" or #RRGGBB.
 	ThemeColor          string
 	ThemeColorSuggested string
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	// Previews are the first stickers of the current version (at most 6).
+	Previews  []PreviewSticker
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// PreviewSticker is a data-root relative sticker file pair for marketplace cards.
+type PreviewSticker struct {
+	ThumbPath, ObjectPath string
 }
 
 // EffectiveThemeColor is the admin colour, else the suggested one, else "".

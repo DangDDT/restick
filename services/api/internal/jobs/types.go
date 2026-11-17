@@ -136,6 +136,8 @@ type CatalogRef struct {
 type JobResult struct {
 	Stickers    []ResultSticker `json:"stickers"`
 	Diagnostics string          `json:"diagnostics,omitempty"`
+	// SuggestedThemeColor is a validated #RRGGBB, or "" when none was usable.
+	SuggestedThemeColor string `json:"suggested_theme_color,omitempty"`
 }
 
 // ResultSticker is one processed cell. File and ThumbFile are flat basenames

@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/eykh/restick/api_svc/internal/packs"
 )
 
 // Processor is the scheduling boundary around one image processing run. The
@@ -119,13 +121,14 @@ type machineRequest struct {
 }
 
 type machineResult struct {
-	Schema      string           `json:"schema"`
-	JobID       string           `json:"job_id"`
-	PackID      string           `json:"pack_id"`
-	Version     int              `json:"version"`
-	Stickers    []machineSticker `json:"stickers"`
-	Diagnostics json.RawMessage  `json:"diagnostics"`
-	Error       *machineError    `json:"error"`
+	Schema              string           `json:"schema"`
+	JobID               string           `json:"job_id"`
+	PackID              string           `json:"pack_id"`
+	Version             int              `json:"version"`
+	Stickers            []machineSticker `json:"stickers"`
+	Diagnostics         json.RawMessage  `json:"diagnostics"`
+	SuggestedThemeColor string           `json:"suggested_theme_color"`
+	Error               *machineError    `json:"error"`
 }
 
 type machineSticker struct {
@@ -164,6 +167,10 @@ func readSuccess(path string, request JobRequest) (JobResult, error) {
 	result := JobResult{
 		Stickers:    make([]ResultSticker, len(document.Stickers)),
 		Diagnostics: diagnosticsText(document.Diagnostics),
+	}
+	// A malformed suggestion is dropped; it must never fail the job.
+	if color, ok := packs.NormalizeThemeColor(document.SuggestedThemeColor); ok {
+		result.SuggestedThemeColor = color
 	}
 	for i, sticker := range document.Stickers {
 		result.Stickers[i] = ResultSticker{

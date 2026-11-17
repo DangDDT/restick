@@ -534,3 +534,19 @@ func (e *publishEnv) readFileDir() string {
 	defer f.Close()
 	return filepath.Dir(f.Name())
 }
+
+func TestPublishRepublishKeepsSuggestedThemeColor(t *testing.T) {
+	e := newPublishEnv(t, "publish-keep-color")
+	if _, err := e.h.db.Exec(`UPDATE packs SET theme_color_suggested = '#A98BF0' WHERE id = ?`, e.packID); err != nil {
+		t.Fatal(err)
+	}
+	e.source.set(e.animation(0, webpBytes(t, animated512WebP)))
+	job := e.publish()
+	pack, err := e.h.catalog.Get(context.Background(), e.packID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pack.CurrentVersion != job.Version || pack.ThemeColorSuggested != "#A98BF0" {
+		t.Fatalf("v%d suggested=%q, want republish v%d keeping #A98BF0", pack.CurrentVersion, pack.ThemeColorSuggested, job.Version)
+	}
+}

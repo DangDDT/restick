@@ -241,6 +241,10 @@ func (f *publicFixture) keyHeaders() map[string]string {
 	return map[string]string{"X-Api-Key": f.apiKey}
 }
 
+func (f *publicFixture) ownerHeaders() map[string]string {
+	return map[string]string{"Cookie": adminCookieName + "=" + f.session}
+}
+
 func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
 	var payload map[string]any
@@ -556,5 +560,90 @@ func TestTombstonesRespectGrants(t *testing.T) {
 	owner := decodeBody(t, f.request(http.MethodGet, "/api/v1/tombstones", map[string]string{"Cookie": adminCookieName + "=" + f.session}))
 	if n := len(owner["items"].([]any)); n != 2 {
 		t.Fatalf("owner tombstones = %d, want 2", n)
+	}
+}
+
+func TestPublicListPacksIncludesPreviewsAndThemeColor(t *testing.T) {
+	f := newPublicFixture(t)
+	tinted := f.publish("tinted", 8, "cute")
+	plain := f.publish("plain", 1)
+	if _, err := f.db.Exec(`UPDATE packs SET theme_color_suggested = '#AABBCC' WHERE id = ?`, tinted.pack.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.Exec(`UPDATE packs SET theme_color = '#112233' WHERE id = ?`, tinted.pack.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	list := decodeBody(t, f.request(http.MethodGet, "/api/v1/packs", f.ownerHeaders()))
+	byID := map[string]map[string]any{}
+	for _, it := range list["items"].([]any) {
+		m := it.(map[string]any)
+		byID[m["id"].(string)] = m
+	}
+	got := byID[tinted.pack.ID]
+	if got["theme_color"] != "#112233" {
+		t.Fatalf("theme_color = %v, want admin override", got["theme_color"])
+	}
+	previews := got["preview_stickers"].([]any)
+	if len(previews) != 6 {
+		t.Fatalf("previews = %d, want 6", len(previews))
+	}
+	first := previews[0].(map[string]any)
+	if first["file_url"] != testPublicBase+"/v1/objects/packs/"+tinted.pack.ID+"/v1/000.webp" ||
+		first["thumb_url"] != testPublicBase+"/v1/objects/packs/"+tinted.pack.ID+"/v1/thumbs/thumb_000.webp" {
+		t.Fatalf("first preview = %v", first)
+	}
+	other := byID[plain.pack.ID]
+	if other["theme_color"] != "" {
+		t.Fatalf("plain theme_color = %v, want empty", other["theme_color"])
+	}
+	if arr, ok := other["preview_stickers"].([]any); !ok || len(arr) != 1 {
+		t.Fatalf("plain previews = %v", other["preview_stickers"])
+	}
+}
+
+func TestPublicEmptyPreviewsAreArrayNotNull(t *testing.T) {
+	f := newPublicFixture(t)
+	empty := f.publish("empty", 1)
+	if _, err := f.db.Exec(`DELETE FROM stickers WHERE pack_id = ?`, empty.pack.ID); err != nil {
+		t.Fatal(err)
+	}
+	got := decodeBody(t, f.request(http.MethodGet, "/api/v1/packs/"+empty.pack.ID, f.ownerHeaders()))
+	arr, ok := got["preview_stickers"].([]any)
+	if !ok || len(arr) != 0 {
+		t.Fatalf("preview_stickers = %v, want []", got["preview_stickers"])
+	}
+}
+
+func TestPublicPackKeepsFilterByTagAndKey(t *testing.T) {
+	f := newPublicFixture(t)
+	a := f.publish("alpha", 3, "cute")
+	b := f.publish("beta", 3, "other")
+	f.grant(f.keyID, a.pack.ID)
+	_ = b
+
+	list := decodeBody(t, f.request(http.MethodGet, "/api/v1/packs?tag=cute", f.keyHeaders()))
+	items := list["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("items = %d, want 1", len(items))
+	}
+	if previews := items[0].(map[string]any)["preview_stickers"].([]any); len(previews) != 3 {
+		t.Fatalf("previews under tag+key filter = %d, want 3", len(previews))
+	}
+}
+
+func TestPublicGetPackIncludesPreviews(t *testing.T) {
+	f := newPublicFixture(t)
+	p := f.publish("detail", 8)
+	f.grant(f.keyID, p.pack.ID)
+	got := decodeBody(t, f.request(http.MethodGet, "/api/v1/packs/"+p.pack.ID, f.keyHeaders()))
+	if previews := got["preview_stickers"].([]any); len(previews) != 6 {
+		t.Fatalf("previews = %d, want 6", len(previews))
+	}
+	if got["theme_color"] != "" {
+		t.Fatalf("theme_color = %v", got["theme_color"])
+	}
+	if len(got["stickers"].([]any)) != 8 {
+		t.Fatal("full stickers list must stay intact")
 	}
 }

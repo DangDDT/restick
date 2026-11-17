@@ -133,6 +133,13 @@ class ProcessJobSuccessTest(ProcessJobTestCase):
         created = sorted(path.name for path in self.root.iterdir())
         self.assertEqual(created, ["output", "request.json", "result.json", "sheet.png"])
 
+    def test_result_contains_suggested_theme_color(self) -> None:
+        white_sheet().save(self.sheet)
+        self.write_request()
+        process_job(self.request, self.result)
+        color = self.read_result()["suggested_theme_color"]
+        self.assertRegex(str(color), r"^#[0-9A-F]{6}$")
+
     def test_processes_true_alpha_sheet(self) -> None:
         alpha_sheet().save(self.sheet)
         self.write_request(outline_width=0, outline_color="#FFFFFF")

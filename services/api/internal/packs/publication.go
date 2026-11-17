@@ -30,6 +30,10 @@ type ProcessedVersion struct {
 	Manifest    assets.PackManifest
 	Files       assets.CommittedFiles
 	Diagnostics string
+	// SuggestedThemeColor is the processor's #RRGGBB suggestion, "" for none.
+	// KeepSuggestion leaves the stored suggestion alone (Go-only republish).
+	SuggestedThemeColor string
+	KeepSuggestion      bool
 }
 
 // CommitProcessed publishes a processed version in one transaction: immutable
@@ -105,8 +109,10 @@ func CommitProcessed(ctx context.Context, db *sql.DB, result ProcessedVersion) e
 	}
 
 	updated, err := tx.ExecContext(ctx, `UPDATE packs SET status = ?, current_version = ?,
+		theme_color_suggested = CASE WHEN ? THEN theme_color_suggested ELSE ? END,
 		updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-		WHERE id = ? AND status != 'revoked'`, string(StatusReady), result.Version, result.PackID)
+		WHERE id = ? AND status != 'revoked'`, string(StatusReady), result.Version,
+		result.KeepSuggestion, result.SuggestedThemeColor, result.PackID)
 	if err != nil {
 		return fmt.Errorf("packs: update pack: %w", err)
 	}

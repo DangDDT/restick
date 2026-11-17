@@ -372,7 +372,7 @@ func (r *Runner) execute(ctx context.Context, job Job) {
 			r.failRun(ctx, runCtx, job, CodeStageFailed, err)
 			return
 		}
-		r.publish(ctx, job, manifest, "")
+		r.publish(ctx, job, manifest, JobResult{})
 		return
 	default:
 		r.fail(ctx, job, CodeProcessorFailed, fmt.Sprintf("unknown job kind %q", job.Request.Kind))
@@ -394,7 +394,7 @@ func (r *Runner) execute(ctx context.Context, job Job) {
 		r.fail(ctx, job, CodeResultInvalid, err.Error())
 		return
 	}
-	r.publish(ctx, job, manifest, result.Diagnostics)
+	r.publish(ctx, job, manifest, result)
 }
 
 // failRun maps an error of a running job: a timeout or shutdown wins over the
@@ -412,7 +412,7 @@ func (r *Runner) failRun(ctx, runCtx context.Context, job Job, code string, err 
 
 // publish stages, renames and commits a validated manifest from the job's
 // output directory.
-func (r *Runner) publish(ctx context.Context, job Job, manifest assets.PackManifest, diagnostics string) {
+func (r *Runner) publish(ctx context.Context, job Job, manifest assets.PackManifest, result JobResult) {
 	staged, err := r.files.StageBundle(ctx, job.ID, manifest)
 	if err != nil {
 		r.fail(ctx, job, CodeStageFailed, err.Error())
@@ -424,12 +424,15 @@ func (r *Runner) publish(ctx context.Context, job Job, manifest assets.PackManif
 		return
 	}
 	err = packs.CommitProcessed(ctx, r.db, packs.ProcessedVersion{
-		JobID:       job.ID,
-		PackID:      job.PackID,
-		Version:     job.Version,
-		Manifest:    manifest,
-		Files:       committed,
-		Diagnostics: diagnostics,
+		JobID:               job.ID,
+		PackID:              job.PackID,
+		Version:             job.Version,
+		Manifest:            manifest,
+		Files:               committed,
+		Diagnostics:         result.Diagnostics,
+		SuggestedThemeColor: result.SuggestedThemeColor,
+		// A Go-only republish has no processor output, so keep the stored colour.
+		KeepSuggestion: job.Request.Kind == KindPublish,
 	})
 	if err != nil {
 		// A revoke or an earlier terminal state wins: the conditional update
