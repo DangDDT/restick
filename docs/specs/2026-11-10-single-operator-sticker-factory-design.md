@@ -198,7 +198,7 @@ Client cần `X-Api-Key` hợp lệ. **GET/HEAD tài nguyên `/v1/objects` và `
 | `GET/HEAD /v1/objects/{key...}` | File thuộc committed version của pack ready; không generic file browser |
 | `GET/HEAD /v1/bundles/{id}/v/{version}` | ZIP committed; kiểm tra trạng thái pack và key **trước** conditional cache/304 |
 
-- Summary giữ `id,slug,name,author,tags,sticker_count,version,thumbnail_url,checksum_sha256`; Flutter không phải đổi hàm public vì backend đổi storage.
+- Summary giữ `id,slug,name,author,tags,sticker_count,version,thumbnail_url,checksum_sha256` và thêm `theme_color` (màu hiệu lực `#RRGGBB` hoặc `""`) cùng `preview_stickers` (≤6 `{thumb_url,file_url}` của phiên bản hiện tại, luôn là mảng); Flutter không phải đổi hàm public vì backend đổi storage.
 - `pack.json` giữ `schema=restick.pack.v1`. SHA256 là hash nối **bytes sticker WebP theo thứ tự manifest**, không phải hash file ZIP. ZIP có `pack.json`, `thumb.webp`, `000.webp...`, `thumbs/thumb_000.webp...`; đường dẫn `thumb` trong manifest tương ứng thực tế.
 - Metadata private/no-store. File version immutable có ETag và range support, dùng `Cache-Control: private, no-cache` để revalidate qua auth; không public shared cache bỏ qua key/revoke.
 - Không dùng API key trong query string/URL, không ghi raw key vào log. Cập nhật web/SDK chỗ dùng query key nếu có; browser admin dùng cookie.

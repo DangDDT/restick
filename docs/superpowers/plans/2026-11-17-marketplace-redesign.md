@@ -12,6 +12,9 @@
 
 ## Global Constraints
 
+- **Chỉ kiểm thử bằng unit/widget/code test, không dựng local.** Không chạy mock server, backend Go, `flutter run` hay `next dev`; người dùng sẽ commit, push, migrate server trên VPS và chỉ thử client trên host đó. Các bước "chạy lại local", "quan sát bằng app" bị bỏ.
+- **Không commit, không push** (người dùng tự làm). Mỗi task dừng ở trạng thái đã test xanh; các bước "Commit" bên dưới bị bỏ.
+
 - Flutter: import `package:material_ui/material_ui.dart` (không `material.dart`), dấu nháy kép, Dart `>=3.7`, không thêm dependency (không Lottie/Rive/google_fonts/flutter_svg); dùng `very_good_analysis` hiện có.
 - Giữ nguyên `ValueKey`: `marketplace.pack.download.<id>`, `marketplace.pack.remove.<id>`, `marketplace.tag`; hợp đồng `MarketplaceCubit` (`load`, `download`, `delete`) giữ nguyên.
 - API tương thích ngược: client cũ bỏ qua trường mới; client mới chịu server cũ thiếu `preview_stickers`/`theme_color`.
@@ -83,7 +86,7 @@
 - [ ] **Step 2: Chạy** `cd services/api && go test ./internal/packs/... ./internal/interfaces/http/... -run 'Preview|ThemeColor' -v`. Dự kiến FAIL.
 - [ ] **Step 3: Cài đặt** `loadPreviews` bằng một truy vấn `ROW_NUMBER() OVER (PARTITION BY s.pack_id ORDER BY s.sort_order)` ≤ 6, join `packs.current_version`, đặt kết quả vào `Pack.Previews` theo `ID` (theo kiểu `loadTags`); gọi ở `ListReady` và `Get`; `summary()` thêm hai trường qua `a.objectURL`. Cập nhật `contracts/openapi/v1.yaml` (schema summary + ví dụ) và dòng 201 của spec 2026-11-10.
 - [ ] **Step 4: Chạy lại** lệnh Step 2, `go test ./...`; nếu repo có kiểm tra contract/openapi (grep `openapi` trong test) chạy kèm. Dự kiến PASS.
-- [ ] **Step 5: Commit** `git commit -m "feat(api): expose preview stickers and theme color in public pack summary"`.
+- [ ] **Step 5: Không commit** (người dùng tự commit); ghi danh sách tệp đã đổi vào báo cáo.
 
 ### Task 3: Nhận `suggested_theme_color` từ kết quả job
 
@@ -99,7 +102,7 @@
 - [ ] **Step 2: Chạy** `cd services/api && go test ./internal/jobs/... ./internal/packs/... -run 'SuggestedThemeColor|SuggestedColor' -v`. Dự kiến FAIL.
 - [ ] **Step 3: Cài đặt** đúng chuỗi truyền trường qua bốn struct; chuẩn hoá hex bằng hàm dùng chung trong package `packs` (xuất `NormalizeThemeColor(string) (string, bool)` để `jobs` gọi, và `normalizeMetadata` dùng lại); `CommitProcessed` thêm `theme_color_suggested = ?` vào câu `UPDATE packs` đang có.
 - [ ] **Step 4: Chạy lại** Step 2 và `go test ./...`. Dự kiến PASS.
-- [ ] **Step 5: Commit** `git commit -m "feat(api): store the suggested theme color from processed jobs"`.
+- [ ] **Step 5: Không commit** (người dùng tự commit); ghi danh sách tệp đã đổi vào báo cáo.
 
 ### Task 4: media_factory tính màu gợi ý
 
@@ -114,7 +117,7 @@
 - [ ] **Step 2: Chạy** `cd services/media_factory && python -m pytest tests/test_theme_color.py -v`. Dự kiến FAIL (module chưa có).
 - [ ] **Step 3: Cài đặt** `suggest_theme_color(images)`: thu nhỏ mỗi ảnh về tối đa 64px; chỉ lấy pixel alpha ≥ 200; bỏ pixel có bão hoà HSV < 0.2, hoặc giá trị V > 0.92 (trắng/viền), hoặc V < 0.2 (mực); gom theo hue vào 36 thùng, trọng số = bão hoà x diện tích; chọn thùng lớn nhất, lấy hue trung bình có trọng số; trả pastel HSL với L = 0.90, S = 0.85 (S tối đa 0.9); nếu không còn pixel nào hoặc tổng trọng số dưới 1% diện tích thì `DEFAULT_THEME_COLOR`. Trong `_render` thu thập bản thu nhỏ của mỗi `canvas` (không giữ ảnh 512px) rồi gọi hàm; docstring đủ Algorithm/Techniques/Keywords/References (link Wikipedia HSL and HSV, Color quantization đã kiểm chứng bằng `scripts/check_links` nếu có).
 - [ ] **Step 4: Chạy lại** `python -m pytest tests -v` trong `services/media_factory` và `python services/media_factory/scripts/check_docstrings.py`. Dự kiến PASS.
-- [ ] **Step 5: Commit** `git commit -m "feat(media_factory): suggest a pastel theme color per pack"`.
+- [ ] **Step 5: Không commit** (người dùng tự commit); ghi danh sách tệp đã đổi vào báo cáo.
 
 ### Task 5: Admin web: chọn màu, hiện gợi ý, mock server
 
@@ -129,8 +132,8 @@
 - [ ] **Step 1:** Đọc `node_modules/next/dist/docs/` mục liên quan trước khi viết (AGENTS.md của web-next yêu cầu). Cập nhật `types.ts`: `AdminPack` thêm `theme_color`, `theme_color_suggested`, `theme_color_effective: string`; `PackUpdate` thêm `theme_color?: string`.
 - [ ] **Step 2:** Cài `ThemeColorPicker`: hàng 5 ô pastel preset + ô nhập `#RRGGBB` (kiểm định dạng phía client, nút "Dùng gợi ý" đặt `""`), nhãn nêu rõ màu gợi ý hiện tại và màu đang áp dụng, khung xem trước nền chứa tối đa 6 sticker đầu của pack. Thêm khoá i18n vi và en (`themeColor`, `themeColorSuggested`, `themeColorUseSuggestion`, `themeColorInvalid`).
 - [ ] **Step 3:** `CatalogForm` thêm state `themeColor` (khởi tạo từ `pack.theme_color`), gửi `theme_color` trong `PUT`; `changeSheet` (dòng ~285) **không** gửi `theme_color` (giữ nguyên nhờ pointer ở server). `mock-server.mjs`: pack dựng sẵn có `theme_color`, `theme_color_suggested`, `theme_color_effective` và `preview_stickers` trong các route công khai `/api/v1/packs`, `PUT` chấp nhận `theme_color` (sai định dạng → 422) và giữ nguyên khi vắng.
-- [ ] **Step 4: Kiểm chứng** `cd clients/web-next && npx next build && npm run lint`. Dự kiến không lỗi. Chạy `cd qa && npm run mock` (nền, cổng 4500, mật khẩu `test`), mở `http://localhost:4500/packs/detail?id=<pack>`: chọn màu, lưu, tải lại thấy giữ màu; đổi sheet không làm mất màu.
-- [ ] **Step 5: Commit** `git commit -m "feat(web): pick or auto-suggest pack theme color in admin"`.
+- [ ] **Step 4: Kiểm chứng** `cd clients/web-next && npx next build && npm run lint`. Dự kiến không lỗi (không chạy mock server).
+- [ ] **Step 5: Không commit** (người dùng tự commit); ghi danh sách tệp đã đổi vào báo cáo.
 
 ### Task 6: SDK: dữ liệu `previews` và `themeColor`
 
@@ -146,7 +149,7 @@
 - [ ] **Step 2: Chạy** `cd clients/flutter/restick && flutter test test/pack_dto_test.dart` (hoặc Dart MCP `run_tests`). Dự kiến FAIL.
 - [ ] **Step 3: Cài đặt** như phần Interfaces; `_merge` giữ `previews` và `themeColor` từ pack remote khi trộn với bản local; cache drift không đổi.
 - [ ] **Step 4: Chạy** `flutter test` toàn bộ và `flutter analyze` (hoặc `analyze_files`). Dự kiến PASS, không cảnh báo mới.
-- [ ] **Step 5: Commit** `git commit -m "feat(sdk): read preview stickers and theme color into StickerPack"`.
+- [ ] **Step 5: Không commit** (người dùng tự commit); ghi danh sách tệp đã đổi vào báo cáo.
 
 ### Task 7: SDK: nền tảng giao diện (thương hiệu, chuỗi, màu pack, gấu, sticker viền, khung chờ)
 
@@ -162,7 +165,7 @@
 - [ ] **Step 2: Chạy** `flutter test test/pack_tones_test.dart test/restick_widgets_test.dart`. Dự kiến FAIL.
 - [ ] **Step 3: Cài đặt** theo Interfaces; tạo bốn tệp font bằng đúng quy trình ở Global Constraints (tải `Baloo2[wght].ttf` và `OFL.txt` từ `https://raw.githubusercontent.com/google/fonts/main/ofl/baloo2/`, dùng một môi trường ảo tạm cho fontTools, không cài vào repo) và kiểm lại cmap đủ ký tự Việt trước khi commit; khai báo trong `pubspec.yaml`: `fonts: - family: Baloo2` với bốn `asset:` kèm `weight: 500/600/700/800` và liệt kê `assets/fonts/OFL.txt` trong `flutter: assets:`; hằng thời gian/đường cong chuyển động đặt chung trong `restick_brand.dart` (`RestickMotion.ease = Cubic(0.16, 1, 0.3, 1)`, `fast = 150ms`, `routine = 300ms`, `enter = 450ms`); mascot vẽ đúng hình trong `mascot.svg`; tôn trọng `MediaQuery.disableAnimationsOf` và `TickerMode`; bọc phần động trong `RepaintBoundary`.
 - [ ] **Step 4: Chạy** `flutter test` và `flutter analyze`. Dự kiến PASS.
-- [ ] **Step 5: Commit** `git commit -m "feat(sdk): brand tokens, strings, pack tones, mascot and die-cut sticker"`.
+- [ ] **Step 5: Không commit** (người dùng tự commit); ghi danh sách tệp đã đổi vào báo cáo.
 
 ### Task 8: SDK: nút tải biến hình (tiến độ, thành công, thất bại)
 
@@ -177,8 +180,8 @@
 - [ ] **Step 1: Viết test thất bại** `download_button_test.dart` (widget test, dựng bằng `StickerPack` thủ công, đổi `pack` qua `pumpWidget`): `remote shows download label and fires onDownload once`; `rapid double tap fires onDownload once until status changes` (khoá ngắn sau bấm, hết khoá khi status đổi); `tapping shows waiting state within 100ms before any progress`; `progress fill follows downloadProgress and shows percent`; `downloading to downloaded plays success then settles on owned` (sau `pumpAndSettle` hiện nhãn "Đã có", dấu tick có mặt); `failed shows retry label and tap fires onDownload`; `failed after downloading shakes once` (dùng `tester.pump` theo bước kiểm `Transform` rồi về 0); `progress dropping back to 0 after failure does not show waiting spinner forever` (failed → remote → bấm lại hoạt động); `disableAnimations skips shake and burst but still shows state colors and tick`; `semantics announce downloading percent, done and failed` (kiểm `Semantics` label từ `RestickStrings`); `haptics called on tap, success, failure` (mock `SystemChannels.platform`).
 - [ ] **Step 2: Chạy** `flutter test test/download_button_test.dart`. Dự kiến FAIL.
 - [ ] **Step 3: Cài đặt** `PackDownloadButton`: `AnimatedSwitcher` giữa các trạng thái với kích thước nút giữ ổn định (không nhảy layout); lớp đổ màu hồng bằng `Transform.scale` ngang theo `downloadProgress` (`Alignment.centerLeft`) kèm vệt sáng chạy qua khi `downloading`; "Đang chờ…" từ lúc bấm tới khi nhận trạng thái `downloading` đầu tiên; tick vẽ bằng `CustomPainter` (dùng `PathMetric.extractPath` theo giá trị animation; `disableAnimations` thì vẽ đủ ngay); vòng sáng lan bằng `TweenAnimationBuilder` quanh nút; chùm 8 hạt tim/sao/lấp lánh bằng một `CustomPainter` một lần trong `OverlayPortal` hoặc `Stack` không cắt (một `AnimationController` tạo khi chuyển sang thành công, huỷ sau khi xong); rung ngang 450ms bằng `Transform.translate`; haptics qua `HapticFeedback.selectionClick/lightImpact/mediumImpact`; `Semantics(liveRegion: true, label: ...)`.
-- [ ] **Step 4: Chạy** `flutter test` và `flutter analyze`. Dự kiến PASS. Quan sát bằng `flutter run -d macos` trong example (hoặc Dart MCP `launch_app`/`get_widget_tree`) rằng nút không nhảy kích thước khi đổi trạng thái.
-- [ ] **Step 5: Commit** `git commit -m "feat(sdk): morphing download button with progress, success and failure motion"`.
+- [ ] **Step 4: Chạy** `flutter test` và `flutter analyze`. Dự kiến PASS. Kích thước nút ổn định giữa các trạng thái được khẳng định bằng widget test (so `tester.getSize` qua các trạng thái).
+- [ ] **Step 5: Không commit** (người dùng tự commit); ghi danh sách tệp đã đổi vào báo cáo.
 
 ### Task 9: SDK: trang chủ cửa hàng B (carousel, thẻ gọn, tìm kiếm, khung chờ)
 
@@ -194,8 +197,8 @@
 - [ ] **Step 1: Viết test thất bại** `sticker_marketplace_test.dart` (widget test với `RestickClient` giả như `marketplace_cubit_test.dart` đã dựng): `shows skeleton while loading and no spinner`; `empty list shows empty state with mascot`; `failure with no packs shows error state and retry`; `renders carousel for first three packs and compact cards for the rest`; `search filters by name author and tag with Vietnamese diacritics` (khớp không phân biệt hoa thường; "meo" không khớp "Mèo" trừ khi chuẩn hoá dấu — cài chuẩn hoá bỏ dấu thủ công cho Latin Vietnamese); `pack without previews falls back to thumbnail and still renders`; `long Vietnamese title with textScaler 2.0 at 320dp has no overflow` (không `RenderFlex overflowed`); `compact card strip greys while downloading and recolors by progress thresholds`; `idle motion stops when TickerMode disabled`; `pull to refresh calls MarketplaceCubit.load`; `download key and remove key still present` (kiểm `find.byKey`); `en strings show 1 sticker and 24 stickers` trên thẻ.
 - [ ] **Step 2: Chạy** `flutter test test/sticker_marketplace_test.dart`. Dự kiến FAIL.
 - [ ] **Step 3: Cài đặt** theo Interfaces. Header: `RestickMascot(size: 38)` + chữ "Restick" (chữ "stick" màu hồng đậm) + biểu tượng tìm kiếm; thân: `CustomScrollView` (slivers: carousel, tiêu đề "Vừa lên kệ", danh sách thẻ gọn) bọc `RefreshIndicator`; `RepaintBoundary` quanh từng vùng động; không `AnimationController` thường trực trên mỗi thẻ. Giữ nền `RestickBrand.background`. Xoá `marketplace_pack_tile.dart` và export cũ nếu có.
-- [ ] **Step 4: Chạy** `flutter test`, `flutter analyze`. Dự kiến PASS. Chạy example với dữ liệu mock (Task 5, `npm run mock` cổng 4500) và quan sát bằng `flutter run -d macos`: cuộn danh sách dài không giật (DevTools profile nếu có).
-- [ ] **Step 5: Commit** `git commit -m "feat(sdk): redesigned marketplace home with hero carousel and compact cards"`.
+- [ ] **Step 4: Chạy** `flutter test`, `flutter analyze`. Dự kiến PASS. Không chạy app; hiệu năng cuộn kiểm bằng cách giữ cấu trúc nhẹ (RepaintBoundary, không controller thường trực) và test widget.
+- [ ] **Step 5: Không commit** (người dùng tự commit); ghi danh sách tệp đã đổi vào báo cáo.
 
 ### Task 10: SDK: ngăn kéo chi tiết D
 
@@ -212,7 +215,7 @@
 - [ ] **Step 2: Chạy** `flutter test test/pack_detail_sheet_test.dart`. Dự kiến FAIL.
 - [ ] **Step 3: Cài đặt** theo Interfaces; trượt lên 350 đến 450ms với `RestickMotion.ease` (mặc định của `showModalBottomSheet` được tuỳ biến qua `sheetAnimationStyle`), lưới nảy lần lượt tổng ≤ 300ms; dùng lại cùng `PackDownloadButton` để hành vi giống thẻ.
 - [ ] **Step 4: Chạy** `flutter test`, `flutter analyze`. Dự kiến PASS.
-- [ ] **Step 5: Commit** `git commit -m "feat(sdk): pack detail bottom sheet with live download state"`.
+- [ ] **Step 5: Không commit** (người dùng tự commit); ghi danh sách tệp đã đổi vào báo cáo.
 
 ### Task 11: Ví dụ, kiểm chứng toàn bộ và chạy lại local
 
@@ -221,6 +224,6 @@
 
 - [ ] **Step 1:** Cập nhật example để bọc `StickerMarketplace` bằng nền thương hiệu, bỏ thanh tab tự tạo nếu không cần; thêm mục CHANGELOG (trường server `preview_stickers`, `theme_color`; `RestickStrings`, thay đổi giao diện).
 - [ ] **Step 2: Kiểm chứng toàn bộ.** `cd services/api && go test ./... && go vet ./...`; `cd services/media_factory && python -m pytest tests -v && python scripts/check_docstrings.py`; `cd clients/web-next && npx next build && npm run lint`; `cd clients/flutter/restick && flutter analyze && flutter test`. Mọi lệnh phải xanh; ghi lại kết quả thật.
-- [ ] **Step 3: Chạy lại local** (theo ghi nhớ của người dùng): build web (`npx next build`) rồi `cd clients/web-next/qa && npm run mock` ở nền (cổng 4500, mật khẩu `test`, **không tắt**) và chạy example Flutter trỏ vào mock để người dùng xem; nếu cần dữ liệu thật thì chạy backend Go theo `feedback-rerun-local` (RESTICK_DATA_DIR, `qa/real-proxy.mjs`).
-- [ ] **Step 4: Quan sát chữ và chuyển động.** Trên example, kiểm tên có dấu nặng (`Mèo Cam Ngố`, `Thỏ Bông`, `Trâu Con thật`, `ặ ỡ ự ẳ Đ`) hiển thị đúng font Baloo 2, không ô vuông/không lệch dòng; kiểm `1 sticker` và `24 stickers` ở bản `en`. Rồi quan sát chuyển động: bằng example: bấm Tải một pack (tiến độ → thành công), ngắt mạng giữa chừng (thất bại → thử lại), bật "Giảm chuyển động" của hệ điều hành; ghi lại những gì quan sát thật và những gì không kiểm được (ví dụ thiết bị thật).
-- [ ] **Step 5: Commit** `git commit -m "docs(sdk): example and changelog for the redesigned marketplace"`; rồi dùng `superpowers:requesting-code-review` cho cả nhánh trước khi báo xong.
+- [ ] **Step 3: (bỏ)** Không dựng local; người dùng sẽ thử client trên host VPS sau khi tự commit, push và migrate.
+- [ ] **Step 4: (bỏ)** Quan sát bằng mắt do người dùng làm trên host VPS; bước này chỉ còn các test: font tải được từ bundle (Task 7) và số nhiều (`restick_strings_test.dart`).
+- [ ] **Step 5: Không commit** (người dùng tự commit); ghi danh sách tệp đã đổi vào báo cáo.
