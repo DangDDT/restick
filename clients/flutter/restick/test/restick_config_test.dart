@@ -26,13 +26,14 @@ void main() {
     });
 
     test("fromJson parses correctly with baseUrl", () {
-      final RestickConfig config =
-          RestickConfig.fromJson(const <String, Object?>{
-        "baseUrl": "https://restick.example.com",
-        "apiKey": "rstk_live_123",
-        "autoSyncIntervalMinutes": 10,
-        "persistApiKey": false,
-      });
+      final RestickConfig config = RestickConfig.fromJson(
+        const <String, Object?>{
+          "baseUrl": "https://restick.example.com",
+          "apiKey": "rstk_live_123",
+          "autoSyncIntervalMinutes": 10,
+          "persistApiKey": false,
+        },
+      );
       expect(config.baseUrl, equals("https://restick.example.com"));
       expect(config.apiKey, equals("rstk_live_123"));
       expect(config.autoSyncInterval, equals(const Duration(minutes: 10)));

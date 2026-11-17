@@ -51,23 +51,24 @@ class GalleryState extends Equatable {
 
   @override
   List<Object?> get props => <Object?>[
-        packs,
-        stickers,
-        selectedPackId,
-        isLoading,
-        failure,
-      ];
+    packs,
+    stickers,
+    selectedPackId,
+    isLoading,
+    failure,
+  ];
 }
 
 class GalleryCubit extends Cubit<GalleryState> {
   GalleryCubit({required RestickClient client})
-      : _client = client,
-        super(const GalleryState()) {
+    : _client = client,
+      super(const GalleryState()) {
     _subscription = _client.watchDownloads().listen(_onDownload);
   }
 
   final RestickClient _client;
   late final StreamSubscription<PackDownloadState> _subscription;
+  int _selectionToken = 0;
 
   Future<void> load() async {
     emit(state.copyWith(isLoading: true, clearFailure: true));
@@ -87,9 +88,10 @@ class GalleryCubit extends Cubit<GalleryState> {
         return;
       }
       final String? lastId = await _client.lastSelectedPackId();
-      final String selectedId = packs.any((StickerPack pack) => pack.id == lastId)
-          ? lastId!
-          : packs.first.id;
+      final String selectedId =
+          packs.any((StickerPack pack) => pack.id == lastId)
+              ? lastId!
+              : packs.first.id;
       await selectPack(selectedId, packs: packs);
     } on Failure catch (failure) {
       if (isClosed) {
@@ -101,6 +103,7 @@ class GalleryCubit extends Cubit<GalleryState> {
 
   Future<void> selectPack(String packId, {List<StickerPack>? packs}) async {
     final List<StickerPack> catalog = packs ?? state.packs;
+    final int token = ++_selectionToken;
     emit(
       state.copyWith(
         packs: catalog,
@@ -109,10 +112,9 @@ class GalleryCubit extends Cubit<GalleryState> {
         clearFailure: true,
       ),
     );
-    await _client.selectPack(packId);
     try {
       final List<StickerAsset> stickers = await _client.getStickers(packId);
-      if (isClosed) {
+      if (isClosed || token != _selectionToken) {
         return;
       }
       emit(
@@ -121,8 +123,9 @@ class GalleryCubit extends Cubit<GalleryState> {
           isLoading: false,
         ),
       );
+      await _client.selectPack(packId);
     } on Failure catch (failure) {
-      if (isClosed) {
+      if (isClosed || token != _selectionToken) {
         return;
       }
       emit(state.copyWith(isLoading: false, failure: failure));

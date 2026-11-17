@@ -1,152 +1,88 @@
-import "dart:io";
-
 import "package:material_ui/material_ui.dart";
 import "package:restick/restick.dart";
 
+import "src/home_shell.dart";
+import "src/setup_screen.dart";
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final RestickClient client = await Restick.open(
-    RestickConfig.fromEnvironment(),
-  );
-  runApp(ExampleApp(client: client));
+  runApp(const RestickExampleApp());
 }
 
-class ExampleApp extends StatelessWidget {
-  const ExampleApp({required this.client, super.key});
+/// Hosts the SDK lifecycle: configuration, client ownership and theming.
+class RestickExampleApp extends StatefulWidget {
+  const RestickExampleApp({super.key});
 
-  final RestickClient client;
+  @override
+  State<RestickExampleApp> createState() => _RestickExampleAppState();
+}
+
+class _RestickExampleAppState extends State<RestickExampleApp> {
+  RestickClient? _client;
+  ThemeMode _themeMode = ThemeMode.system;
+  final ValueNotifier<List<String>> _failures = ValueNotifier<List<String>>(
+    <String>[],
+  );
+
+  @override
+  void dispose() {
+    _client?.dispose().ignore();
+    _failures.dispose();
+    super.dispose();
+  }
+
+  Future<void> _open(RestickConfig config) async {
+    final RestickClient client = await Restick.open(config);
+    if (!mounted) {
+      await client.dispose();
+      return;
+    }
+    setState(() => _client = client);
+  }
+
+  Future<void> _disconnect() async {
+    final RestickClient? client = _client;
+    setState(() => _client = null);
+    await client?.dispose();
+  }
+
+  void _reportFailure(Failure failure) {
+    final String stamp = DateTime.now().toIso8601String().substring(11, 19);
+    _failures.value = <String>[
+      ..._failures.value,
+      "$stamp ${failure.runtimeType}: ${failure.message}",
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
+    final RestickClient? client = _client;
     return MaterialApp(
-      title: "Restick SDK ${Restick.sdkVersion}",
+      title: "Restick example",
+      debugShowCheckedModeBanner: false,
       theme: buildRestickThemeData(brightness: Brightness.light),
       darkTheme: buildRestickThemeData(brightness: Brightness.dark),
+      themeMode: _themeMode,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       builder: (BuildContext context, Widget? child) {
         // Bridge legacy SDK Material widgets until packages migrate.
         // ignore: deprecated_member_use
         return MaterialUiCompatibilityBridge(child: child!);
       },
-      home: RestickScope(
-        client: client,
-        child: ExampleHome(client: client),
-      ),
-    );
-  }
-}
-
-class ExampleHome extends StatefulWidget {
-  const ExampleHome({required this.client, super.key});
-
-  final RestickClient client;
-
-  @override
-  State<ExampleHome> createState() => _ExampleHomeState();
-}
-
-class _ExampleHomeState extends State<ExampleHome> with WidgetsBindingObserver {
-  File? _selected;
-  int _tab = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    widget.client.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      widget.client.stopPeriodicAutoSync();
-    } else if (state == AppLifecycleState.resumed) {
-      widget.client.startPeriodicAutoSync();
-      widget.client.syncRevocations();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Restick SDK ${Restick.sdkVersion}"),
-      ),
-      body: Column(
-        spacing: 12,
-        children: <Widget>[
-          if (_selected != null)
-            SizedBox(
-              height: 160,
-              child: Image.file(_selected!, fit: BoxFit.contain),
+      home: client == null
+          ? SetupScreen(onOpen: _open, onFailure: _reportFailure)
+          : RestickScope(
+              client: client,
+              child: HomeShell(
+                client: client,
+                themeMode: _themeMode,
+                onThemeModeChanged: (ThemeMode mode) {
+                  setState(() => _themeMode = mode);
+                },
+                onDisconnect: _disconnect,
+                failures: _failures,
+              ),
             ),
-          Expanded(
-            child: ExampleTabBody(
-              tab: _tab,
-              onStickerSelected: _onStickerSelected,
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        destinations: const <NavigationDestination>[
-          NavigationDestination(
-            icon: Icon(Icons.storefront_outlined),
-            label: "Marketplace",
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.photo_library_outlined),
-            label: "Gallery",
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.emoji_emotions_outlined),
-            label: "Picker",
-          ),
-        ],
-        onDestinationSelected: (int index) {
-          setState(() {
-            _tab = index;
-          });
-        },
-      ),
     );
-  }
-
-  void _onStickerSelected(StickerAsset asset) {
-    setState(() {
-      _selected = MediaQuery.disableAnimationsOf(context)
-          ? asset.file
-          : asset.animatedFile ?? asset.file;
-    });
-  }
-}
-
-class ExampleTabBody extends StatelessWidget {
-  const ExampleTabBody({
-    required this.tab,
-    required this.onStickerSelected,
-    super.key,
-  });
-
-  final int tab;
-  final ValueChanged<StickerAsset> onStickerSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    switch (tab) {
-      case 0:
-        return const StickerMarketplace();
-      case 1:
-        return StickerGallery(onStickerSelected: onStickerSelected);
-      default:
-        return StickerPicker(onStickerSelected: onStickerSelected);
-    }
   }
 }

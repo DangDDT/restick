@@ -7,16 +7,21 @@ class RestickApi {
   final Dio _dio;
   final String? _baseUrl;
 
-  Options? _requestOptions() {
-    if (_baseUrl == null) return null;
-    return Options(extra: <String, dynamic>{"baseUrl": _baseUrl});
+  Options? _requestOptions({bool silent = false}) {
+    if (_baseUrl == null && !silent) return null;
+    return Options(
+      extra: <String, dynamic>{
+        if (_baseUrl != null) "baseUrl": _baseUrl,
+        if (silent) "silent": true,
+      },
+    );
   }
 
   Future<PackListResponseDto> listPacks({String? tag}) async {
     final Response<dynamic> response = await _dio.get<dynamic>(
       "/api/v1/packs",
       queryParameters: tag != null ? <String, dynamic>{"tag": tag} : null,
-      options: _requestOptions(),
+      options: _requestOptions(silent: true),
     );
     final Map<String, dynamic> data =
         (response.data as Map).cast<String, dynamic>();
@@ -49,7 +54,7 @@ class RestickApi {
     final Response<dynamic> response = await _dio.get<dynamic>(
       "/api/v1/tombstones",
       queryParameters: <String, dynamic>{"since": since},
-      options: _requestOptions(),
+      options: _requestOptions(silent: true),
     );
     final Map<String, dynamic> data =
         (response.data as Map).cast<String, dynamic>();

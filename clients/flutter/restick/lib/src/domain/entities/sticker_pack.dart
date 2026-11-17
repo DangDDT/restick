@@ -1,5 +1,6 @@
 import "package:equatable/equatable.dart";
 import "package:restick/src/domain/entities/pack_download_state.dart";
+import "package:restick/src/domain/entities/sticker_preview.dart";
 
 class StickerPack extends Equatable {
   const StickerPack({
@@ -15,6 +16,8 @@ class StickerPack extends Equatable {
     this.downloadStatus = PackDownloadStatus.remote,
     this.downloadProgress = 0,
     this.localDir = "",
+    this.previews = const <StickerPreview>[],
+    this.themeColor = "",
   });
 
   final String id;
@@ -29,6 +32,10 @@ class StickerPack extends Equatable {
   final PackDownloadStatus downloadStatus;
   final double downloadProgress;
   final String localDir;
+  final List<StickerPreview> previews;
+
+  /// Effective accent colour as `#RRGGBB`, or `""` when the server sets none.
+  final String themeColor;
 
   bool get isDownloaded => downloadStatus == PackDownloadStatus.downloaded;
 
@@ -43,6 +50,8 @@ class StickerPack extends Equatable {
     List<String>? tags,
     String? name,
     String? author,
+    List<StickerPreview>? previews,
+    String? themeColor,
   }) {
     return StickerPack(
       id: id,
@@ -57,6 +66,8 @@ class StickerPack extends Equatable {
       downloadStatus: downloadStatus ?? this.downloadStatus,
       downloadProgress: downloadProgress ?? this.downloadProgress,
       localDir: localDir ?? this.localDir,
+      previews: previews ?? this.previews,
+      themeColor: themeColor ?? this.themeColor,
     );
   }
 
@@ -74,5 +85,7 @@ class StickerPack extends Equatable {
         downloadStatus,
         downloadProgress,
         localDir,
+        previews,
+        themeColor,
       ];
 }

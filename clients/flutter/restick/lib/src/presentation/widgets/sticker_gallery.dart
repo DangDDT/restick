@@ -24,9 +24,10 @@ class StickerGallery extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider<GalleryCubit>(
-      create: (_) => GalleryCubit(
-        client: client ?? RestickScope.of(context),
-      )..load(),
+      create:
+          (_) => GalleryCubit(
+            client: client ?? RestickScope.of(context),
+          )..load(),
       child: _GalleryView(
         onStickerSelected: onStickerSelected,
         compact: compact,
@@ -48,7 +49,10 @@ class _GalleryView extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<GalleryCubit, GalleryState>(
       builder: (BuildContext context, GalleryState state) {
-        if (state.packs.isEmpty && !state.isLoading) {
+        if (state.packs.isEmpty && state.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (state.packs.isEmpty) {
           return const RestickEmptyState(
             message:
                 "No downloaded stickers yet. Open the marketplace to download a pack.",
@@ -60,15 +64,18 @@ class _GalleryView extends StatelessWidget {
           children: <Widget>[
             _GalleryPackStrip(state: state, compact: compact),
             Expanded(
-              child: state.stickers.isEmpty
-                  ? const RestickEmptyState(
-                      message: "This pack has no local stickers.",
-                    )
-                  : StickerGrid(
-                      assets: state.stickers,
-                      onStickerSelected: onStickerSelected,
-                      columns: compact ? 5 : null,
-                    ),
+              child:
+                  state.stickers.isEmpty
+                      ? state.isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : const RestickEmptyState(
+                            message: "This pack has no local stickers.",
+                          )
+                      : StickerGrid(
+                        assets: state.stickers,
+                        onStickerSelected: onStickerSelected,
+                        columns: compact ? 5 : null,
+                      ),
             ),
           ],
         );

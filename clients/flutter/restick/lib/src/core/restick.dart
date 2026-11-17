@@ -35,8 +35,9 @@ abstract final class Restick {
       errorCubit: errorCubit,
     );
     final Dio downloadDio = createDownloadDio(config: config);
-    final RestickDatabase database =
-        await RestickDatabase.open(config.databaseExecutor);
+    final RestickDatabase database = await RestickDatabase.open(
+      config.databaseExecutor,
+    );
     final PackFileStore fileStore = PackFileStore();
     await fileStore.open();
     final PackRepositoryImpl repository = PackRepositoryImpl(
@@ -49,15 +50,18 @@ abstract final class Restick {
       apiBase: config.apiBase,
       errorCubit: errorCubit,
     );
-    final RestickClient client = RestickClient(
-      repository: repository,
-      config: config,
-      loadingCubit: loadingCubit,
-      errorCubit: errorCubit,
-      dios: <Dio>[catalogDio, downloadDio],
-    );
-    await client.syncRevocations();
-    client.startPeriodicAutoSync();
+    // Startup must not block on the network; the gallery reads local data and
+    // reacts to revocation events when this background sync completes.
+    final RestickClient client =
+        RestickClient(
+            repository: repository,
+            config: config,
+            loadingCubit: loadingCubit,
+            errorCubit: errorCubit,
+            dios: <Dio>[catalogDio, downloadDio],
+          )
+          ..startPeriodicAutoSync()
+          ..syncRevocations().ignore();
     return client;
   }
 }

@@ -1,5 +1,5 @@
 import "package:material_ui/material_ui.dart";
-import "package:restick/src/presentation/scope/restick_scope.dart";
+import "package:restick/src/presentation/widgets/restick_image_request.dart";
 
 class PackThumbnail extends StatelessWidget {
   const PackThumbnail({
@@ -17,14 +17,14 @@ class PackThumbnail extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     if (url.isEmpty) {
-      return _PlaceholderThumb(size: size, color: colors.surfaceContainerHighest);
+      return _PlaceholderThumb(
+        size: size,
+        color: colors.surfaceContainerHighest,
+      );
     }
-    final RestickScope? scope =
-        context.findAncestorWidgetOfExactType<RestickScope>();
-    final Map<String, String>? effectiveHeaders = headers ??
-        (scope != null
-            ? <String, String>{"X-Api-Key": scope.client.config.apiKey}
-            : null);
+    final Map<String, String>? effectiveHeaders =
+        restickImageHeaders(context, headers);
+    final int decodeSize = restickDecodeSize(context, size);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
@@ -33,6 +33,8 @@ class PackThumbnail extends StatelessWidget {
         headers: effectiveHeaders,
         width: size,
         height: size,
+        cacheWidth: decodeSize,
+        cacheHeight: decodeSize,
         fit: BoxFit.cover,
         errorBuilder: (
           BuildContext context,

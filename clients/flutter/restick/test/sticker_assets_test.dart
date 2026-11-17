@@ -88,93 +88,127 @@ Future<RestickDatabase> _downloadedPack(
 
 Future<Directory> _tempDir() async {
   final Directory dir = await Directory.systemTemp.createTemp("restick_pack_");
-  addTearDown(() => dir.delete(recursive: true));
+  addTearDown(() async {
+    if (dir.existsSync()) {
+      await dir.delete(recursive: true);
+    }
+  });
   return dir;
 }
 
 void main() {
-  test("getStickers parses animated entries and old pack.json without animated",
-      () async {
-    final Directory animatedDir = await _tempDir();
-    File(p.join(animatedDir.path, "animated", "000.webp"))
-      ..createSync(recursive: true)
-      ..writeAsBytesSync(_bytes);
-    final RestickDatabase newDatabase = await _downloadedPack(
-      animatedDir,
-      pack: _packJson(animated: _animated),
-    );
-    addTearDown(newDatabase.close);
+  test(
+    "getStickers parses animated entries and old pack.json without animated",
+    () async {
+      final Directory animatedDir = await _tempDir();
+      File(p.join(animatedDir.path, "animated", "000.webp"))
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(_bytes);
+      final RestickDatabase newDatabase = await _downloadedPack(
+        animatedDir,
+        pack: _packJson(animated: _animated),
+      );
+      addTearDown(newDatabase.close);
 
-    final List<StickerAsset> fromNew =
-        await (await _repository(newDatabase)).getStickers("pack-id");
-    expect(fromNew, hasLength(1));
-    expect(fromNew.single.isAnimated, isTrue);
-    expect(
-      fromNew.single.animatedFile!.path,
-      p.join(animatedDir.path, "animated", "000.webp"),
-    );
-    expect(fromNew.single.file.path, p.join(animatedDir.path, "000.webp"));
+      final List<StickerAsset> fromNew = await (await _repository(
+        newDatabase,
+      )).getStickers("pack-id");
+      expect(fromNew, hasLength(1));
+      expect(fromNew.single.isAnimated, isTrue);
+      expect(
+        fromNew.single.animatedFile!.path,
+        p.join(animatedDir.path, "animated", "000.webp"),
+      );
+      expect(fromNew.single.file.path, p.join(animatedDir.path, "000.webp"));
 
-    final Directory plainDir = await _tempDir();
-    final RestickDatabase oldDatabase = await _downloadedPack(
-      plainDir,
+      final Directory plainDir = await _tempDir();
+      final RestickDatabase oldDatabase = await _downloadedPack(
+        plainDir,
+        pack: _packJson(),
+      );
+      addTearDown(oldDatabase.close);
+
+      final List<StickerAsset> fromOld = await (await _repository(
+        oldDatabase,
+      )).getStickers("pack-id");
+      expect(fromOld, hasLength(1));
+      expect(fromOld.single.isAnimated, isFalse);
+      expect(fromOld.single.animatedFile, isNull);
+      expect(fromOld.single.file.path, p.join(plainDir.path, "000.webp"));
+    },
+  );
+
+  test("getStickers caches assets until the pack is deleted", () async {
+    final Directory dir = await _tempDir();
+    final RestickDatabase database = await _downloadedPack(
+      dir,
       pack: _packJson(),
     );
-    addTearDown(oldDatabase.close);
-
-    final List<StickerAsset> fromOld =
-        await (await _repository(oldDatabase)).getStickers("pack-id");
-    expect(fromOld, hasLength(1));
-    expect(fromOld.single.isAnimated, isFalse);
-    expect(fromOld.single.animatedFile, isNull);
-    expect(fromOld.single.file.path, p.join(plainDir.path, "000.webp"));
-  });
-
-  test("getStickers falls back to the static file when the animated file is missing",
-      () async {
-    final Directory dir = await _tempDir();
-    final RestickDatabase database = await _downloadedPack(
-      dir,
-      pack: _packJson(animated: _animated),
-    );
     addTearDown(database.close);
+    final PackRepositoryImpl repository = await _repository(database);
 
-    final List<StickerAsset> stickers =
-        await (await _repository(database)).getStickers("pack-id");
-    expect(stickers.single.isAnimated, isFalse);
-    expect(stickers.single.file.path, p.join(dir.path, "000.webp"));
+    final List<StickerAsset> first = await repository.getStickers("pack-id");
+    final List<StickerAsset> second = await repository.getStickers("pack-id");
+    expect(identical(first, second), isTrue);
+
+    await repository.deletePack("pack-id");
+    expect(await repository.getStickers("pack-id"), isEmpty);
   });
 
-  test("getStickers falls back to the static file on malformed animated metadata",
-      () async {
-    final Directory dir = await _tempDir();
-    File(p.join(dir.path, "animated", "000.webp"))
-      ..createSync(recursive: true)
-      ..writeAsBytesSync(_bytes);
-    final RestickDatabase database = await _downloadedPack(
-      dir,
-      pack: _packJson(animated: <String, Object?>{"frames": 24}),
-    );
-    addTearDown(database.close);
+  test(
+    "getStickers falls back to the static file when the animated file is missing",
+    () async {
+      final Directory dir = await _tempDir();
+      final RestickDatabase database = await _downloadedPack(
+        dir,
+        pack: _packJson(animated: _animated),
+      );
+      addTearDown(database.close);
 
-    final List<StickerAsset> stickers =
-        await (await _repository(database)).getStickers("pack-id");
-    expect(stickers.single.isAnimated, isFalse);
-    expect(stickers.single.file.path, p.join(dir.path, "000.webp"));
-  });
+      final List<StickerAsset> stickers = await (await _repository(
+        database,
+      )).getStickers("pack-id");
+      expect(stickers.single.isAnimated, isFalse);
+      expect(stickers.single.file.path, p.join(dir.path, "000.webp"));
+    },
+  );
 
-  test("getStickers falls back to the static file on a non-map animated entry",
-      () async {
-    final Directory dir = await _tempDir();
-    final RestickDatabase database = await _downloadedPack(
-      dir,
-      pack: _packJson(animated: "animated/000.webp"),
-    );
-    addTearDown(database.close);
+  test(
+    "getStickers falls back to the static file on malformed animated metadata",
+    () async {
+      final Directory dir = await _tempDir();
+      File(p.join(dir.path, "animated", "000.webp"))
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(_bytes);
+      final RestickDatabase database = await _downloadedPack(
+        dir,
+        pack: _packJson(animated: <String, Object?>{"frames": 24}),
+      );
+      addTearDown(database.close);
 
-    final List<StickerAsset> stickers =
-        await (await _repository(database)).getStickers("pack-id");
-    expect(stickers.single.isAnimated, isFalse);
-    expect(stickers.single.file.path, p.join(dir.path, "000.webp"));
-  });
+      final List<StickerAsset> stickers = await (await _repository(
+        database,
+      )).getStickers("pack-id");
+      expect(stickers.single.isAnimated, isFalse);
+      expect(stickers.single.file.path, p.join(dir.path, "000.webp"));
+    },
+  );
+
+  test(
+    "getStickers falls back to the static file on a non-map animated entry",
+    () async {
+      final Directory dir = await _tempDir();
+      final RestickDatabase database = await _downloadedPack(
+        dir,
+        pack: _packJson(animated: "animated/000.webp"),
+      );
+      addTearDown(database.close);
+
+      final List<StickerAsset> stickers = await (await _repository(
+        database,
+      )).getStickers("pack-id");
+      expect(stickers.single.isAnimated, isFalse);
+      expect(stickers.single.file.path, p.join(dir.path, "000.webp"));
+    },
+  );
 }

@@ -1,6 +1,7 @@
 import "package:restick/src/data/mappers/json_codec.dart";
 import "package:restick/src/data/mappers/url_rewriter.dart";
 import "package:restick/src/domain/entities/sticker_pack.dart";
+import "package:restick/src/domain/entities/sticker_preview.dart";
 import "package:restick/src/domain/entities/tombstone.dart";
 
 class PackSummaryDto {
@@ -14,6 +15,8 @@ class PackSummaryDto {
     required this.version,
     required this.thumbnailUrl,
     required this.checksumSha256,
+    this.themeColor = "",
+    this.previews = const <StickerPreviewDto>[],
   });
 
   factory PackSummaryDto.fromJson(Map<String, dynamic> json) {
@@ -27,6 +30,11 @@ class PackSummaryDto {
       version: (json["version"]! as num).toInt(),
       thumbnailUrl: (json["thumbnail_url"] as String?) ?? "",
       checksumSha256: (json["checksum_sha256"] as String?) ?? "",
+      themeColor: (json["theme_color"] as String?) ?? "",
+      previews: asJsonList(json["preview_stickers"])
+          .map(StickerPreviewDto.tryParse)
+          .whereType<StickerPreviewDto>()
+          .toList(),
     );
   }
 
@@ -39,6 +47,8 @@ class PackSummaryDto {
   final int version;
   final String thumbnailUrl;
   final String checksumSha256;
+  final String themeColor;
+  final List<StickerPreviewDto> previews;
 
   StickerPack toEntity(Uri apiBase) {
     return StickerPack(
@@ -51,6 +61,37 @@ class PackSummaryDto {
       version: version,
       thumbnailUrl: rewritePublicUrl(thumbnailUrl, apiBase),
       checksumSha256: checksumSha256,
+      themeColor: themeColor,
+      previews: previews
+          .map((StickerPreviewDto dto) => dto.toEntity(apiBase))
+          .toList(),
+    );
+  }
+}
+
+class StickerPreviewDto {
+  const StickerPreviewDto({required this.thumbUrl, required this.fileUrl});
+
+  /// Returns null for entries that are not an object with string urls.
+  static StickerPreviewDto? tryParse(Object? value) {
+    if (value is! Map) {
+      return null;
+    }
+    final Object? thumb = value["thumb_url"];
+    final Object? file = value["file_url"];
+    if (thumb is! String || file is! String) {
+      return null;
+    }
+    return StickerPreviewDto(thumbUrl: thumb, fileUrl: file);
+  }
+
+  final String thumbUrl;
+  final String fileUrl;
+
+  StickerPreview toEntity(Uri apiBase) {
+    return StickerPreview(
+      thumbUrl: rewritePublicUrl(thumbUrl, apiBase),
+      fileUrl: rewritePublicUrl(fileUrl, apiBase),
     );
   }
 }

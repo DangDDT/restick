@@ -5,6 +5,9 @@ import "package:restick/src/domain/entities/tombstone.dart";
 
 abstract class PackRepository {
   Future<List<StickerPack>> listMarketplace({String? tag});
+
+  /// Last marketplace page fetched in this process, if any.
+  Future<List<StickerPack>?> cachedMarketplace({String? tag});
   Future<StickerPack> getPack(String packId);
   Future<List<StickerPack>> listGallery();
   Future<void> downloadPack(String packId);

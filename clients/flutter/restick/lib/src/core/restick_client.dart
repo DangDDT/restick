@@ -17,11 +17,11 @@ class RestickClient {
     required RestickLoadingCubit loadingCubit,
     required RestickErrorCubit errorCubit,
     required List<Dio> dios,
-  })  : _repository = repository,
-        _config = config,
-        _loadingCubit = loadingCubit,
-        _errorCubit = errorCubit,
-        _dios = dios;
+  }) : _repository = repository,
+       _config = config,
+       _loadingCubit = loadingCubit,
+       _errorCubit = errorCubit,
+       _dios = dios;
 
   static const String sdkVersion = "0.1.0";
 
@@ -40,6 +40,10 @@ class RestickClient {
 
   Future<List<StickerPack>> listMarketplace({String? tag}) {
     return _repository.listMarketplace(tag: tag);
+  }
+
+  Future<List<StickerPack>?> cachedMarketplace({String? tag}) {
+    return _repository.cachedMarketplace(tag: tag);
   }
 
   Future<StickerPack> getPack(String packId) {

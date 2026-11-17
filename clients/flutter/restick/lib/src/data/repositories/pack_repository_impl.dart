@@ -31,14 +31,14 @@ class PackRepositoryImpl implements PackRepository {
     required RestickPrefsStorage prefs,
     required Uri apiBase,
     required RestickErrorCubit errorCubit,
-  })  : _api = api,
-        _downloadDio = downloadDio,
-        _database = database,
-        _fileStore = fileStore,
-        _downloader = downloader,
-        _prefs = prefs,
-        _apiBase = apiBase,
-        _errorCubit = errorCubit;
+  }) : _api = api,
+       _downloadDio = downloadDio,
+       _database = database,
+       _fileStore = fileStore,
+       _downloader = downloader,
+       _prefs = prefs,
+       _apiBase = apiBase,
+       _errorCubit = errorCubit;
 
   final RestickApi _api;
   final Dio _downloadDio;
@@ -51,23 +51,35 @@ class PackRepositoryImpl implements PackRepository {
   final StreamController<PackDownloadState> _downloads =
       StreamController<PackDownloadState>.broadcast();
   final Set<String> _downloading = <String>{};
+  final Map<String, double> _downloadProgress = <String, double>{};
+  final Map<String, List<StickerAsset>> _stickerCache =
+      <String, List<StickerAsset>>{};
+  final Map<String, List<StickerPack>> _marketplaceCache =
+      <String, List<StickerPack>>{};
 
   @override
   Future<List<StickerPack>> listMarketplace({String? tag}) async {
-    await syncRevocations();
+    final PackListResponseDto response;
     try {
-      final PackListResponseDto response = await _api.listPacks(tag: tag);
-      final Map<String, LocalPack> locals = await _readLocalMap();
-      return response.items
-          .map((PackSummaryDto dto) => _merge(dto.toEntity(_apiBase), locals))
-          .where(
-            (StickerPack pack) =>
-                pack.downloadStatus != PackDownloadStatus.revoked,
-          )
-          .toList();
+      response = await _api.listPacks(tag: tag);
     } on DioException catch (error) {
       throw _throwMapped(error);
     }
+    final List<StickerPack> remote =
+        response.items
+            .map((PackSummaryDto dto) => dto.toEntity(_apiBase))
+            .toList();
+    _marketplaceCache[tag ?? ""] = remote;
+    return _mergeWithLocals(remote);
+  }
+
+  @override
+  Future<List<StickerPack>?> cachedMarketplace({String? tag}) async {
+    final List<StickerPack>? remote = _marketplaceCache[tag ?? ""];
+    if (remote == null) {
+      return null;
+    }
+    return _mergeWithLocals(remote);
   }
 
   @override
@@ -88,7 +100,6 @@ class PackRepositoryImpl implements PackRepository {
 
   @override
   Future<List<StickerPack>> listGallery() async {
-    await syncRevocations();
     final List<LocalPack> rows = await _database.readDownloadedPacks();
     return rows.map(_fromRow).toList();
   }
@@ -106,7 +117,6 @@ class PackRepositoryImpl implements PackRepository {
       ),
     );
     try {
-      await syncRevocations();
       final StickerPack remote = await getPack(packId);
       final BundleMetaDto bundle = await _api.getBundle(packId);
       final LocalPack? existing = await _database.readPack(packId);
@@ -120,11 +130,15 @@ class PackRepositoryImpl implements PackRepository {
         );
         return;
       }
-      final List<int> zip = await _downloadZip(bundle.rewrittenUrl(_apiBase), packId);
+      final List<int> zip = await _downloadZip(
+        bundle.rewrittenUrl(_apiBase),
+        packId,
+      );
       final Directory dest = _fileStore.packDirectory(
         packId: packId,
         version: bundle.version,
       );
+      _stickerCache.remove(packId);
       await _downloader.unzipAndVerify(
         zipBytes: zip,
         dest: dest,
@@ -152,7 +166,10 @@ class PackRepositoryImpl implements PackRepository {
         ),
       );
     } on DioException catch (error) {
-      await _handleDownloadFailure(packId, mapDioException(error, packId: packId));
+      await _handleDownloadFailure(
+        packId,
+        mapDioException(error, packId: packId),
+      );
     } on Failure catch (failure) {
       await _handleDownloadFailure(packId, failure);
     } on FormatException catch (error) {
@@ -161,11 +178,13 @@ class PackRepositoryImpl implements PackRepository {
       await _handleDownloadFailure(packId, UnexpectedFailure(error.toString()));
     } finally {
       _downloading.remove(packId);
+      _downloadProgress.remove(packId);
     }
   }
 
   @override
   Future<void> deletePack(String packId) async {
+    _stickerCache.remove(packId);
     final LocalPack? cached = await _database.readPack(packId);
     if (cached != null) {
       await _fileStore.deleteDirectory(cached.localDir);
@@ -181,43 +200,57 @@ class PackRepositoryImpl implements PackRepository {
 
   @override
   Future<List<StickerAsset>> getStickers(String packId) async {
-    final LocalPack? cached = await _database.readPack(packId);
-    if (cached == null || cached.status != PackDownloadStatus.downloaded.name) {
+    final List<StickerAsset>? cachedStickers = _stickerCache[packId];
+    if (cachedStickers != null) {
+      return cachedStickers;
+    }
+    final LocalPack? row = await _database.readPack(packId);
+    if (row == null || row.status != PackDownloadStatus.downloaded.name) {
       return <StickerAsset>[];
     }
-    final File packFile = File(p.join(cached.localDir, "pack.json"));
+    final File packFile = File(p.join(row.localDir, "pack.json"));
     if (!packFile.existsSync()) {
       return <StickerAsset>[];
     }
     final Map<String, Object?> pack = asJsonMap(
       jsonDecode(await packFile.readAsString()),
     );
-    return asJsonList(pack["stickers"]).map((Object? item) {
-      final Map<String, Object?> sticker = asJsonMap(item);
-      final String fileName = sticker["file"]! as String;
-      final String thumbName = (sticker["thumb"] as String?) ?? "thumbs/thumb_$fileName";
-      final Object? animated = sticker["animated"];
-      final Object? animatedName =
-          animated == null ? null : asJsonMap(animated)["file"];
-      final File? animatedFile = animatedName is String
-          ? File(p.join(cached.localDir, animatedName))
-          : null;
-      return StickerAsset(
-        packId: packId,
-        file: File(p.join(cached.localDir, fileName)),
-        thumb: File(
-          p.join(
-            cached.localDir,
-            thumbName.startsWith("thumb_") ? p.join("thumbs", thumbName) : thumbName,
+    final List<StickerAsset> stickers = List<StickerAsset>.unmodifiable(
+      asJsonList(pack["stickers"]).map((Object? item) {
+        final Map<String, Object?> sticker = asJsonMap(item);
+        final String fileName = sticker["file"]! as String;
+        final String thumbName =
+            (sticker["thumb"] as String?) ?? "thumbs/thumb_$fileName";
+        final Object? animated = sticker["animated"];
+        final Object? animatedName =
+            animated == null ? null : asJsonMap(animated)["file"];
+        final File? animatedFile =
+            animatedName is String
+                ? File(p.join(row.localDir, animatedName))
+                : null;
+        return StickerAsset(
+          packId: packId,
+          file: File(p.join(row.localDir, fileName)),
+          thumb: File(
+            p.join(
+              row.localDir,
+              thumbName.startsWith("thumb_")
+                  ? p.join("thumbs", thumbName)
+                  : thumbName,
+            ),
           ),
-        ),
-        emojiHint: (sticker["emoji_hint"] as String?) ?? "",
-        width: (sticker["width"]! as num).toInt(),
-        height: (sticker["height"]! as num).toInt(),
-        animatedFile:
-            animatedFile != null && animatedFile.existsSync() ? animatedFile : null,
-      );
-    }).toList();
+          emojiHint: (sticker["emoji_hint"] as String?) ?? "",
+          width: (sticker["width"]! as num).toInt(),
+          height: (sticker["height"]! as num).toInt(),
+          animatedFile:
+              animatedFile != null && animatedFile.existsSync()
+                  ? animatedFile
+                  : null,
+        );
+      }),
+    );
+    _stickerCache[packId] = stickers;
+    return stickers;
   }
 
   @override
@@ -253,9 +286,8 @@ class PackRepositoryImpl implements PackRepository {
       );
     }
     String cursor = await _database.readTombstoneCursor();
-    final List<Tombstone> items = response.items
-        .map((TombstoneDto dto) => dto.toEntity())
-        .toList();
+    final List<Tombstone> items =
+        response.items.map((TombstoneDto dto) => dto.toEntity()).toList();
     for (final Tombstone item in items) {
       pending.add(item.packId);
       if (item.revokedAt.compareTo(cursor) > 0) {
@@ -296,6 +328,17 @@ class PackRepositoryImpl implements PackRepository {
   Future<void> dispose() async {
     await _downloads.close();
     await _database.close();
+  }
+
+  Future<List<StickerPack>> _mergeWithLocals(List<StickerPack> remote) async {
+    final Map<String, LocalPack> locals = await _readLocalMap();
+    return remote
+        .map((StickerPack pack) => _merge(pack, locals))
+        .where(
+          (StickerPack pack) =>
+              pack.downloadStatus != PackDownloadStatus.revoked,
+        )
+        .toList();
   }
 
   Future<Map<String, LocalPack>> _readLocalMap() async {
@@ -395,6 +438,7 @@ class PackRepositoryImpl implements PackRepository {
   }
 
   Future<void> _purge(String packId) async {
+    _stickerCache.remove(packId);
     final LocalPack? cached = await _database.readPack(packId);
     if (cached != null) {
       await _fileStore.deleteDirectory(cached.localDir);
@@ -416,6 +460,7 @@ class PackRepositoryImpl implements PackRepository {
         PackDownloadState(
           packId: packId,
           status: PackDownloadStatus.failed,
+          progress: _downloadProgress[packId] ?? 0,
           message: failure.message,
         ),
       );
@@ -430,6 +475,9 @@ class PackRepositoryImpl implements PackRepository {
   }
 
   void _emit(PackDownloadState state) {
+    if (state.status == PackDownloadStatus.downloading) {
+      _downloadProgress[state.packId] = state.progress;
+    }
     if (!_downloads.isClosed) {
       _downloads.add(state);
     }

@@ -167,6 +167,14 @@ Navigator.of(context).push(
 );
 ```
 
+Texts default to Vietnamese (`RestickStrings.vi`). For English, pass
+`StickerMarketplace(strings: RestickStrings.en)`.
+
+The marketplace uses the server fields `preview_stickers` and `theme_color`
+(exposed as `StickerPack.previews` / `StickerPack.themeColor`); older servers
+still work with fallbacks. The Baloo 2 font ships inside the package, so no
+`google_fonts` dependency is needed.
+
 ---
 
 ## 🛠️ Programmatic API
