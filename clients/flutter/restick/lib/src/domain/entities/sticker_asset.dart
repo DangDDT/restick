@@ -11,6 +11,7 @@ class StickerAsset extends Equatable {
     required this.width,
     required this.height,
     this.animatedFile,
+    this.keywords = const <String>[],
   });
 
   final String packId;
@@ -24,18 +25,22 @@ class StickerAsset extends Equatable {
   /// file is gone.
   final File? animatedFile;
 
+  /// Search keywords from the pack manifest; empty on older packs.
+  final List<String> keywords;
+
   bool get isAnimated => animatedFile != null;
 
   File get preview => thumb.existsSync() ? thumb : file;
 
   @override
   List<Object?> get props => <Object?>[
-        packId,
-        file.path,
-        thumb.path,
-        emojiHint,
-        width,
-        height,
-        animatedFile?.path,
-      ];
+    packId,
+    file.path,
+    thumb.path,
+    emojiHint,
+    width,
+    height,
+    animatedFile?.path,
+    keywords,
+  ];
 }

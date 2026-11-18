@@ -240,6 +240,9 @@ class PackRepositoryImpl implements PackRepository {
             ),
           ),
           emojiHint: (sticker["emoji_hint"] as String?) ?? "",
+          keywords: List<String>.unmodifiable(
+            asJsonList(sticker["keywords"] ?? <Object?>[]).whereType<String>(),
+          ),
           width: (sticker["width"]! as num).toInt(),
           height: (sticker["height"]! as num).toInt(),
           animatedFile:

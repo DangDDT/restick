@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Added `StickerAsset.keywords` (from the manifest `keywords`, empty on older packs) and `RestickClient.suggestStickers(text)`, which returns downloaded stickers whose emoji hint or keyword matches the text (case and Vietnamese-diacritic insensitive, whole words only).
 - Gallery and marketplace reads no longer block on revocation sync; startup sync is best-effort, the marketplace paints the last in-process catalog before refreshing, sticker manifests are memoized per pack, download progress rebuilds are capped to 2% steps, and network thumbnails decode at display size.
 - Added optional animated WebP variants without duplicate sticker entries; the grid honors reduced motion and keeps the static file as a fallback.
 - Updated bundle verification to include animated bytes after each static sticker, rejecting missing, unsafe and corrupt variant references. Upgrade clients before publishing animated packs; static-only packs remain compatible.

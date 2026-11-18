@@ -8,6 +8,7 @@ import "package:restick/src/domain/entities/pack_download_state.dart";
 import "package:restick/src/domain/entities/sticker_asset.dart";
 import "package:restick/src/domain/entities/sticker_pack.dart";
 import "package:restick/src/domain/entities/tombstone.dart";
+import "package:restick/src/domain/sticker_suggestion.dart";
 import "package:restick/src/domain/repositories/pack_repository.dart";
 
 class RestickClient {
@@ -76,6 +77,18 @@ class RestickClient {
 
   Future<TombstoneSyncResult> syncRevocations() {
     return _repository.syncRevocations();
+  }
+
+  /// Downloaded stickers matching [text] by emoji hint or keyword, best first.
+  Future<List<StickerAsset>> suggestStickers(
+    String text, {
+    int limit = 12,
+  }) async {
+    final List<StickerAsset> all = <StickerAsset>[
+      for (final StickerPack pack in await listGallery())
+        ...await getStickers(pack.id),
+    ];
+    return suggestStickersFor(all, text, limit: limit);
   }
 
   Future<void> selectPack(String packId) {

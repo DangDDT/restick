@@ -98,6 +98,38 @@ Future<Directory> _tempDir() async {
 
 void main() {
   test(
+    "getStickers parses keywords and tolerates missing or null ones",
+    () async {
+      final Directory dir = await _tempDir();
+      final Map<String, Object?> pack = _packJson();
+      final Map<String, Object?> sticker =
+          (pack["stickers"]! as List<Object?>).single! as Map<String, Object?>;
+      sticker["keywords"] = <Object?>["thanks", "cam on", 7];
+      final RestickDatabase withKeywords = await _downloadedPack(
+        dir,
+        pack: pack,
+      );
+      addTearDown(withKeywords.close);
+      final List<StickerAsset> parsed = await (await _repository(
+        withKeywords,
+      )).getStickers("pack-id");
+      expect(parsed.single.keywords, <String>["thanks", "cam on"]);
+
+      sticker["keywords"] = null;
+      final Directory nullDir = await _tempDir();
+      final RestickDatabase withNull = await _downloadedPack(
+        nullDir,
+        pack: pack,
+      );
+      addTearDown(withNull.close);
+      final List<StickerAsset> empty = await (await _repository(
+        withNull,
+      )).getStickers("pack-id");
+      expect(empty.single.keywords, isEmpty);
+    },
+  );
+
+  test(
     "getStickers parses animated entries and old pack.json without animated",
     () async {
       final Directory animatedDir = await _tempDir();
